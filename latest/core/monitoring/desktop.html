@@ -255,6 +255,11 @@ database is <code>~/torc-desktop.db</code> on the login node, or in the app's da
 locally (<code>~/.zprofile</code> for zsh; <code>~/.zshrc</code> is not read). See
 <a href="../how-to/set-up-authentication.html">Set Up Authentication</a>.</p>
 <p>The app remembers the form between launches.</p>
+<h3 id="saved-connections"><a class="header" href="#saved-connections">Saved connections</a></h3>
+<p>To switch between several clusters or servers, name the current form under <strong>Save as</strong> and click
+<strong>Save</strong>. Connecting with a name entered also saves it, along with any changes. Saved connections
+appear in a list at the top of the connect page; picking one fills in the form, and <strong>Delete</strong>
+removes it. They are stored on this computer only.</p>
 <h2 id="while-connected"><a class="header" href="#while-connected">While connected</a></h2>
 <p>The <strong>Connection</strong> menu has:</p>
 <ul>
@@ -264,7 +269,13 @@ locally (<code>~/.zprofile</code> for zsh; <code>~/.zshrc</code> is not read). S
 <p>Disconnecting or quitting stops torc-dash and any server it started. If an SSH session drops
 (network change, sleep), the app notices within about 90 seconds and returns to the connect page
 with a <strong>Reconnect</strong> button. Reconnecting signs in again, so MFA users are prompted again.</p>
-<p>Downloads and links that open new windows may not behave as they do in a browser.</p>
+<p>Downloads from the dashboard (such as a workflow export or a log bundle) open a save dialog when
+they finish; the app then confirms with a notification, or shows an error. File pickers for uploads
+work as in a browser.</p>
+<p>To be notified when a workflow finishes, turn on <strong>Notify me when a workflow finishes</strong> in the
+dashboard's <strong>Settings</strong> tab. Notifications appear while the app window is in the background. On
+macOS, allow them for Torc Desktop in <strong>System Settings → Notifications</strong> if none appear.</p>
+<p>Links that open new windows may not behave as they do in a browser.</p>
 <h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
 <ul>
 <li><strong>macOS says the app is damaged or can't be opened</strong>: run the <code>xattr</code> command under

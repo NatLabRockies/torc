@@ -294,6 +294,20 @@ where it runs.</li>
 <code>~/torc-desktop.db</code> on the login node or the app's data folder locally. Loopback-only, because a
 private server on a shared node must not be reachable by other users.</li>
 </ul>
+<h2 id="downloads-file-pickers-and-notifications"><a class="header" href="#downloads-file-pickers-and-notifications">Downloads, file pickers, and notifications</a></h2>
+<p>The window is created in <code>setup</code> (<code>"create": false</code> in <code>tauri.conf.json</code>) so it can have an
+<code>on_download</code> handler; without one, the webviews drop downloads. A download needs a destination
+before it starts, and a save dialog cannot answer synchronously from the webview's callback, so the
+file goes to a fresh temporary directory first. When it finishes, a native save dialog
+(tauri-plugin-dialog) asks where to keep it, and the file is moved there. The dashboard should start
+downloads from <code>&lt;a download&gt;</code> links: WebKit downloads a plain navigation only when it cannot display
+the response type, so a JSON attachment would replace the page.</p>
+<p><code>&lt;input type="file"&gt;</code> needs nothing: wry implements WebKit's open panel on macOS, and WebView2 and
+WebKitGTK show their own pickers.</p>
+<p>The dashboard notifies with the Web Notification API. tauri-plugin-notification injects a
+<code>window.Notification</code> polyfill into every page that sends it to the OS. The <code>dashboard</code> capability
+lets the remote origin <code>http://127.0.0.1:*</code> call only the plugin's permission and notify commands;
+it gets no other IPC.</p>
 <h2 id="build-and-distribution"><a class="header" href="#build-and-distribution">Build and distribution</a></h2>
 <ul>
 <li>CI (<code>.github/workflows/dashboard.yml</code>) type-checks the connect page and runs <code>cargo fmt</code>, clippy,

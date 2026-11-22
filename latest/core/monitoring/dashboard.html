@@ -293,13 +293,27 @@ Debugging, Resources) share a <strong>workflow picker</strong> in the top bar. D
 <h3 id="workflows-tab"><a class="header" href="#workflows-tab">Workflows Tab</a></h3>
 <ul>
 <li><strong>Workflow list</strong> with ID, name, user, description, and creation time. Filter by text or access
-group, or show workflows from all users. Click a row to open its details.</li>
+group, or show workflows from all users. Archived workflows are hidden unless <strong>Archived</strong> is
+checked. Click a row to open its details.</li>
 <li><strong>Actions</strong> per workflow: run locally, submit to the scheduler, initialize, reinitialize, reset
-status, cancel, recover, sync status, execution plan, export, and delete. Select several workflows
-to delete them together.</li>
+status, watch (optionally with auto-recovery), stop a local run, schedule Slurm nodes, recover,
+sync Slurm status, execution plan, edit and share, export, download logs, archive, cancel, and
+delete. Select several workflows to archive or delete them together.</li>
+<li><strong>Schedule Slurm nodes</strong> submits more allocations for one of the workflow's Slurm schedulers
+(<code>torc slurm schedule-nodes</code>), for example to add capacity or to rerun reset jobs. By default it
+skips the workflow's pending <code>schedule_nodes</code> actions so they don't submit extra allocations.</li>
+<li><strong>Recover</strong> previews the recovery plan (<code>torc recover --dry-run</code>) before applying it. You can set
+the memory and runtime multipliers, the log output directory, and whether to also retry jobs that
+failed for unknown reasons.</li>
+<li><strong>Edit &amp; share</strong> changes the workflow's name, description, and project, and shares it with access
+groups (<code>torc access-groups add-workflow</code>).</li>
+<li><strong>Export</strong> downloads the workflow as JSON to your computer; <strong>Download logs</strong> downloads a
+<code>.tar.gz</code> of its logs (<code>torc logs bundle</code>), which is handy for sharing with support.</li>
 <li><strong>Import</strong> a workflow from a file on the server or an uploaded file.</li>
 <li><strong>Run output</strong> streams into a panel at the bottom of the window while you keep using the
-dashboard. Stopping the panel stops the output, not the run; use <strong>Cancel</strong> to stop the run.</li>
+dashboard. <strong>Stop</strong> terminates a local run and its jobs (they get SIGTERM, then SIGKILL after the
+grace period). Closing the panel or the browser leaves the run going; <strong>Stop local run</strong> in the
+actions menu stops it later.</li>
 </ul>
 <h4 id="creating-workflows"><a class="header" href="#creating-workflows">Creating Workflows</a></h4>
 <p>Click <strong>Create workflow</strong> (or press <code>N</code>) and choose a source:</p>
@@ -307,11 +321,16 @@ dashboard. Stopping the panel stops the output, not the run; use <strong>Cancel<
 <li><strong>Upload file</strong>: drag and drop or click to select a YAML, JSON, JSON5, or KDL specification</li>
 <li><strong>File path</strong>: a path on the machine running <code>torc-dash</code></li>
 <li><strong>Paste spec</strong>: paste a specification; the format is detected automatically</li>
+<li><strong>Commands</strong>: one command per line; each becomes an independent job with default resources (Slurm
+options are not offered, since Slurm generation needs resource requirements)</li>
 <li><strong>Wizard</strong>: build a workflow step by step (jobs, parameters, resources, Slurm schedulers,
 actions, monitoring) with a live preview of the generated spec</li>
 </ol>
 <p><strong>Validate</strong> checks the spec on the server without creating anything. By default the new workflow is
 initialized after creation; if output files already exist you are asked before they are removed.</p>
+<p>When HPC profiles are available, <strong>Generate Slurm schedulers</strong> creates schedulers from the jobs'
+resource requirements for the chosen profile (the detected system by default). <strong>Preview allocation
+plan</strong> shows the allocations <code>torc slurm plan-allocations</code> recommends before you create anything.</p>
 <p>From an uploaded YAML or JSON file, <strong>Open in spec editor</strong> moves it to the Spec Editor tab; on the
 wizard's last step, <strong>Edit as YAML</strong> does the same with the generated spec.</p>
 <h3 id="spec-editor-tab"><a class="header" href="#spec-editor-tab">Spec Editor Tab</a></h3>
@@ -352,7 +371,19 @@ scheduled compute nodes, and Slurm stats.</p>
 <code>&gt;</code>, <code>&lt;</code>, <code>&gt;=</code>, <code>&lt;=</code>, <code>~</code> (contains), and <code>:</code> (e.g. <code>status=failed</code>, <code>exec_time&gt;10</code>, <code>name:work</code>).
 Quick-filter buttons cover common job statuses.</li>
 <li><strong>Job details</strong>: click a job to see its command, results, logs (stdout/stderr), files, user data,
-resources, and dependencies. Other tabs open the same view.</li>
+resources, and dependencies. Other tabs open the same view. <strong>Edit</strong> changes the job's command,
+priority, and resources (not while it is running). Pick another of the workflow's resource
+requirements or adjust the values; if the requirement is shared with other jobs, the job gets its
+own copy, named <code>&lt;name&gt;_job&lt;id&gt;</code>, so the others keep their values. The command can change while no
+job in the workflow has run yet (every job is uninitialized, blocked, or ready); for an
+initialized workflow the dashboard resets its jobs, saves the command, and initializes it again.
+<strong>Reset for rerun</strong> resets the job and its dependents.</li>
+<li><strong>Editing resource requirements and Slurm schedulers</strong>: click a row in the Resources or Schedulers
+sub-tab to edit it. The change applies to every job (or future allocation) that uses it, so
+editing is allowed only when no jobs are running or pending and no Slurm allocations are queued or
+active. <strong>Add resource requirements…</strong> and <strong>Add Slurm scheduler…</strong> in those sub-tabs create new
+records at any time; then point jobs at a new requirement from the job's <strong>Edit</strong> dialog, or use a
+new scheduler from <strong>Schedule Slurm nodes</strong>.</li>
 </ul>
 <p>Tables render only the visible rows, so workflows with very large job counts stay responsive.</p>
 <h3 id="graph-tab"><a class="header" href="#graph-tab">Graph Tab</a></h3>
@@ -371,7 +402,18 @@ workflow's submission directory)</li>
 <li>Keep <strong>Failed only</strong> checked to focus on failures, or uncheck it to see all jobs</li>
 <li>Select a job to read its stdout and stderr side by side (copy, or open in the file viewer)</li>
 </ol>
-<p>Sub-tabs analyze Slurm logs for errors and collect <code>sacct</code> accounting data for Slurm allocations.</p>
+<p>Other views:</p>
+<ul>
+<li><strong>Live tail</strong> follows the logs of running jobs.</li>
+<li><strong>Scheduling</strong> explains why ready jobs aren't running. It shows ready jobs that need more time
+than any active allocation has left (<code>torc workflows diagnose</code>), and the workflow's actions with
+their trigger progress (<code>torc workflows list-actions</code>).</li>
+<li><strong>Resource check</strong> lists jobs that used more than they requested
+(<code>torc workflows check-resources</code>). It can also right-size the requirements from measured usage
+(<code>torc workflows correct-resources</code>), with a preview first; jobs are not rerun.</li>
+<li><strong>Slurm log analysis</strong> finds errors in Slurm logs. <strong>Slurm accounting</strong> collects <code>sacct</code> data and
+total node and CPU time for the workflow's allocations.</li>
+</ul>
 <h3 id="events-tab"><a class="header" href="#events-tab">Events Tab</a></h3>
 <p>Live workflow events via Server-Sent Events (SSE), plus stored events such as retries:</p>
 <ul>
@@ -564,8 +606,13 @@ proxied through the <code>torc-dash</code> backend.</p>
 <h3 id="settings-tab"><a class="header" href="#settings-tab">Settings Tab</a></h3>
 <ul>
 <li><strong>Appearance and behavior</strong>: theme (system, light, dark), dark palette (Warm Gray, Nord, Dracula,
-Monokai, and others), auto-refresh interval, and whether to show workflows from all users by
-default. Preferences are stored in the browser.</li>
+Monokai, and others), auto-refresh interval, whether to show workflows from all users by default,
+and desktop notifications. Preferences are stored in the browser.</li>
+<li><strong>Notifications</strong>: when on, the browser (or <a href="./desktop.html">Torc Desktop</a>) shows a notification
+when a followed workflow finishes, saying whether any jobs failed. Followed workflows are the one
+selected in the top bar and any run, watched, or submitted from this dashboard since it was
+opened. Notifications appear only while the dashboard is in the background; the browser asks for
+permission when you turn them on.</li>
 <li><strong>Version</strong>: dashboard and server versions, with a warning if they don't match, the server URL,
 and a <strong>Test connection</strong> button that shows why a connection fails</li>
 <li><strong>Server management</strong>: start and stop <code>torc-server</code> from the dashboard (port, database path, log
