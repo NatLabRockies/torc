@@ -262,6 +262,9 @@ EXAMPLES:
 
     # Hide multiple columns
     torc jobs list 123 -x command -x name
+
+    # Jobs that use resource requirements record 7
+    torc jobs list 123 --resource-requirements-id 7
 ")]
     List {
         /// List jobs for this workflow (optional - will prompt if not provided)
@@ -273,6 +276,9 @@ EXAMPLES:
         /// Filter by upstream job ID (jobs that depend on this job)
         #[arg(long)]
         upstream_job_id: Option<i64>,
+        /// Filter by resource requirements ID (jobs that use this record)
+        #[arg(long)]
+        resource_requirements_id: Option<i64>,
         /// Maximum number of jobs to return (default: all)
         #[arg(short, long)]
         limit: Option<i64>,
@@ -522,7 +528,7 @@ EXAMPLES:
         /// interactively when omitted)
         #[arg(long)]
         workflow_id: Option<i64>,
-        /// Skip precondition checks (no active workers, target jobs not running)
+        /// Skip the busy-workflow check (active workers or allocations, running or pending jobs)
         #[arg(long)]
         force: bool,
         /// Preview which jobs would be reset without applying changes
@@ -616,6 +622,7 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
             workflow_id,
             status,
             upstream_job_id,
+            resource_requirements_id,
             limit,
             offset,
             sort_by,
@@ -663,6 +670,7 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
             if let Some(upstream_id) = upstream_job_id {
                 params = params.with_upstream_job_id(*upstream_id);
             }
+            params.resource_requirements_id = *resource_requirements_id;
 
             match pagination::paginate_jobs(config, selected_workflow_id, params) {
                 Ok(jobs) => {
@@ -1011,6 +1019,9 @@ pub fn handle_job_commands(config: &Configuration, command: &JobCommands, format
                 None,    // name
                 None,    // command
                 None,    // label
+                None,    // ids
+                None,    // statuses
+                None,    // resource_requirements_id
             ) {
                 Ok(response) => {
                     let job_count = response.total_count;
@@ -1563,6 +1574,9 @@ pub fn get_current_job_count(
         None,    // name
         None,    // command
         None,    // label
+        None,    // ids
+        None,    // statuses
+        None,    // resource_requirements_id
     )
     .map_err(|e| format!("Failed to get job count: {:?}", e))?;
 
@@ -1617,25 +1631,47 @@ fn resolve_reset_targets_by_ids(
     config: &Configuration,
     job_ids: &[i64],
 ) -> (i64, Vec<models::JobModel>) {
-    let mut fetched: Vec<models::JobModel> = Vec::with_capacity(job_ids.len());
-    for &id in job_ids {
-        match apis::jobs_api::get_job(config, id) {
-            Ok(job) => fetched.push(job),
-            Err(e) => {
-                eprintln!("Error: job {} not found: {}", id, e);
-                std::process::exit(1);
-            }
+    // The first job names the workflow; the rest are fetched in bulk from it.
+    let first = match apis::jobs_api::get_job(config, job_ids[0]) {
+        Ok(job) => job,
+        Err(e) => {
+            eprintln!("Error: job {} not found: {}", job_ids[0], e);
+            std::process::exit(1);
         }
-    }
+    };
+    let workflow_id = first.workflow_id;
+    let mut by_id: HashMap<i64, models::JobModel> = match pagination::paginate_jobs_by_ids(
+        config,
+        workflow_id,
+        job_ids,
+        JobListParams::new(),
+    ) {
+        Ok(jobs) => jobs.into_iter().map(|j| (require_job_id(&j), j)).collect(),
+        Err(e) => {
+            eprintln!("Error: failed to fetch jobs: {}", e);
+            std::process::exit(1);
+        }
+    };
 
-    // De-duplicate by ID while preserving first-occurrence order
+    // De-duplicate by ID while preserving first-occurrence order. An ID missing from
+    // the bulk fetch is either absent or in another workflow; fetch it to tell which.
     let mut seen_ids: HashSet<i64> = HashSet::new();
     let mut unique_jobs: Vec<models::JobModel> = Vec::new();
-    for job in fetched {
-        let id = require_job_id(&job);
-        if seen_ids.insert(id) {
-            unique_jobs.push(job);
+    for &id in job_ids {
+        if !seen_ids.insert(id) {
+            continue;
         }
+        let job = match by_id.remove(&id) {
+            Some(job) => job,
+            None => match apis::jobs_api::get_job(config, id) {
+                Ok(job) => job,
+                Err(e) => {
+                    eprintln!("Error: job {} not found: {}", id, e);
+                    std::process::exit(1);
+                }
+            },
+        };
+        unique_jobs.push(job);
     }
 
     // Determine workflow from first job; reject if any job belongs elsewhere
@@ -1694,25 +1730,14 @@ fn resolve_reset_targets_by_status(
         }
     }
 
-    let mut seen_ids: HashSet<i64> = HashSet::new();
-    let mut unique_jobs: Vec<models::JobModel> = Vec::new();
-    for status in statuses {
-        let params = JobListParams::new().with_status(status);
-        let jobs = match pagination::paginate_jobs(config, workflow_id, params) {
-            Ok(jobs) => jobs,
-            Err(e) => {
-                eprintln!("Error: failed to list {} jobs: {}", status, e);
-                std::process::exit(1);
-            }
-        };
-        for job in jobs {
-            let id = require_job_id(&job);
-            if seen_ids.insert(id) {
-                unique_jobs.push(job);
-            }
+    let params = JobListParams::new().with_statuses(statuses);
+    match pagination::paginate_jobs(config, workflow_id, params) {
+        Ok(jobs) => jobs,
+        Err(e) => {
+            eprintln!("Error: failed to list jobs: {}", e);
+            std::process::exit(1);
         }
     }
-    unique_jobs
 }
 
 /// Resolve all jobs in `workflow_id` whose latest result has the given
@@ -1738,20 +1763,30 @@ fn resolve_reset_targets_by_return_code(
     // Fetch the current JobModel for each matched job (results carry job_id but
     // not the live job state the rest of the reset flow needs).
     let mut seen_ids: HashSet<i64> = HashSet::new();
-    let mut unique_jobs: Vec<models::JobModel> = Vec::new();
-    for result in results {
-        if !seen_ids.insert(result.job_id) {
-            continue;
-        }
-        match apis::jobs_api::get_job(config, result.job_id) {
-            Ok(job) => unique_jobs.push(job),
+    let job_ids: Vec<i64> = results
+        .iter()
+        .map(|r| r.job_id)
+        .filter(|id| seen_ids.insert(*id))
+        .collect();
+    let jobs =
+        match pagination::paginate_jobs_by_ids(config, workflow_id, &job_ids, JobListParams::new())
+        {
+            Ok(jobs) => jobs,
             Err(e) => {
-                eprintln!("Error: job {} not found: {}", result.job_id, e);
+                eprintln!("Error: failed to fetch jobs: {}", e);
                 std::process::exit(1);
             }
-        }
+        };
+    if jobs.len() != job_ids.len() {
+        let found: HashSet<i64> = jobs.iter().filter_map(|j| j.id).collect();
+        let missing: Vec<i64> = job_ids
+            .into_iter()
+            .filter(|id| !found.contains(id))
+            .collect();
+        eprintln!("Error: jobs not found: {:?}", missing);
+        std::process::exit(1);
     }
-    unique_jobs
+    jobs
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1845,15 +1880,25 @@ fn handle_reset_job_status(
     // leaves jobs uninitialized, so the workflow is no longer "complete".
     let mut unique_jobs = unique_jobs;
     if !force {
-        // If workers look active, they may be dead runners that never deactivated
-        // (e.g. a killed `torc run`). Run the `torc recover` orphan cleanup to
-        // deactivate them and fail their stuck Running jobs before checking. The
-        // cleanup is workflow-wide, so preview it and confirm before applying.
+        // The server's quiet check (no active workers or allocations, no running or pending
+        // jobs), run up front so the user sees the problem before the tables and prompt.
+        let job_ids: Vec<i64> = unique_jobs.iter().map(require_job_id).collect();
+        let precheck = || {
+            crate::client::commands::recover::preview_reset(
+                config,
+                workflow_id,
+                Some(job_ids.clone()),
+                Some(models::JobStatus::ALL.to_vec()),
+            )
+            .err()
+        };
+        let mut refusal = precheck();
+        // A busy workflow may only have dead runners that never deactivated (e.g. a killed
+        // `torc run`). Run the `torc recover` orphan cleanup to deactivate them and fail their
+        // stuck Running jobs, then check again. The cleanup is workflow-wide, so preview it
+        // and confirm before applying.
         use crate::client::commands::orphan_detection::cleanup_orphaned_jobs;
-        let preview = if !dry_run
-            && crate::client::commands::recover::check_no_active_workers(config, workflow_id)
-                .is_err()
-        {
+        let preview = if refusal.is_some() && !dry_run {
             cleanup_orphaned_jobs(config, workflow_id, true)
                 .ok()
                 .filter(|p| p.any_cleaned())
@@ -1880,43 +1925,30 @@ fn handle_reset_job_status(
             }
             match cleanup_orphaned_jobs(config, workflow_id, false) {
                 Ok(r) if r.total_jobs_failed() > 0 => {
-                    for job in unique_jobs.iter_mut() {
-                        if let Ok(fresh) = apis::jobs_api::get_job(config, require_job_id(job)) {
-                            *job = fresh;
+                    let ids: Vec<i64> = unique_jobs.iter().map(require_job_id).collect();
+                    if let Ok(fresh) = pagination::paginate_jobs_by_ids(
+                        config,
+                        workflow_id,
+                        &ids,
+                        JobListParams::new(),
+                    ) {
+                        let mut fresh: HashMap<i64, models::JobModel> =
+                            fresh.into_iter().map(|j| (require_job_id(&j), j)).collect();
+                        for job in unique_jobs.iter_mut() {
+                            if let Some(f) = fresh.remove(&require_job_id(job)) {
+                                *job = f;
+                            }
                         }
                     }
                 }
                 Ok(_) => {}
                 Err(e) => log::warn!("Orphan cleanup failed workflow_id={}: {}", workflow_id, e),
             }
+            refusal = precheck();
         }
-        if let Err(msg) =
-            crate::client::commands::recover::check_no_active_workers(config, workflow_id)
-        {
+        if let Some(msg) = refusal {
             eprintln!("Error: {}", msg);
             eprintln!("Use --force to skip this check.");
-            std::process::exit(1);
-        }
-
-        // Reject jobs currently in Running or Pending status
-        let active_targets: Vec<i64> = unique_jobs
-            .iter()
-            .filter(|j| {
-                matches!(
-                    j.status,
-                    Some(models::JobStatus::Running) | Some(models::JobStatus::Pending)
-                )
-            })
-            .map(require_job_id)
-            .collect();
-        if !active_targets.is_empty() {
-            eprintln!(
-                "Error: the following jobs are currently Running or Pending and cannot be reset \
-                 without --force:"
-            );
-            for id in &active_targets {
-                eprintln!("  job {}", id);
-            }
             std::process::exit(1);
         }
     }
@@ -2102,34 +2134,33 @@ fn handle_reset_job_status(
     }
 
     // -----------------------------------------------------------------------
-    // 8. Apply: fetch run_id, then reset ONLY the requested jobs
+    // 8. Apply: reset ONLY the requested jobs, in one server transaction
     // -----------------------------------------------------------------------
-    let run_id = match apis::workflows_api::get_workflow(config, workflow_id) {
-        Ok(wf) => wf.run_id.unwrap_or(1),
-        Err(e) => {
-            eprintln!("Error: failed to fetch workflow {}: {}", workflow_id, e);
-            std::process::exit(1);
-        }
-    };
-
-    // The server's one-level reinitialize_downstream_jobs may incidentally reset
-    // some direct Completed/Failed dependents on complete→uninitialized; that is
+    // Resetting a terminal job also resets its downstream jobs on the server; that is
     // harmless — the recursive reset at reinit time covers the rest.
-    let mut succeeded: Vec<i64> = Vec::new();
-    let mut failures: Vec<(i64, String)> = Vec::new();
-
-    for job in &unique_jobs {
-        let id = require_job_id(job);
-        match apis::jobs_api::manage_status_change(
+    let requested: Vec<i64> = unique_jobs.iter().map(require_job_id).collect();
+    let (succeeded, failures): (Vec<i64>, Vec<(i64, String)>) =
+        match crate::client::commands::recover::reset_jobs(
             config,
-            id,
-            models::JobStatus::Uninitialized,
-            run_id,
+            workflow_id,
+            Some(requested.clone()),
+            Some(models::JobStatus::ALL.to_vec()),
+            force,
         ) {
-            Ok(_) => succeeded.push(id),
-            Err(e) => failures.push((id, e.to_string())),
-        }
-    }
+            Ok(response) => (
+                response.reset.unwrap_or_default(),
+                response
+                    .skipped
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|s| (s.job_id, s.reason))
+                    .collect(),
+            ),
+            Err(msg) => (
+                Vec::new(),
+                requested.iter().map(|&id| (id, msg.clone())).collect(),
+            ),
+        };
 
     // -----------------------------------------------------------------------
     // 8b. Apply reinit (only when requested and all resets succeeded)
@@ -2181,7 +2212,7 @@ fn handle_reset_job_status(
             "status": status_str,
             "workflow_id": workflow_id,
             "reset_count": succeeded.len(),
-            "requested_job_ids": unique_jobs.iter().map(require_job_id).collect::<Vec<_>>(),
+            "requested_job_ids": requested,
             "reset_job_ids": succeeded,
             // Informational: these are reset by the server at reinit time,
             // not by this command.
@@ -2266,6 +2297,9 @@ pub fn get_existing_job_names(
             None, // name
             None, // command
             None, // label
+            None, // ids
+            None, // statuses
+            None, // resource_requirements_id
         )
         .map_err(|e| format!("Failed to get existing job names: {:?}", e))?;
 

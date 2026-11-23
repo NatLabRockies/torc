@@ -190,6 +190,9 @@ fn test_export_import_basic(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
+        None, // resource_requirements_id
     )
     .expect("Failed to list imported jobs");
     let imported_jobs = jobs_response.items;
@@ -365,6 +368,8 @@ fn test_export_with_results(start_server: &ServerProcess) {
         None, // status
         None, // all_runs
         None, // compute_node_id
+        None, // ids
+        None, // statuses
     )
     .expect("Failed to list imported results");
 
@@ -474,6 +479,8 @@ fn test_import_results_without_compute_nodes(start_server: &ServerProcess) {
     let results_response = apis::results_api::list_results(
         config,
         new_workflow_id,
+        None,
+        None,
         None,
         None,
         None,
@@ -627,6 +634,9 @@ fn test_import_id_remapping(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs 1")
     .items;
@@ -647,6 +657,9 @@ fn test_import_id_remapping(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs 2")
     .items;
@@ -801,6 +814,9 @@ fn test_export_import_ro_crate_job_id_remapping(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
+        None, // resource_requirements_id
     )
     .expect("Failed to list imported jobs");
     let imported_jobs = jobs_response.items;
@@ -878,4 +894,197 @@ fn test_export_import_ro_crate_job_id_remapping(start_server: &ServerProcess) {
         Some(new_file_id),
         "File entity file_id should be remapped"
     );
+}
+
+fn list_jobs_by_id(
+    config: &torc::client::apis::configuration::Configuration,
+    workflow_id: i64,
+) -> std::collections::HashMap<i64, JobModel> {
+    apis::jobs_api::list_jobs(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        Some(true), // include_relationships
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to list jobs")
+    .items
+    .into_iter()
+    .map(|j| (j.id.unwrap(), j))
+    .collect()
+}
+
+/// Export `workflow_id`, optionally edit the export JSON, and import it as `name`.
+fn export_and_import(
+    server: &ServerProcess,
+    workflow_id: i64,
+    name: &str,
+    edit: impl FnOnce(&mut Value),
+) -> Result<i64, Box<dyn std::error::Error>> {
+    let export_file = NamedTempFile::new().expect("Failed to create temp file");
+    let export_path = export_file.path().to_str().unwrap();
+    let args = [
+        "workflows",
+        "export",
+        &workflow_id.to_string(),
+        "-o",
+        export_path,
+    ];
+    run_cli_with_json(&args, server, Some("test_user")).expect("Failed to export workflow");
+    let mut export: Value = serde_json::from_str(&fs::read_to_string(export_path).unwrap())?;
+    edit(&mut export);
+    fs::write(export_path, serde_json::to_string(&export)?)?;
+    let args = ["workflows", "import", export_path, "--name", name];
+    let result = run_cli_with_json(&args, server, Some("test_user"))?;
+    Ok(result["workflow_id"].as_i64().unwrap())
+}
+
+/// Import must map old to new IDs by position: the database allows duplicate job, file, and
+/// user_data names, and the bulk endpoints reject duplicates within one request.
+#[rstest]
+fn test_import_duplicate_names(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = WorkflowModel::new("dup_names".to_string(), "test_user".to_string());
+    let workflow_id = apis::workflows_api::create_workflow(config, workflow)
+        .unwrap()
+        .id
+        .unwrap();
+
+    let mut job_ids = Vec::new();
+    for tag in ["a", "b"] {
+        let file = FileModel::new(workflow_id, "dup.txt".to_string(), format!("/tmp/{}", tag));
+        let file_id = apis::files_api::create_file(config, file)
+            .unwrap()
+            .id
+            .unwrap();
+        let mut ud = UserDataModel::new(workflow_id, "dup".to_string());
+        ud.data = Some(serde_json::json!({ "tag": tag }));
+        let ud_id = apis::user_data_api::create_user_data(config, ud, None, None)
+            .unwrap()
+            .id
+            .unwrap();
+        let mut job = JobModel::new(workflow_id, "dup".to_string(), format!("echo {}", tag));
+        job.input_file_ids = Some(vec![file_id]);
+        job.input_user_data_ids = Some(vec![ud_id]);
+        job_ids.push(apis::jobs_api::create_job(config, job).unwrap().id.unwrap());
+    }
+    let mut consumer = JobModel::new(workflow_id, "dup".to_string(), "echo c".to_string());
+    consumer.depends_on_job_ids = Some(vec![job_ids[1]]);
+    apis::jobs_api::create_job(config, consumer).unwrap();
+
+    let new_id = export_and_import(start_server, workflow_id, "dup_names_imported", |_| {})
+        .expect("Failed to import workflow with duplicate names");
+
+    let jobs = list_jobs_by_id(config, new_id);
+    assert_eq!(jobs.len(), 3);
+    for job in jobs.values() {
+        let tag = job.command.strip_prefix("echo ").unwrap();
+        if tag == "c" {
+            let deps = job.depends_on_job_ids.clone().unwrap();
+            assert_eq!(deps.len(), 1);
+            assert_eq!(jobs[&deps[0]].command, "echo b");
+            continue;
+        }
+        let file_ids = job.input_file_ids.clone().unwrap();
+        assert_eq!(file_ids.len(), 1);
+        let file = apis::files_api::get_file(config, file_ids[0]).unwrap();
+        assert_eq!(file.workflow_id, new_id);
+        assert_eq!(file.path, format!("/tmp/{}", tag));
+        let ud_ids = job.input_user_data_ids.clone().unwrap();
+        assert_eq!(ud_ids.len(), 1);
+        let ud = apis::user_data_api::get_user_data(config, ud_ids[0]).unwrap();
+        assert_eq!(ud.workflow_id, new_id);
+        assert_eq!(ud.data, Some(serde_json::json!({ "tag": tag })));
+    }
+}
+
+/// Jobs are created level by level so dependencies exist at creation time, regardless of the
+/// order of jobs in the export file. A cycle fails the import and rolls it back.
+#[rstest]
+fn test_import_multi_level_dependencies(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = WorkflowModel::new("multi_level".to_string(), "test_user".to_string());
+    let workflow_id = apis::workflows_api::create_workflow(config, workflow)
+        .unwrap()
+        .id
+        .unwrap();
+
+    // j1 <- j2 <- j3 <- j4, and j4 also depends on j1.
+    let mut ids: Vec<i64> = Vec::new();
+    let deps_by_job: [&[usize]; 4] = [&[], &[0], &[1], &[2, 0]];
+    for (i, deps) in deps_by_job.iter().enumerate() {
+        let mut job = JobModel::new(
+            workflow_id,
+            format!("j{}", i + 1),
+            format!("echo {}", i + 1),
+        );
+        if !deps.is_empty() {
+            job.depends_on_job_ids = Some(deps.iter().map(|&d| ids[d]).collect());
+        }
+        ids.push(apis::jobs_api::create_job(config, job).unwrap().id.unwrap());
+    }
+
+    // Reverse the export's job order so it is not already topological.
+    let new_id = export_and_import(start_server, workflow_id, "multi_level_imported", |e| {
+        e["jobs"].as_array_mut().unwrap().reverse();
+    })
+    .expect("Failed to import multi-level workflow");
+
+    let jobs = list_jobs_by_id(config, new_id);
+    assert_eq!(jobs.len(), 4);
+    for job in jobs.values() {
+        let i: usize = job.name[1..].parse::<usize>().unwrap() - 1;
+        let mut dep_names: Vec<String> = job
+            .depends_on_job_ids
+            .clone()
+            .unwrap_or_default()
+            .iter()
+            .map(|d| jobs[d].name.clone())
+            .collect();
+        dep_names.sort();
+        let mut expected: Vec<String> = deps_by_job[i]
+            .iter()
+            .map(|&d| format!("j{}", d + 1))
+            .collect();
+        expected.sort();
+        assert_eq!(dep_names, expected, "dependencies of {}", job.name);
+        assert_eq!(job.status, Some(JobStatus::Uninitialized));
+    }
+
+    // Make j1 depend on j4 to create a cycle; import must fail and leave no workflow behind.
+    let err = export_and_import(start_server, workflow_id, "multi_level_cycle", |e| {
+        let jobs = e["jobs"].as_array_mut().unwrap();
+        let j1 = jobs.iter_mut().find(|j| j["name"] == "j1").unwrap();
+        j1["depends_on_job_ids"] = serde_json::json!([ids[3]]);
+    })
+    .expect_err("Import with a dependency cycle should fail");
+    assert!(err.to_string().contains("cycle"), "{}", err);
+    let remaining = apis::workflows_api::list_workflows(
+        config,
+        None,
+        None,
+        None,
+        None,
+        Some("multi_level_cycle"),
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap()
+    .items;
+    assert!(remaining.is_empty(), "cycle import should be rolled back");
 }

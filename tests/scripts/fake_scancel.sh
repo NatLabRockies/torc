@@ -3,7 +3,7 @@
 # Fake scancel command for testing
 # Simulates Slurm's scancel command
 
-JOBS_FILE="${TMPDIR:-/tmp}/fake_slurm_jobs.txt"
+JOBS_FILE="${TORC_FAKE_SLURM_STATE_DIR:-${TMPDIR:-/tmp}}/fake_slurm_jobs.txt"
 
 # Check for failure simulation
 if [ -n "$TORC_FAKE_SCANCEL_FAIL" ]; then

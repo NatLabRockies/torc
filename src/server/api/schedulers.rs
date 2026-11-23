@@ -8,8 +8,8 @@ use log::{debug, error, info};
 use sqlx::Row;
 
 use crate::server::api_responses::{
-    CreateLocalSchedulerResponse, CreateScheduledComputeNodeResponse, CreateSlurmSchedulerResponse,
-    DeleteLocalSchedulerResponse, DeleteLocalSchedulersResponse,
+    ApplySchedulerPlanResponse, CreateLocalSchedulerResponse, CreateScheduledComputeNodeResponse,
+    CreateSlurmSchedulerResponse, DeleteLocalSchedulerResponse, DeleteLocalSchedulersResponse,
     DeleteScheduledComputeNodeResponse, DeleteScheduledComputeNodesResponse,
     DeleteSlurmSchedulerResponse, DeleteSlurmSchedulersResponse, GetLocalSchedulerResponse,
     GetScheduledComputeNodeResponse, GetSlurmSchedulerResponse, ListLocalSchedulersResponse,
@@ -19,7 +19,10 @@ use crate::server::api_responses::{
 
 use crate::models;
 
-use super::{ApiContext, SqlQueryBuilder, database_error_with_msg, resource_not_found_response};
+use super::{
+    ApiContext, SqlQueryBuilder, begin_immediate, database_error_with_msg,
+    database_lock_aware_error, message_error_response, resource_not_found_response,
+};
 
 /// Trait defining scheduler-related API operations
 #[async_trait]
@@ -170,6 +173,16 @@ pub trait SchedulersApi<C> {
         id: i64,
         context: &C,
     ) -> Result<DeleteSlurmSchedulerResponse, ApiError>;
+
+    /// Apply a client-computed scheduler plan in one transaction: validate, suppress existing
+    /// schedule_nodes actions, create schedulers, assign jobs, and create armed recovery actions.
+    async fn apply_scheduler_plan(
+        &self,
+        workflow_id: i64,
+        body: models::ApplySchedulerPlanRequest,
+        dry_run: bool,
+        context: &C,
+    ) -> Result<ApplySchedulerPlanResponse, ApiError>;
 }
 
 /// Implementation of schedulers API for the server
@@ -1059,16 +1072,15 @@ where
             r#"
             UPDATE local_scheduler
             SET
-                workflow_id = COALESCE($1, workflow_id)
-                ,memory = COALESCE($2, memory)
-                ,num_cpus = COALESCE($3, num_cpus)
-            WHERE id = $4
+                memory = COALESCE($1, memory)
+                ,num_cpus = COALESCE($2, num_cpus)
+            WHERE id = $3 AND workflow_id = $4
             "#,
         )
-        .bind(body.workflow_id)
         .bind(body.memory)
         .bind(body.num_cpus)
         .bind(id)
+        .bind(body.workflow_id)
         .execute(self.context.pool.as_ref())
         .await
         {
@@ -1079,9 +1091,18 @@ where
         };
 
         if result.rows_affected() == 0 {
-            return Ok(UpdateLocalSchedulerResponse::NotFoundErrorResponse(
-                resource_not_found_response("Local scheduler", id),
-            ));
+            let pool = self.context.pool.as_ref();
+            return Ok(
+                if super::workflow_id_mismatch(pool, "local_scheduler", id).await? {
+                    UpdateLocalSchedulerResponse::UnprocessableContentErrorResponse(
+                        super::workflow_id_immutable_response(),
+                    )
+                } else {
+                    UpdateLocalSchedulerResponse::NotFoundErrorResponse(
+                        resource_not_found_response("Local scheduler", id),
+                    )
+                },
+            );
         }
 
         // Return the updated local scheduler by fetching it again
@@ -1135,20 +1156,19 @@ where
             r#"
             UPDATE scheduled_compute_node
             SET
-                workflow_id = COALESCE($1, workflow_id)
-                ,scheduler_id = COALESCE($2, scheduler_id)
-                ,scheduler_config_id = COALESCE($3, scheduler_config_id)
-                ,scheduler_type = COALESCE($4, scheduler_type)
-                ,status = COALESCE($5, status)
-            WHERE id = $6
+                scheduler_id = COALESCE($1, scheduler_id)
+                ,scheduler_config_id = COALESCE($2, scheduler_config_id)
+                ,scheduler_type = COALESCE($3, scheduler_type)
+                ,status = COALESCE($4, status)
+            WHERE id = $5 AND workflow_id = $6
             "#,
         )
-        .bind(body.workflow_id)
         .bind(body.scheduler_id)
         .bind(body.scheduler_config_id)
         .bind(body.scheduler_type)
         .bind(body.status)
         .bind(id)
+        .bind(body.workflow_id)
         .execute(self.context.pool.as_ref())
         .await
         {
@@ -1159,9 +1179,18 @@ where
         };
 
         if result.rows_affected() == 0 {
-            return Ok(UpdateScheduledComputeNodeResponse::NotFoundErrorResponse(
-                resource_not_found_response("Scheduled compute node", id),
-            ));
+            let pool = self.context.pool.as_ref();
+            return Ok(
+                if super::workflow_id_mismatch(pool, "scheduled_compute_node", id).await? {
+                    UpdateScheduledComputeNodeResponse::UnprocessableContentErrorResponse(
+                        super::workflow_id_immutable_response(),
+                    )
+                } else {
+                    UpdateScheduledComputeNodeResponse::NotFoundErrorResponse(
+                        resource_not_found_response("Scheduled compute node", id),
+                    )
+                },
+            );
         }
 
         // Return the updated scheduled compute node by fetching it again
@@ -1212,27 +1241,26 @@ where
             }
         };
 
+        // Optional text fields: null keeps the current value, "" clears it.
         let result = match sqlx::query(
             r#"
             UPDATE slurm_scheduler
             SET
-                workflow_id = COALESCE($1, workflow_id)
-                ,name = COALESCE($2, name)
-                ,account = COALESCE($3, account)
-                ,gres = COALESCE($4, gres)
-                ,mem = COALESCE($5, mem)
-                ,nodes = COALESCE($6, nodes)
-                ,ntasks_per_node = COALESCE($7, ntasks_per_node)
-                ,partition = COALESCE($8, partition)
-                ,qos = COALESCE($9, qos)
-                ,tmp = COALESCE($10, tmp)
-                ,walltime = COALESCE($11, walltime)
-                ,extra = COALESCE($12, extra)
-                ,serialize_allocations = COALESCE($13, serialize_allocations)
-            WHERE id = $14
+                name = COALESCE($1, name)
+                ,account = COALESCE($2, account)
+                ,gres = NULLIF(COALESCE($3, gres), '')
+                ,mem = NULLIF(COALESCE($4, mem), '')
+                ,nodes = COALESCE($5, nodes)
+                ,ntasks_per_node = COALESCE($6, ntasks_per_node)
+                ,partition = NULLIF(COALESCE($7, partition), '')
+                ,qos = NULLIF(COALESCE($8, qos), '')
+                ,tmp = NULLIF(COALESCE($9, tmp), '')
+                ,walltime = COALESCE($10, walltime)
+                ,extra = NULLIF(COALESCE($11, extra), '')
+                ,serialize_allocations = COALESCE($12, serialize_allocations)
+            WHERE id = $13 AND workflow_id = $14
             "#,
         )
-        .bind(body.workflow_id)
         .bind(body.name)
         .bind(body.account)
         .bind(body.gres)
@@ -1246,6 +1274,7 @@ where
         .bind(body.extra)
         .bind(body.serialize_allocations)
         .bind(id)
+        .bind(body.workflow_id)
         .execute(self.context.pool.as_ref())
         .await
         {
@@ -1256,9 +1285,18 @@ where
         };
 
         if result.rows_affected() == 0 {
-            return Ok(UpdateSlurmSchedulerResponse::NotFoundErrorResponse(
-                resource_not_found_response("Slurm scheduler", id),
-            ));
+            let pool = self.context.pool.as_ref();
+            return Ok(
+                if super::workflow_id_mismatch(pool, "slurm_scheduler", id).await? {
+                    UpdateSlurmSchedulerResponse::UnprocessableContentErrorResponse(
+                        super::workflow_id_immutable_response(),
+                    )
+                } else {
+                    UpdateSlurmSchedulerResponse::NotFoundErrorResponse(
+                        resource_not_found_response("Slurm scheduler", id),
+                    )
+                },
+            );
         }
 
         // Return the updated Slurm scheduler by fetching it again
@@ -1434,5 +1472,263 @@ where
             }
             Err(e) => Err(database_error_with_msg(e, "Failed to delete scheduler")),
         }
+    }
+
+    async fn apply_scheduler_plan(
+        &self,
+        workflow_id: i64,
+        body: models::ApplySchedulerPlanRequest,
+        dry_run: bool,
+        context: &C,
+    ) -> Result<ApplySchedulerPlanResponse, ApiError> {
+        debug!(
+            "apply_scheduler_plan(workflow_id={}, schedulers={}, actions={}, dry_run={}) - X-Span-ID: {:?}",
+            workflow_id,
+            body.schedulers.len(),
+            body.recovery_actions.len(),
+            dry_run,
+            context.get().0.clone()
+        );
+        let unprocessable = |msg: String| {
+            Ok(
+                ApplySchedulerPlanResponse::UnprocessableContentErrorResponse(
+                    message_error_response(msg),
+                ),
+            )
+        };
+        if body.schedulers.is_empty() {
+            return unprocessable("Scheduler plan has no schedulers".to_string());
+        }
+        // job_id -> index of the scheduler it is assigned to.
+        let mut job_scheduler = std::collections::HashMap::new();
+        for (idx, entry) in body.schedulers.iter().enumerate() {
+            for id in &entry.job_ids {
+                if job_scheduler.insert(*id, idx).is_some() {
+                    return unprocessable(format!(
+                        "job_id={} is listed more than once in the plan",
+                        id
+                    ));
+                }
+            }
+        }
+        for (i, action) in body.recovery_actions.iter().enumerate() {
+            let Some(idx) = usize::try_from(action.scheduler_index)
+                .ok()
+                .filter(|idx| *idx < body.schedulers.len())
+            else {
+                return unprocessable(format!(
+                    "recovery_actions[{}]: scheduler_index {} is out of range",
+                    i, action.scheduler_index
+                ));
+            };
+            if action.job_ids.is_empty() || action.num_allocations < 1 {
+                return unprocessable(format!(
+                    "recovery_actions[{}]: needs job_ids and num_allocations >= 1",
+                    i
+                ));
+            }
+            if let Some(id) = action
+                .job_ids
+                .iter()
+                .find(|id| job_scheduler.get(id) != Some(&idx))
+            {
+                return unprocessable(format!(
+                    "recovery_actions[{}]: job_id={} is not assigned to scheduler_index {}",
+                    i, id, action.scheduler_index
+                ));
+            }
+        }
+        // Id sets are bound as one JSON array and expanded with json_each.
+        let to_json = |ids: &[i64]| serde_json::to_string(ids).expect("serialize ids");
+        let all_job_ids: Vec<i64> = job_scheduler.keys().copied().collect();
+
+        // The write lock is taken up front so validation, arming, and the writes see the same
+        // job statuses. A dry run does everything and rolls back.
+        let mut tx = begin_immediate(&self.context.pool)
+            .await
+            .map_err(|e| database_lock_aware_error(e, "Failed to begin transaction"))?;
+
+        // Validate: every job belongs to the workflow. Jobs that are no longer pending (a worker
+        // claimed one after the client planned) are left out of the plan and reported, so a
+        // race with a running allocation does not void the whole plan.
+        let statuses: std::collections::HashMap<i64, i64> = sqlx::query_as::<_, (i64, i64)>(
+            "SELECT j.id, j.status FROM json_each(?1) p \
+                 JOIN job j ON j.id = p.value AND j.workflow_id = ?2",
+        )
+        .bind(to_json(&all_job_ids))
+        .bind(workflow_id)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(|e| database_error_with_msg(e, "Failed to read job statuses"))?
+        .into_iter()
+        .collect();
+        let pending = [
+            models::JobStatus::Uninitialized.to_int() as i64,
+            models::JobStatus::Blocked.to_int() as i64,
+            models::JobStatus::Ready.to_int() as i64,
+        ];
+        let mut missing: Vec<i64> = all_job_ids
+            .iter()
+            .copied()
+            .filter(|id| !statuses.contains_key(id))
+            .collect();
+        if !missing.is_empty() {
+            missing.sort_unstable();
+            let total = missing.len();
+            missing.truncate(20);
+            return unprocessable(format!(
+                "{} job(s) in the plan are not in workflow_id={}: {:?}",
+                total, workflow_id, missing
+            ));
+        }
+        let is_pending = |id: &i64| pending.contains(&statuses[id]);
+        let mut skipped_job_ids: Vec<i64> = all_job_ids
+            .iter()
+            .copied()
+            .filter(|id| !is_pending(id))
+            .collect();
+        skipped_job_ids.sort_unstable();
+        // A recovery action whose scheduler has no pending jobs left is dropped: its allocation
+        // would have nothing to run. One that gates on a skipped job while its scheduler still
+        // has pending jobs (a merged scheduler gates only on its root jobs) cannot be armed
+        // correctly from this plan, so the client must replan.
+        // ponytail: reject-and-replan until workflow action triggering is redesigned.
+        let mut keep_action = Vec::with_capacity(body.recovery_actions.len());
+        for (i, action) in body.recovery_actions.iter().enumerate() {
+            let has_pending = body.schedulers[action.scheduler_index as usize]
+                .job_ids
+                .iter()
+                .any(is_pending);
+            if has_pending && let Some(id) = action.job_ids.iter().find(|id| !is_pending(id)) {
+                return unprocessable(format!(
+                    "recovery_actions[{}]: gate job_id={} is no longer pending but its scheduler \
+                     still has pending jobs; regenerate the plan",
+                    i, id
+                ));
+            }
+            keep_action.push(has_pending);
+        }
+        let mut response = models::ApplySchedulerPlanResponse {
+            skipped_job_ids,
+            ..Default::default()
+        };
+        let now = chrono::Utc::now().to_rfc3339();
+
+        // Suppress: the old schedule_nodes actions would otherwise start their own allocations.
+        // Persistent ones too: they would keep firing the old schedulers from every new worker.
+        // `executed = 0` skips actions already claimed or suppressed (a persistent action keeps
+        // executed = 0 across claims, so it is suppressed even after one has run).
+        if body.suppress_existing_schedule_actions {
+            response.suppressed_action_ids = sqlx::query_scalar::<_, i64>(
+                "UPDATE workflow_action SET executed = 1, executed_at = ?1, state = 'suppressed', \
+                 error = NULL WHERE workflow_id = ?2 AND action_type = 'schedule_nodes' \
+                 AND is_recovery = 0 AND executed = 0 RETURNING id",
+            )
+            .bind(&now)
+            .bind(workflow_id)
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to suppress schedule actions"))?;
+            response.suppressed_action_ids.sort_unstable();
+        }
+
+        // Create schedulers and assign their jobs.
+        for entry in &body.schedulers {
+            let s = &entry.scheduler;
+            let id = sqlx::query_scalar::<_, i64>(
+                "INSERT INTO slurm_scheduler (workflow_id, name, account, gres, mem, nodes, \
+                 ntasks_per_node, partition, qos, tmp, walltime, extra, serialize_allocations) \
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+            )
+            .bind(workflow_id)
+            .bind(&s.name)
+            .bind(&s.account)
+            .bind(&s.gres)
+            .bind(&s.mem)
+            .bind(s.nodes)
+            .bind(s.ntasks_per_node)
+            .bind(&s.partition)
+            .bind(&s.qos)
+            .bind(&s.tmp)
+            .bind(&s.walltime)
+            .bind(&s.extra)
+            .bind(s.serialize_allocations.unwrap_or(false))
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to create slurm scheduler"))?;
+            let job_ids: Vec<i64> = entry.job_ids.iter().copied().filter(is_pending).collect();
+            if !job_ids.is_empty() {
+                sqlx::query(
+                    "UPDATE job SET scheduler_id = ?1 \
+                     WHERE id IN (SELECT value FROM json_each(?2))",
+                )
+                .bind(id)
+                .bind(to_json(&job_ids))
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| database_error_with_msg(e, "Failed to assign jobs to scheduler"))?;
+            }
+            response.scheduler_ids.push(id);
+        }
+
+        // Recovery actions, armed from the jobs' statuses as of this transaction. Of the pending
+        // statuses only ready satisfies on_jobs_ready; later transitions to ready increment
+        // trigger_count through check_and_trigger_actions. Every gate job of a kept action is
+        // pending (checked above).
+        let ready = models::JobStatus::Ready.to_int() as i64;
+        for (action, keep) in body.recovery_actions.iter().zip(keep_action) {
+            if !keep {
+                continue;
+            }
+            let job_ids = &action.job_ids;
+            let scheduler_id = response.scheduler_ids[action.scheduler_index as usize];
+            let required = job_ids.len() as i64;
+            let trigger_count = job_ids.iter().filter(|id| statuses[id] == ready).count() as i64;
+            let config = serde_json::json!({
+                "scheduler_type": "slurm",
+                "scheduler_id": scheduler_id,
+                "num_allocations": action.num_allocations,
+            });
+            let id = sqlx::query_scalar::<_, i64>(
+                "INSERT INTO workflow_action (workflow_id, trigger_type, action_type, \
+                 action_config, job_ids, trigger_count, required_triggers, executed, persistent, \
+                 is_recovery) \
+                 VALUES (?, 'on_jobs_ready', 'schedule_nodes', ?, ?, ?, ?, 0, 0, 1) RETURNING id",
+            )
+            .bind(workflow_id)
+            .bind(config.to_string())
+            .bind(to_json(job_ids))
+            .bind(trigger_count)
+            .bind(required)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to create recovery action"))?;
+            response.actions.push(models::AppliedSchedulerAction {
+                id,
+                scheduler_id,
+                num_allocations: action.num_allocations,
+                pending: trigger_count >= required,
+            });
+        }
+
+        if dry_run {
+            tx.rollback()
+                .await
+                .map_err(|e| database_error_with_msg(e, "Failed to roll back dry run"))?;
+        } else {
+            tx.commit()
+                .await
+                .map_err(|e| database_lock_aware_error(e, "Failed to commit transaction"))?;
+            info!(
+                "Applied scheduler plan workflow_id={} schedulers={} jobs={} skipped={} actions={} suppressed={}",
+                workflow_id,
+                response.scheduler_ids.len(),
+                all_job_ids.len() - response.skipped_job_ids.len(),
+                response.skipped_job_ids.len(),
+                response.actions.len(),
+                response.suppressed_action_ids.len()
+            );
+        }
+        Ok(ApplySchedulerPlanResponse::SuccessfulResponse(response))
     }
 }

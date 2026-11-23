@@ -17,6 +17,10 @@ The server implements these key endpoints:
 - `POST /workflows/{id}/claim_next_jobs` - Thread-safe job allocation to workers
 - `POST /jobs/{id}/manage_status_change` - Update job status with cascade effects
 - `POST /workflows/{id}/process_changed_job_inputs` - Detect changed inputs and reset jobs
+- `POST /workflows/{id}/file_stats` - Compare a client's file stat snapshot with stored mtimes and
+  reset jobs with changed inputs or missing outputs, plus their downstream jobs
+- `POST /workflows/{id}/apply_scheduler_plan` - Apply a client-computed Slurm scheduler plan in one
+  transaction: suppress old schedule actions, create schedulers, assign jobs, arm recovery actions
 
 ## Thread Safety
 

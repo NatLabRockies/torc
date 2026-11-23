@@ -128,6 +128,12 @@ curl -X POST http://localhost:8080/torc-service/v1/jobs \
 curl "http://localhost:8080/torc-service/v1/jobs?workflow_id=1&status=ready" \
   | jq '.items[] | {name, status, id}'
 
+# curl - several statuses, or specific job IDs (comma-separated)
+curl "http://localhost:8080/torc-service/v1/jobs?workflow_id=1&statuses=failed,terminated" \
+  | jq '.items[] | {name, status, id}'
+curl "http://localhost:8080/torc-service/v1/jobs?workflow_id=1&ids=1,2,3" \
+  | jq '.items[] | {name, status, id}'
+
 # nushell - filter and format
 http get "http://localhost:8080/torc-service/v1/jobs?workflow_id=1"
   | get items
@@ -278,4 +284,40 @@ curl -X POST "http://localhost:8080/torc-service/v1/workflows/1/claim_next_jobs?
 curl -X POST "http://localhost:8080/torc-service/v1/workflows/1/process_changed_job_inputs?dry_run=true" \
   -H "Content-Type: application/json" \
   -d '{}' | jq '.reinitialized_jobs'
+```
+
+**Apply File Stats** (Initialization and Reinitialization)
+
+```bash
+curl -X POST "http://localhost:8080/torc-service/v1/workflows/1/file_stats?dry_run=true" \
+  -H "Content-Type: application/json" \
+  -d '{"files": [{"id": 1, "exists": true, "st_mtime": 1700000000.123}, {"id": 2, "exists": false}]}' \
+  | jq '.reset_jobs'
+```
+
+**Apply Scheduler Plan** (`torc slurm regenerate`)
+
+```bash
+curl -X POST "http://localhost:8080/torc-service/v1/workflows/1/apply_scheduler_plan?dry_run=true" \
+  -H "Content-Type: application/json" \
+  -d '{"schedulers": [{"scheduler": {"workflow_id": 1, "name": "regen", "account": "acct",
+        "nodes": 1, "walltime": "01:00:00"}, "job_ids": [1, 2]}],
+       "recovery_actions": [{"scheduler_index": 0, "job_ids": [1, 2], "num_allocations": 1}],
+       "suppress_existing_schedule_actions": true}' \
+  | jq '.actions'
+```
+
+**Record a Workflow Action's Outcome** (job runners and `torc submit`)
+
+```bash
+curl -X POST http://localhost:8080/torc-service/v1/workflows/1/actions/2/result \
+  -H "Content-Type: application/json" \
+  -d '{"success": false, "error": "sbatch: error: Invalid account"}' \
+  | jq '{state, error}'
+```
+
+**Re-arm a Failed Workflow Action** (`torc workflows reset-action 1 2`)
+
+```bash
+curl -X POST http://localhost:8080/torc-service/v1/workflows/1/actions/2/reset | jq '.state'
 ```

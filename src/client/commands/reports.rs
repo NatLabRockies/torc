@@ -676,6 +676,14 @@ pub fn build_results_report(
         results
     };
 
+    // A workflow has few compute nodes but may have many results: list them once.
+    let compute_nodes: std::collections::HashMap<i64, models::ComputeNodeModel> =
+        pagination::paginate_compute_nodes(config, wf_id, pagination::ComputeNodeListParams::new())
+            .map_err(|e| format!("Error fetching compute nodes: {}", e))?
+            .into_iter()
+            .filter_map(|n| n.id.map(|id| (id, n)))
+            .collect();
+
     let mut result_records: Vec<JobResultRecord> = Vec::new();
 
     for result in &results {
@@ -706,8 +714,8 @@ pub fn build_results_report(
 
         // Get compute node and determine log file paths
         let compute_node_id = result.compute_node_id;
-        match apis::compute_nodes_api::get_compute_node(config, compute_node_id) {
-            Ok(compute_node) => {
+        match compute_nodes.get(&compute_node_id) {
+            Some(compute_node) => {
                 compute_node_type = Some(compute_node.compute_node_type.clone());
 
                 match compute_node.compute_node_type.as_str() {
@@ -778,11 +786,8 @@ pub fn build_results_report(
                     }
                 }
             }
-            Err(e) => {
-                eprintln!(
-                    "Warning: Could not fetch compute node {}: {}",
-                    compute_node_id, e
-                );
+            None => {
+                eprintln!("Warning: Compute node {} not found", compute_node_id);
                 // compute_node_type and job_runner_log stay None
             }
         }
@@ -959,6 +964,57 @@ pub fn generate_summary(config: &Configuration, workflow_id: Option<i64>, format
             );
         }
 
+        let action_line = |a: &serde_json::Value| {
+            format!(
+                "action {} ({} {})",
+                a["id"],
+                a["trigger_type"].as_str().unwrap_or(""),
+                a["action_type"].as_str().unwrap_or("")
+            )
+        };
+        let failed_actions = report["failed_actions"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        let stuck_actions = report["stuck_actions"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        if !failed_actions.is_empty() {
+            eprintln!();
+            eprintln!("✗ {} workflow action(s) failed:", failed_actions.len());
+            for a in &failed_actions {
+                eprintln!(
+                    "  {}: {}",
+                    action_line(a),
+                    a["error"].as_str().unwrap_or("(no error recorded)")
+                );
+            }
+        }
+        if !stuck_actions.is_empty() {
+            eprintln!();
+            eprintln!(
+                "⚠ {} workflow action(s) claimed over {} minutes ago with no result \
+                 (still running, or the claimer died):",
+                stuck_actions.len(),
+                STUCK_ACTION_CLAIM_MINUTES
+            );
+            for a in &stuck_actions {
+                eprintln!(
+                    "  {}: claimed at {}",
+                    action_line(a),
+                    a["executed_at"].as_str().unwrap_or("?")
+                );
+            }
+        }
+        if !failed_actions.is_empty() || !stuck_actions.is_empty() {
+            eprintln!(
+                "  Torc does not retry actions. Fix the cause, then run \
+                 'torc workflows reset-action {} <action_id>'.",
+                workflow_id
+            );
+        }
+
         // Labeled ready jobs that no active runner will claim.
         if let Some(unserved) = report["unserved_ready_labels"].as_object()
             && !unserved.is_empty()
@@ -1039,5 +1095,57 @@ pub fn build_workflow_summary_report(
         report["max_allocation_remaining_seconds"] = serde_json::json!(max_rem);
     }
 
+    // Actions whose execution failed, or that were claimed long ago with no outcome. Servers older
+    // than API 1.1.0 record no state, so both lists are empty there. Best-effort: a failure here
+    // must not break the rest of the summary.
+    let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
+        .unwrap_or_else(|e| {
+            log::warn!(
+                "Failed to fetch workflow actions for summary workflow_id={}: {}",
+                workflow_id,
+                e
+            );
+            Vec::new()
+        });
+    let (failed, stuck) = problem_actions(&actions, chrono::Utc::now());
+    report["failed_actions"] = serde_json::json!(failed);
+    report["stuck_actions"] = serde_json::json!(stuck);
+
     Ok(report)
+}
+
+/// A claimed action with no reported outcome after this long is reported as possibly stuck. A
+/// `schedule_nodes` claim normally resolves in seconds; a long `run_commands` action can
+/// legitimately take longer, so the report says "no result", not "dead".
+pub const STUCK_ACTION_CLAIM_MINUTES: i64 = 30;
+
+/// Split out the `failed` actions and the `claimed` actions older than
+/// [`STUCK_ACTION_CLAIM_MINUTES`] for `torc status`.
+pub fn problem_actions(
+    actions: &[models::WorkflowActionModel],
+    now: chrono::DateTime<chrono::Utc>,
+) -> (
+    Vec<models::WorkflowActionModel>,
+    Vec<models::WorkflowActionModel>,
+) {
+    let failed = actions
+        .iter()
+        .filter(|a| a.state.as_deref() == Some("failed"))
+        .cloned()
+        .collect();
+    let stuck = actions
+        .iter()
+        .filter(|a| {
+            a.state.as_deref() == Some("claimed")
+                && a.executed_at
+                    .as_deref()
+                    .and_then(|t| chrono::DateTime::parse_from_rfc3339(t).ok())
+                    .is_some_and(|t| {
+                        now.signed_duration_since(t)
+                            > chrono::Duration::minutes(STUCK_ACTION_CLAIM_MINUTES)
+                    })
+        })
+        .cloned()
+        .collect();
+    (failed, stuck)
 }

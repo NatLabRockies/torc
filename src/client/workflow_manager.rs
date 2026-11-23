@@ -4,8 +4,11 @@ use crate::client::errors::TorcError;
 use crate::config::TorcConfig;
 use log::{self, debug, error, info, warn};
 
-use crate::client::commands::pagination::{FileListParams, JobListParams, iter_files, iter_jobs};
-use crate::models::{FileModel, JobStatus, TaskModel, WorkflowModel};
+use crate::MAX_RECORD_TRANSFER_COUNT;
+use crate::client::commands::pagination::{FileListParams, iter_files};
+use crate::client::version_check;
+use crate::models::{self, FileModel, TaskModel, WorkflowModel};
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::time::UNIX_EPOCH;
@@ -35,6 +38,19 @@ pub struct StartOutcome {
     pub slurm_actions_seen: usize,
 }
 
+/// The workflow's files and what the client observed on disk for each.
+struct FileSnapshot {
+    entries: Vec<models::FileStatEntry>,
+    files: HashMap<i64, FileModel>,
+}
+
+fn describe_file(files: &HashMap<i64, FileModel>, id: i64) -> String {
+    match files.get(&id) {
+        Some(f) => format!("'{}' (id: {}, path: {})", f.name, id, f.path),
+        None => format!("id {}", id),
+    }
+}
+
 pub struct WorkflowManager {
     config: Configuration,
     torc_config: TorcConfig,
@@ -51,25 +67,19 @@ impl WorkflowManager {
         }
     }
 
-    /// Get the modification time of a file as seconds since Unix epoch.
-    /// Panics if the modification time cannot be read.
-    fn get_modified_file_time(metadata: &fs::Metadata) -> f64 {
-        let system_time = metadata
-            .modified()
-            .expect("Failed to get modification time");
-        let duration = system_time
-            .duration_since(UNIX_EPOCH)
-            .expect("File has modification time before Unix epoch");
-        duration.as_secs_f64()
-    }
-
     /// Check if initialization is safe to run without executing.
     /// Returns information about missing input files and existing output files.
     pub fn check_initialization(&self) -> Result<InitializationCheck, TorcError> {
-        // Check for missing required input files
-        let missing_input_files = self.get_missing_required_files()?;
-
-        // Check for existing output files
+        let (response, files) = self.update_file_stats(true)?;
+        let missing_input_files: Vec<String> = response
+            .missing_required_file_ids
+            .iter()
+            .map(|id| {
+                files
+                    .get(id)
+                    .map_or_else(|| id.to_string(), |f| f.path.clone())
+            })
+            .collect();
         let existing_output_files = self.get_existing_output_files()?;
 
         // Safe if no missing input files (existing output files are just warnings)
@@ -80,42 +90,6 @@ impl WorkflowManager {
             missing_input_files,
             existing_output_files,
         })
-    }
-
-    /// Get list of missing required input files (file paths)
-    fn get_missing_required_files(&self) -> Result<Vec<String>, TorcError> {
-        let response =
-            match apis::workflows_api::list_required_existing_files(&self.config, self.workflow_id)
-            {
-                Ok(response) => response,
-                Err(err) => {
-                    return Err(TorcError::ApiError(format!(
-                        "Failed to list required existing files: {}",
-                        err
-                    )));
-                }
-            };
-
-        let mut missing_files = Vec::new();
-
-        for file_id in response.files {
-            let file = match apis::files_api::get_file(&self.config, file_id) {
-                Ok(file) => file,
-                Err(err) => {
-                    return Err(TorcError::ApiError(format!(
-                        "Failed to get file details for ID {}: {}",
-                        file_id, err
-                    )));
-                }
-            };
-
-            let file_path = Path::new(&file.path);
-            if !file_path.exists() {
-                missing_files.push(file.path.clone());
-            }
-        }
-
-        Ok(missing_files)
     }
 
     /// Get list of existing output files (file paths)
@@ -152,7 +126,8 @@ impl WorkflowManager {
     /// If force is true:
     ///   - Ignore missing input files.
     pub fn initialize(&self, force: bool) -> Result<(), TorcError> {
-        self.check_workflow(force)?;
+        self.check_workflow()?;
+        let snapshot = self.snapshot_files(force)?;
         self.cleanup_output_files(false)?;
         match apis::workflows_api::reset_workflow_status(&self.config, self.workflow_id, None) {
             Ok(_) => {}
@@ -164,7 +139,13 @@ impl WorkflowManager {
                 return Err(TorcError::ApiError(err.to_string()));
             }
         }
-        match apis::workflows_api::reset_job_status(&self.config, self.workflow_id, Some(false)) {
+        match apis::workflows_api::reset_job_status(
+            &self.config,
+            self.workflow_id,
+            Some(false),
+            None,
+            None,
+        ) {
             Ok(_) => {}
             Err(err) => {
                 error!(
@@ -175,7 +156,7 @@ impl WorkflowManager {
             }
         }
         // reset_workflow_status above bumps run_id — no separate bump call needed.
-        self.initialize_files()?;
+        self.sync_file_stats(&snapshot, force, false)?;
         self.initialize_jobs(false)?;
         // Event is now broadcast via SSE from the server
         Ok(())
@@ -198,7 +179,8 @@ impl WorkflowManager {
             );
             return Ok(active);
         }
-        self.check_workflow(force)?;
+        self.check_workflow()?;
+        let snapshot = self.snapshot_files(force)?;
         self.cleanup_output_files(false)?;
         match apis::workflows_api::reset_workflow_status(&self.config, self.workflow_id, None) {
             Ok(_) => {}
@@ -210,7 +192,13 @@ impl WorkflowManager {
                 return Err(TorcError::ApiError(err.to_string()));
             }
         }
-        match apis::workflows_api::reset_job_status(&self.config, self.workflow_id, Some(false)) {
+        match apis::workflows_api::reset_job_status(
+            &self.config,
+            self.workflow_id,
+            Some(false),
+            None,
+            None,
+        ) {
             Ok(_) => {}
             Err(err) => {
                 error!(
@@ -221,7 +209,7 @@ impl WorkflowManager {
             }
         }
         // reset_workflow_status above bumps run_id — no separate bump call needed.
-        self.initialize_files()?;
+        self.sync_file_stats(&snapshot, force, false)?;
         self.initialize_jobs_async(false)
     }
 
@@ -299,6 +287,8 @@ impl WorkflowManager {
 
         // Filter for schedule_nodes actions
         let mut outcome = StartOutcome::default();
+        // Whether the server records action outcomes; checked on the first claimed action.
+        let mut report_outcomes: Option<bool> = None;
         for action in actions {
             let action_type = &action.action_type;
             let action_id = action.id.unwrap_or(0);
@@ -367,7 +357,7 @@ impl WorkflowManager {
                     let poll_interval = poll_interval_override
                         .unwrap_or(self.torc_config.client.slurm.poll_interval);
 
-                    match crate::client::commands::slurm::schedule_slurm_nodes(
+                    let result = crate::client::commands::slurm::schedule_slurm_nodes(
                         &self.config,
                         self.workflow_id,
                         scheduler_id,
@@ -379,7 +369,19 @@ impl WorkflowManager {
                         max_parallel_jobs,
                         self.torc_config.client.slurm.keep_submission_scripts,
                         claim_backoff_max_secs_override,
-                    ) {
+                    );
+                    if *report_outcomes.get_or_insert_with(|| {
+                        version_check::check_version(&self.config).server_supports_action_outcomes()
+                    }) {
+                        crate::client::utils::report_action_result(
+                            &self.config,
+                            self.workflow_id,
+                            action_id,
+                            &result.as_ref().map(|_| ()).map_err(|e| e.to_string()),
+                            20,
+                        );
+                    }
+                    match result {
                         Ok(()) => {
                             outcome.allocations_submitted += num_allocations.max(0);
                             info!(
@@ -413,7 +415,8 @@ impl WorkflowManager {
     /// Reinitialize the workflow. Resets workflow status (which also bumps
     /// run_id) and runs the startup script.
     pub fn reinitialize(&self, force: bool, dry_run: bool) -> Result<(), TorcError> {
-        self.check_workflow(force)?;
+        self.check_workflow()?;
+        let snapshot = self.snapshot_files(force || dry_run)?;
         if !dry_run {
             match apis::workflows_api::reset_workflow_status(&self.config, self.workflow_id, None) {
                 Ok(_) => {
@@ -428,7 +431,7 @@ impl WorkflowManager {
                 }
             }
         }
-        self.reinitialize_jobs(dry_run)?;
+        self.reinitialize_jobs_from(&snapshot, force, dry_run)?;
         // Event is now broadcast via SSE from the server
         Ok(())
     }
@@ -455,9 +458,10 @@ impl WorkflowManager {
             return Ok(Some(active));
         }
 
-        self.check_workflow(force)?;
+        self.check_workflow()?;
+        let snapshot = self.snapshot_files(force || dry_run)?;
         if dry_run {
-            self.reinitialize_jobs(true)?;
+            self.reinitialize_jobs_from(&snapshot, force, true)?;
             return Ok(None);
         }
 
@@ -474,8 +478,7 @@ impl WorkflowManager {
             }
         }
 
-        self.process_changed_files(false)?;
-        self.update_jobs_if_output_files_are_missing(false)?;
+        self.sync_file_stats(&snapshot, force, false)?;
         self.process_changed_user_data(false)?;
 
         let task = self.initialize_jobs_async(true)?;
@@ -502,70 +505,6 @@ impl WorkflowManager {
                 .map_err(|e| TorcError::ApiError(format!("Failed to parse task response: {}", e))),
             Err(err) => Err(TorcError::ApiError(err.to_string())),
         }
-    }
-
-    /// Initialize the file stats in the database.
-    pub fn initialize_files(&self) -> Result<(), TorcError> {
-        info!("Initializing files for workflow {}", self.workflow_id);
-
-        // Create file list parameters
-        let params = FileListParams::new();
-
-        // Iterate through all files for this workflow using iter_files
-        let files_iterator = iter_files(&self.config, self.workflow_id, params);
-
-        for file_result in files_iterator {
-            match file_result {
-                Ok(mut file) => {
-                    let file_id = file.id.expect("File ID must be set for existing files");
-                    let file_path = Path::new(&file.path);
-                    if !file_path.exists() {
-                        continue;
-                    }
-                    match fs::metadata(file_path) {
-                        Ok(metadata) => {
-                            let mtime = Self::get_modified_file_time(&metadata);
-
-                            // Update the file record if the mtime has changed or is not set
-                            let needs_update = match file.st_mtime {
-                                Some(current_mtime) => (current_mtime - mtime).abs() > 0.01, // Allow for filesystem timestamp precision differences (10ms)
-                                None => true, // Always update if no mtime is set
-                            };
-
-                            if needs_update {
-                                file.st_mtime = Some(mtime);
-
-                                match apis::files_api::update_file(
-                                    &self.config,
-                                    file_id,
-                                    file.clone(),
-                                ) {
-                                    Ok(_) => {
-                                        info!(
-                                            "Updated file {} (id: {}) with mtime: {}",
-                                            file.name, file_id, mtime
-                                        );
-                                    }
-                                    Err(err) => {
-                                        panic!(
-                                            "Failed to update file {} (id: {}): {}",
-                                            file.name, file_id, err
-                                        );
-                                    }
-                                }
-                            }
-                        }
-                        Err(err) => {
-                            panic!("Failed to get metadata for file {}: {}", file.path, err);
-                        }
-                    }
-                }
-                Err(err) => {
-                    panic!("Failed to fetch file from API: {}", err);
-                }
-            }
-        }
-        Ok(())
     }
 
     /// Check for existing output files and optionally delete them.
@@ -678,8 +617,8 @@ impl WorkflowManager {
         }
     }
 
-    /// Check the condtions of the workflow.
-    pub fn check_workflow(&self, force: bool) -> Result<(), TorcError> {
+    /// Check that the workflow is not archived and has no missing user data.
+    pub fn check_workflow(&self) -> Result<(), TorcError> {
         match apis::workflows_api::get_workflow(&self.config, self.workflow_id) {
             Ok(workflow) => {
                 if workflow.is_archived.unwrap_or(false) {
@@ -691,7 +630,6 @@ impl WorkflowManager {
             }
             Err(err) => return Err(TorcError::ApiError(err.to_string())),
         }
-        self.check_workflow_files(force)?;
         self.check_user_data()?;
         Ok(())
     }
@@ -806,6 +744,26 @@ impl WorkflowManager {
             &workflow.name,
         );
 
+        // st_mtime is also set on output files once their job completes, so exclude any file
+        // a job produces; otherwise re-initializing after a run records outputs as inputs.
+        // A partial list would misclassify outputs, so skip input entities on any error.
+        let output_file_ids: std::collections::HashSet<i64> = match iter_files(
+            &self.config,
+            self.workflow_id,
+            FileListParams::new().with_is_output(true),
+        )
+        .collect::<Result<Vec<_>, _>>()
+        {
+            Ok(files) => files.into_iter().filter_map(|f| f.id).collect(),
+            Err(e) => {
+                warn!(
+                    "Skipping RO-Crate input entities for workflow {}: failed to list output files: {}",
+                    self.workflow_id, e
+                );
+                return;
+            }
+        };
+
         // Collect all files with st_mtime set (input files)
         let params = FileListParams::new();
         let files_iterator = iter_files(&self.config, self.workflow_id, params);
@@ -814,8 +772,10 @@ impl WorkflowManager {
         for file_result in files_iterator {
             match file_result {
                 Ok(file) => {
-                    // Input files have st_mtime set
-                    if file.st_mtime.is_some() {
+                    // Input files have st_mtime set and are not produced by a job
+                    if file.st_mtime.is_some()
+                        && !file.id.is_some_and(|id| output_file_ids.contains(&id))
+                    {
                         input_files.push(file);
                     }
                 }
@@ -840,9 +800,19 @@ impl WorkflowManager {
     }
 
     /// Reinitialize jobs. Account for jobs that are new or have been reset.
-    pub fn reinitialize_jobs(&self, dry_run: bool) -> Result<(), TorcError> {
-        self.process_changed_files(dry_run)?;
-        self.update_jobs_if_output_files_are_missing(dry_run)?;
+    /// If force is false, return an error if required input files are missing.
+    pub fn reinitialize_jobs(&self, force: bool, dry_run: bool) -> Result<(), TorcError> {
+        let snapshot = self.snapshot_files(force || dry_run)?;
+        self.reinitialize_jobs_from(&snapshot, force, dry_run)
+    }
+
+    fn reinitialize_jobs_from(
+        &self,
+        snapshot: &FileSnapshot,
+        force: bool,
+        dry_run: bool,
+    ) -> Result<(), TorcError> {
+        self.sync_file_stats(snapshot, force, dry_run)?;
         self.process_changed_user_data(dry_run)?;
         if !dry_run {
             self.initialize_jobs(true)?;
@@ -850,134 +820,184 @@ impl WorkflowManager {
         Ok(())
     }
 
-    /// Update files in the database that have changed.
-    /// If dry_run is true, log required changes but do not apply them.
-    pub fn process_changed_files(&self, dry_run: bool) -> Result<(), TorcError> {
-        debug!("Processing changed files for workflow {}", self.workflow_id);
-
-        // Create file list parameters
-        let params = FileListParams::new();
-
-        // Iterate through all files for this workflow using iter_files
-        let files_iterator = iter_files(&self.config, self.workflow_id, params);
-
-        for file_result in files_iterator {
-            match file_result {
-                Ok(mut file) => {
-                    let file_id = file.id.expect("File ID must be set for existing files");
-                    let file_path = Path::new(&file.path);
-
-                    debug!(
-                        "Processing file {} (id: {}, path: {}, current st_mtime: {:?})",
-                        file.name, file_id, file.path, file.st_mtime
-                    );
-
-                    let mut file_changed = false;
-                    let mut change_reason = String::new();
-
-                    let file_exists = file_path.exists();
-                    let db_has_mtime = file.st_mtime.is_some();
-
-                    match (file_exists, db_has_mtime) {
-                        (true, true) => {
-                            // File exists, database has mtime - check for changes
-                            match fs::metadata(file_path) {
-                                Ok(metadata) => {
-                                    let mtime = Self::get_modified_file_time(&metadata);
-                                    let current_mtime = file.st_mtime.unwrap();
-
-                                    if (current_mtime - mtime).abs() > 0.01 {
-                                        file_changed = true;
-                                        change_reason = format!(
-                                            "modified time changed from {} to {}",
-                                            current_mtime, mtime
-                                        );
-                                        file.st_mtime = Some(mtime);
-                                    }
-                                }
-                                Err(err) => {
-                                    panic!(
-                                        "Failed to get metadata for file {} (id: {}): {}",
-                                        file.name, file_id, err
-                                    );
-                                }
-                            }
-                        }
-                        (true, false) => {
-                            // File exists, database has no mtime - file appeared
-                            match fs::metadata(file_path) {
-                                Ok(metadata) => {
-                                    let mtime = Self::get_modified_file_time(&metadata);
-                                    file_changed = true;
-                                    change_reason = format!("file appeared with mtime {}", mtime);
-                                    file.st_mtime = Some(mtime);
-                                }
-                                Err(err) => {
-                                    panic!(
-                                        "Failed to get metadata for file {} (id: {}): {}",
-                                        file.name, file_id, err
-                                    );
-                                }
-                            }
-                        }
-                        (false, true) => {
-                            // File doesn't exist, database has mtime - file disappeared
-                            file_changed = true;
-                            change_reason =
-                                format!("file disappeared (was mtime {})", file.st_mtime.unwrap());
-                            file.st_mtime = None;
-                        }
-                        (false, false) => {
-                            // File doesn't exist, database has no mtime - no change
-                            debug!(
-                                "File {} (id: {}) doesn't exist and database has no mtime - no change needed",
-                                file.name, file_id
-                            );
-                        }
-                    }
-
-                    if file_changed {
-                        if dry_run {
-                            info!(
-                                "Dry run: File {} (id: {}) has changed: {}",
-                                file.name, file_id, change_reason
-                            );
-                        } else {
-                            match apis::files_api::update_file(&self.config, file_id, file.clone())
-                            {
-                                Ok(_) => {
-                                    debug!(
-                                        "Updated file {} (id: {}) - {}",
-                                        file.name, file_id, change_reason
-                                    );
-                                }
-                                Err(err) => {
-                                    panic!(
-                                        "Failed to update file {} (id: {}): {}",
-                                        file.name, file_id, err
-                                    );
-                                }
-                            }
-                        }
-
-                        match self.update_jobs_on_file_change(file.clone(), dry_run) {
-                            Ok(_) => {}
-                            Err(err) => {
-                                panic!(
-                                    "Failed to update jobs for file {} (id: {}): {}",
-                                    file.name, file_id, err
-                                );
-                            }
-                        }
-                    }
-                }
-                Err(err) => {
-                    panic!("Failed to fetch file from API: {}", err);
-                }
+    /// Send the workflow's file stats to the server, which stores changed mtimes and resets
+    /// affected jobs and their downstream jobs. Logs what changed (or would change, for a dry
+    /// run). Returns an error if required input files are missing, unless force is true.
+    fn sync_file_stats(
+        &self,
+        snapshot: &FileSnapshot,
+        force: bool,
+        dry_run: bool,
+    ) -> Result<(), TorcError> {
+        let response = self.send_file_stats(snapshot, dry_run)?;
+        let prefix = if dry_run {
+            "Dry run: would reset"
+        } else {
+            "Reset"
+        };
+        for change in &response.changed_files {
+            let msg = format!(
+                "File {} {}",
+                describe_file(&snapshot.files, change.file_id),
+                change.reason
+            );
+            if dry_run {
+                info!("Dry run: {}", msg);
+            } else {
+                debug!("{}", msg);
             }
         }
+        for job in &response.reset_jobs {
+            info!(
+                "{} job_id={} name='{}' from status={} to uninitialized ({})",
+                prefix, job.job_id, job.name, job.status, job.reason
+            );
+        }
 
+        self.check_missing_required_files(&response, &snapshot.files, force)
+    }
+
+    /// Stat the workflow's files before anything is changed. Unless force is true, fail early
+    /// if required input files are missing, using a dry run so the workflow is left untouched.
+    fn snapshot_files(&self, force: bool) -> Result<FileSnapshot, TorcError> {
+        let snapshot = self.stat_files()?;
+        if !force {
+            let response = self.send_file_stats(&snapshot, true)?;
+            self.check_missing_required_files(&response, &snapshot.files, false)?;
+        }
+        Ok(snapshot)
+    }
+
+    /// Return an error listing missing required input files, or log them if force is true.
+    fn check_missing_required_files(
+        &self,
+        response: &models::FileStatsResponse,
+        files: &HashMap<i64, FileModel>,
+        force: bool,
+    ) -> Result<(), TorcError> {
+        if response.missing_required_file_ids.is_empty() {
+            return Ok(());
+        }
+        let missing: Vec<String> = response
+            .missing_required_file_ids
+            .iter()
+            .map(|id| format!("Required file {} does not exist", describe_file(files, *id)))
+            .collect();
+        if !force {
+            return Err(TorcError::OperationNotAllowed(format!(
+                "Missing required files:\n{}",
+                missing.join("\n")
+            )));
+        }
+        for msg in &missing {
+            error!("{}", msg);
+        }
+        error!(
+            "Found {} missing required files for workflow {} (ignored due to force=true)",
+            missing.len(),
+            self.workflow_id
+        );
         Ok(())
+    }
+
+    /// Stat the workflow's files and send the snapshot to the server's `update_file_stats`
+    /// endpoint. Returns the merged responses and the files by ID.
+    pub fn update_file_stats(
+        &self,
+        dry_run: bool,
+    ) -> Result<(models::FileStatsResponse, HashMap<i64, FileModel>), TorcError> {
+        let snapshot = self.stat_files()?;
+        let response = self.send_file_stats(&snapshot, dry_run)?;
+        Ok((response, snapshot.files))
+    }
+
+    /// List the workflow's files once and stat each path.
+    fn stat_files(&self) -> Result<FileSnapshot, TorcError> {
+        let mut files = HashMap::new();
+        let mut entries = Vec::new();
+        for file in iter_files(&self.config, self.workflow_id, FileListParams::new()) {
+            let file =
+                file.map_err(|e| TorcError::ApiError(format!("Failed to list files: {}", e)))?;
+            let id = file
+                .id
+                .ok_or_else(|| TorcError::ApiError(format!("File '{}' has no ID", file.name)))?;
+            // Any metadata error counts as missing, as Path::exists does.
+            let entry = match fs::metadata(&file.path) {
+                Ok(metadata) => {
+                    let mtime = metadata
+                        .modified()
+                        .ok()
+                        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                        .ok_or_else(|| {
+                            TorcError::OperationNotAllowed(format!(
+                                "Cannot read modification time of {}",
+                                file.path
+                            ))
+                        })?;
+                    models::FileStatEntry {
+                        id,
+                        exists: true,
+                        st_mtime: Some(mtime.as_secs_f64()),
+                    }
+                }
+                Err(_) => models::FileStatEntry {
+                    id,
+                    exists: false,
+                    st_mtime: None,
+                },
+            };
+            entries.push(entry);
+            files.insert(id, file);
+        }
+        Ok(FileSnapshot { entries, files })
+    }
+
+    /// Send a snapshot to `update_file_stats` in batches of up to `MAX_RECORD_TRANSFER_COUNT`.
+    /// Each batch is applied in its own transaction and is idempotent, so a rerun after a
+    /// failure reaches the same state.
+    fn send_file_stats(
+        &self,
+        snapshot: &FileSnapshot,
+        dry_run: bool,
+    ) -> Result<models::FileStatsResponse, TorcError> {
+        let mut merged = models::FileStatsResponse::default();
+        for batch in snapshot.entries.chunks(MAX_RECORD_TRANSFER_COUNT as usize) {
+            let request = models::FileStatsRequest {
+                files: batch.to_vec(),
+            };
+            let response = apis::files_api::update_file_stats(
+                &self.config,
+                self.workflow_id,
+                request,
+                Some(dry_run),
+            )
+            .map_err(|e| self.file_stats_error(e))?;
+            merged.changed_files.extend(response.changed_files);
+            merged.reset_jobs.extend(response.reset_jobs);
+            merged
+                .missing_required_file_ids
+                .extend(response.missing_required_file_ids);
+        }
+        Ok(merged)
+    }
+
+    /// A 404 from a server that predates `update_file_stats` gets an upgrade hint; a 404
+    /// for a missing workflow stays as is.
+    fn file_stats_error<T: std::fmt::Debug>(&self, err: apis::Error<T>) -> TorcError {
+        if let apis::Error::ResponseError(ref content) = err
+            && content.status == reqwest::StatusCode::NOT_FOUND
+            && !version_check::check_version(&self.config).server_supports_file_stats()
+        {
+            return TorcError::OperationNotAllowed(
+                "The torc server is too old for this client: it has no file_stats endpoint \
+                 (HTTP API 1.1.0). Upgrade torc-server."
+                    .to_string(),
+            );
+        }
+        TorcError::ApiError(format!(
+            "Failed to update file stats for workflow_id={}: {}",
+            self.workflow_id, err
+        ))
     }
 
     /// Process changed user_data by detecting jobs with changed inputs.
@@ -1025,310 +1045,5 @@ impl WorkflowManager {
                 Err(TorcError::ApiError(err.to_string()))
             }
         }
-    }
-
-    /// Update job status in the database based on a file change.
-    /// If dry_run is true, log required changes but do not apply them.
-    pub fn update_jobs_on_file_change(
-        &self,
-        file: FileModel,
-        dry_run: bool,
-    ) -> Result<(), TorcError> {
-        // First, find the current workflow's run_id and store in a variable
-        let run_id = self.get_run_id()?;
-
-        // Check if file.id is set, return an error if not
-        let file_id = match file.id {
-            Some(id) => id,
-            None => {
-                return Err(TorcError::OperationNotAllowed(
-                    "File ID is not set, cannot update jobs on file change".to_string(),
-                ));
-            }
-        };
-
-        // Create job list parameters with needs_file_id filter
-        let params = JobListParams::new().with_needs_file_id(file_id);
-
-        // Iterate over the affected jobs using iter_jobs
-        for job_result in iter_jobs(&self.config, self.workflow_id, params) {
-            let job = match job_result {
-                Ok(job) => job,
-                Err(err) => {
-                    error!("Failed to fetch job from API: {}", err);
-                    return Err(TorcError::ApiError(format!(
-                        "Failed to list jobs for file {}: {}",
-                        file_id, err
-                    )));
-                }
-            };
-            let job_id = match job.id {
-                Some(id) => id,
-                None => {
-                    warn!("Job has no ID, skipping");
-                    continue;
-                }
-            };
-
-            let job_status = match &job.status {
-                Some(status) => status,
-                None => {
-                    warn!("job_id={} has no status, skipping", job_id);
-                    continue;
-                }
-            };
-
-            // Check if job's status is Completed, Failed, or Canceled
-            match job_status {
-                JobStatus::Completed | JobStatus::Failed | JobStatus::Canceled => {
-                    if dry_run {
-                        // If dry run is true, just log the change
-                        info!(
-                            "Dry run: Would reset job_id={} name='{}' from status={} to uninitialized due to file change in '{}' file_id={}",
-                            job_id, job.name, job_status, file.name, file_id
-                        );
-
-                        // TODO
-                        // Find and log direct downstream jobs (jobs that depend on this job)
-                        // Note: This only finds direct dependencies, not transitive ones.
-                        // A server-side recursive query would be more efficient for full traversal.
-                        let downstream_params = JobListParams::new().with_upstream_job_id(job_id);
-                        for downstream_job_result in
-                            iter_jobs(&self.config, self.workflow_id, downstream_params)
-                        {
-                            let downstream_job = match downstream_job_result {
-                                Ok(job) => job,
-                                Err(err) => {
-                                    panic!("Failed to fetch downstream job: {}", err);
-                                }
-                            };
-
-                            let downstream_job_id = match downstream_job.id {
-                                Some(id) => id,
-                                None => continue,
-                            };
-
-                            info!(
-                                "Dry run: Would reset downstream job_id={} name='{}' status={} to uninitialized",
-                                downstream_job_id,
-                                downstream_job.name,
-                                downstream_job
-                                    .status
-                                    .map(|s| s.to_string())
-                                    .unwrap_or_default()
-                            );
-                        }
-                    } else {
-                        match apis::jobs_api::manage_status_change(
-                            &self.config,
-                            job_id,
-                            JobStatus::Uninitialized,
-                            run_id,
-                        ) {
-                            Ok(_) => {
-                                info!(
-                                    "Reset job_id={} name='{}' from status={} to uninitialized due to file change in '{}' file_id={}",
-                                    job_id, job.name, job_status, file.name, file_id
-                                );
-                            }
-                            Err(err) => {
-                                panic!(
-                                    "Failed to reset job_id={} status due to file change: {}",
-                                    job_id, err
-                                );
-                            }
-                        }
-                    }
-                }
-                _ => {
-                    // Job is not Completed, Failed, or Canceled, no action needed
-                    debug!(
-                        "job_id={} name='{}' has status={}, no reset needed for file change in '{}' file_id={}",
-                        job_id, job.name, job_status, file.name, file_id
-                    );
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Update the status of "completed" jobs to "uninitialized" if their output files are now missing.
-    /// If dry_run is true, log changes but don't apply them.
-    pub fn update_jobs_if_output_files_are_missing(&self, dry_run: bool) -> Result<(), TorcError> {
-        let run_id = self.get_run_id()?;
-
-        let job_params = JobListParams::new().with_status(JobStatus::Completed);
-        for job_result in iter_jobs(&self.config, self.workflow_id, job_params) {
-            let job = match job_result {
-                Ok(job) => job,
-                Err(err) => {
-                    panic!("Failed to fetch job from API: {}", err);
-                }
-            };
-
-            let job_id = match job.id {
-                Some(id) => id,
-                None => {
-                    panic!("Job has no ID, skipping");
-                }
-            };
-
-            let file_params = FileListParams::new().with_produced_by_job_id(job_id);
-            let mut any_missing_files = false;
-
-            for file_result in iter_files(&self.config, self.workflow_id, file_params) {
-                let file = match file_result {
-                    Ok(file) => file,
-                    Err(err) => {
-                        panic!("Failed to fetch file from API: {}", err);
-                    }
-                };
-
-                let file_path = Path::new(&file.path);
-                if !file_path.exists() {
-                    any_missing_files = true;
-                    debug!(
-                        "Output file {} from job {} (name: '{}') is missing",
-                        file.path, job_id, job.name
-                    );
-                    break; // No need to check more files for this job
-                }
-            }
-
-            // If any output file is missing, handle the job status change
-            if any_missing_files {
-                if dry_run {
-                    info!(
-                        "Dry run: Would reset job {} (name: '{}') from Done to Uninitialized due to missing output files",
-                        job_id, job.name
-                    );
-
-                    // Find and log direct downstream jobs (jobs that depend on this job)
-                    // Note: This only finds direct dependencies, not transitive ones.
-                    // A server-side recursive query would be more efficient for full traversal.
-                    let downstream_params = JobListParams::new().with_upstream_job_id(job_id);
-                    for downstream_job_result in
-                        iter_jobs(&self.config, self.workflow_id, downstream_params)
-                    {
-                        let downstream_job = match downstream_job_result {
-                            Ok(job) => job,
-                            Err(err) => {
-                                panic!("Failed to fetch downstream job: {}", err);
-                            }
-                        };
-
-                        let downstream_job_id = match downstream_job.id {
-                            Some(id) => id,
-                            None => continue,
-                        };
-
-                        info!(
-                            "Dry run: Would reset downstream job {} (name: '{}' status: {}) to uninitialized",
-                            downstream_job_id,
-                            downstream_job.name,
-                            downstream_job
-                                .status
-                                .map(|s| s.to_string())
-                                .unwrap_or_default()
-                        );
-                    }
-                } else {
-                    match apis::jobs_api::manage_status_change(
-                        &self.config,
-                        job_id,
-                        JobStatus::Uninitialized,
-                        run_id,
-                    ) {
-                        Ok(_) => {
-                            info!(
-                                "Reset job {} (name: '{}') from Done to Uninitialized due to missing output files",
-                                job_id, job.name
-                            );
-                        }
-                        Err(err) => {
-                            panic!(
-                                "Failed to reset job {} status due to missing output files: {}",
-                                job_id, err
-                            );
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Check that all required existing files for the workflow exist on the filesystem.
-    /// If force is true, log missing files as warnings but don't return an error.
-    /// If force is false, return an error if any required files are missing.
-    pub fn check_workflow_files(&self, force: bool) -> Result<(), TorcError> {
-        // Get list of required existing file IDs
-        let response =
-            match apis::workflows_api::list_required_existing_files(&self.config, self.workflow_id)
-            {
-                Ok(response) => response,
-                Err(err) => {
-                    return Err(TorcError::ApiError(format!(
-                        "Failed to list required existing files: {}",
-                        err
-                    )));
-                }
-            };
-
-        let mut missing_files = Vec::new();
-        let file_count = response.files.len();
-
-        for file_id in response.files {
-            let file = match apis::files_api::get_file(&self.config, file_id) {
-                Ok(file) => file,
-                Err(err) => {
-                    panic!("Failed to get file details for ID {}: {}", file_id, err);
-                }
-            };
-
-            let file_path = Path::new(&file.path);
-            if !file_path.exists() {
-                let missing_info = format!(
-                    "Required file '{}' (id: {}, path: {}) does not exist on filesystem",
-                    file.name, file_id, file.path
-                );
-
-                if force {
-                    error!("{}", missing_info);
-                } else {
-                    missing_files.push(missing_info);
-                }
-            } else {
-                debug!(
-                    "Required file '{}' (id: {}) exists at path: {}",
-                    file.name, file_id, file.path
-                );
-            }
-        }
-
-        // If we have missing files and not ignoring them, return an error
-        if !missing_files.is_empty() && !force {
-            return Err(TorcError::OperationNotAllowed(format!(
-                "Missing required files:\n{}",
-                missing_files.join("\n")
-            )));
-        }
-
-        if missing_files.is_empty() {
-            debug!(
-                "All {} required existing files are present for workflow {}",
-                file_count, self.workflow_id
-            );
-        } else if force {
-            error!(
-                "Found {} missing required files for workflow {} (ignored due to force=true)",
-                missing_files.len(),
-                self.workflow_id
-            );
-        }
-
-        Ok(())
     }
 }

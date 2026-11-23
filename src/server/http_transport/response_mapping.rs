@@ -131,38 +131,49 @@ map_response!(
 map_response!(
     update_compute_node_response,
     UpdateComputeNodeResponse,
-    SuccessfulResponse
+    SuccessfulResponse,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
 );
 map_response!(
     update_event_response,
     UpdateEventResponse,
     SuccessfulResponse
 );
-map_response!(update_file_response, UpdateFileResponse, SuccessfulResponse);
+map_response!(
+    update_file_response,
+    UpdateFileResponse,
+    SuccessfulResponse,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
+);
 map_response!(
     update_local_scheduler_response,
     UpdateLocalSchedulerResponse,
-    SuccessfulResponse
+    SuccessfulResponse,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
 );
 map_response!(
     update_result_response,
     UpdateResultResponse,
-    SuccessfulResponse
+    SuccessfulResponse,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
 );
 map_response!(
     update_user_data_response,
     UpdateUserDataResponse,
-    SuccessfulResponse
+    SuccessfulResponse,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
 );
 map_response!(
     update_scheduled_compute_node_response,
     UpdateScheduledComputeNodeResponse,
-    ScheduledComputeNodeUpdatedInTheTable
+    ScheduledComputeNodeUpdatedInTheTable,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
 );
 map_response!(
     update_slurm_scheduler_response,
     UpdateSlurmSchedulerResponse,
-    SuccessfulResponse
+    SuccessfulResponse,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
 );
 map_response!(
     update_resource_requirements_response,
@@ -255,7 +266,8 @@ map_response!(
 map_response!(
     list_results_response,
     ListResultsResponse,
-    SuccessfulResponse
+    SuccessfulResponse,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
 );
 map_response!(
     list_user_data_response,
@@ -447,7 +459,12 @@ map_response!(
     UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
 );
 map_response!(create_job_response, CreateJobResponse, SuccessfulResponse, UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY);
-map_response!(list_jobs_response, ListJobsResponse, SuccessfulResponse);
+map_response!(
+    list_jobs_response,
+    ListJobsResponse,
+    SuccessfulResponse,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
+);
 map_response!(delete_jobs_response, DeleteJobsResponse, SuccessfulResponse);
 map_response!(get_job_response, GetJobResponse, SuccessfulResponse);
 map_response!(update_job_response, UpdateJobResponse, SuccessfulResponse, UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY);
@@ -527,6 +544,25 @@ map_response!(
     ConflictResponse => StatusCode::CONFLICT
 );
 map_response!(
+    suppress_action_response,
+    SuppressActionResponse,
+    SuccessfulResponse,
+    ConflictResponse => StatusCode::CONFLICT
+);
+map_response!(
+    report_action_result_response,
+    ReportActionResultResponse,
+    SuccessfulResponse,
+    ConflictResponse => StatusCode::CONFLICT,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
+);
+map_response!(
+    reset_action_response,
+    ResetActionResponse,
+    SuccessfulResponse,
+    ConflictResponse => StatusCode::CONFLICT
+);
+map_response!(
     update_workflow_action_response,
     UpdateWorkflowActionResponse,
     SuccessfulResponse,
@@ -571,7 +607,8 @@ map_response!(
     InitializeJobsResponse,
     SuccessfulResponse,
     AcceptedResponse => StatusCode::ACCEPTED,
-    ConflictErrorResponse => StatusCode::CONFLICT
+    ConflictErrorResponse => StatusCode::CONFLICT,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
 );
 map_response!(
     is_workflow_complete_response,
@@ -634,6 +671,18 @@ map_response!(
     SuccessfulResponse
 );
 map_response!(
+    apply_scheduler_plan_response,
+    ApplySchedulerPlanResponse,
+    SuccessfulResponse,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
+);
+map_response!(
+    update_file_stats_response,
+    UpdateFileStatsResponse,
+    SuccessfulResponse,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
+);
+map_response!(
     list_required_existing_files_response,
     ListRequiredExistingFilesResponse,
     SuccessfulResponse
@@ -641,7 +690,8 @@ map_response!(
 map_response!(
     reset_job_status_response,
     ResetJobStatusResponse,
-    SuccessfulResponse
+    SuccessfulResponse,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
 );
 map_response!(
     reset_workflow_status_response,

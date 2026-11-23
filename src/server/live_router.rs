@@ -81,13 +81,31 @@ pub fn app_router(state: LiveRouterState) -> Router {
     Router::new()
         .merge(
             Router::new()
-                // Axum defaults JSON request bodies to 2 MiB, so bulk creation endpoints need an
-                // explicit override to preserve large workflow submissions.
+                // Axum defaults JSON request bodies to 2 MiB, so bulk endpoints need an explicit
+                // override to preserve large workflow submissions, file-stat snapshots, and completion
+                // batches (whose entries carry per-output-file stats).
                 .route("/torc-service/v1/bulk_jobs", post(create_jobs))
                 .route("/torc-service/v1/bulk_files", post(create_files))
                 .route(
                     "/torc-service/v1/bulk_user_data",
                     post(create_user_data_list),
+                )
+                .route(
+                    "/torc-service/v1/workflows/{id}/file_stats",
+                    post(update_file_stats),
+                )
+                .route(
+                    "/torc-service/v1/workflows/{id}/apply_scheduler_plan",
+                    post(apply_scheduler_plan),
+                )
+                .route(
+                    "/torc-service/v1/workflows/{id}/batch_complete_jobs",
+                    post(batch_complete_jobs),
+                )
+                // Selective resets carry every selected job ID in one request.
+                .route(
+                    "/torc-service/v1/workflows/{id}/reset_job_status",
+                    post(reset_job_status),
                 )
                 .layer(DefaultBodyLimit::max(max_bulk_request_body_bytes())),
         )
@@ -217,6 +235,18 @@ pub fn app_router(state: LiveRouterState) -> Router {
         .route(
             "/torc-service/v1/workflows/{id}/actions/{action_id}/claim",
             post(claim_action),
+        )
+        .route(
+            "/torc-service/v1/workflows/{id}/actions/{action_id}/suppress",
+            post(suppress_action),
+        )
+        .route(
+            "/torc-service/v1/workflows/{id}/actions/{action_id}/result",
+            post(report_action_result),
+        )
+        .route(
+            "/torc-service/v1/workflows/{id}/actions/{action_id}/reset",
+            post(reset_action),
         )
         .route(
             "/torc-service/v1/jobs",
@@ -367,20 +397,12 @@ pub fn app_router(state: LiveRouterState) -> Router {
             post(reset_workflow_status),
         )
         .route(
-            "/torc-service/v1/workflows/{id}/reset_job_status",
-            post(reset_job_status),
-        )
-        .route(
             "/torc-service/v1/workflows/{id}/claim_jobs_based_on_resources/{limit}",
             post(claim_jobs_based_on_resources),
         )
         .route(
             "/torc-service/v1/workflows/{id}/claim_next_jobs",
             post(claim_next_jobs),
-        )
-        .route(
-            "/torc-service/v1/workflows/{id}/batch_complete_jobs",
-            post(batch_complete_jobs),
         )
         .route("/torc-service/v1/jobs/{id}/spawn_jobs", post(spawn_jobs))
         .route(
@@ -506,8 +528,14 @@ pub struct ResetWorkflowStatusQuery {
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct ResetJobStatusQuery {
+    /// Without a body: reset only failed, terminated, canceled, and pending_failed jobs.
+    /// Ignored when a body is sent.
     #[param(nullable = true)]
     pub failed_only: Option<bool>,
+    /// With a body: reset even if the workflow has active compute nodes, pending or active
+    /// scheduled compute nodes, or running or pending jobs.
+    #[param(nullable = true)]
+    pub force: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
@@ -563,6 +591,18 @@ pub struct ProcessChangedJobInputsQuery {
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
+pub struct UpdateFileStatsQuery {
+    #[param(nullable = true)]
+    pub dry_run: Option<bool>,
+}
+
+#[derive(Debug, Clone, Deserialize, IntoParams)]
+pub struct ApplySchedulerPlanQuery {
+    #[param(nullable = true)]
+    pub dry_run: Option<bool>,
+}
+
+#[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct ReadyJobRequirementsQuery {
     #[param(nullable = true)]
     pub scheduler_config_id: Option<i64>,
@@ -595,6 +635,47 @@ pub async fn version(State(state): State<LiveRouterState>) -> Response<Body> {
         git_hash: (!state.openapi_state.access_control_enabled)
             .then_some(state.openapi_state.git_hash.clone()),
     })
+}
+
+#[utoipa::path(
+    post,
+    tag = "slurm_schedulers",
+    path = "/workflows/{id}/apply_scheduler_plan",
+    operation_id = "apply_scheduler_plan",
+    description = "Apply a client-computed Slurm scheduler plan in one transaction. Every job \
+        must belong to the workflow, be pending (uninitialized, blocked, or ready), and appear in \
+        at most one scheduler; otherwise the plan is rejected and nothing changes. When \
+        suppress_existing_schedule_actions is set, the workflow's non-recovery, unexecuted \
+        schedule_nodes actions (persistent ones included) are suppressed. The schedulers are created, their \
+        jobs are assigned, and an on_jobs_ready recovery action is created for each \
+        recovery_actions entry, armed from the gating jobs' current statuses. The response lists \
+        the created IDs and which actions are pending (ready to submit now). With dry_run=true, \
+        the same result is reported and nothing is stored.",
+    params(("id" = i64, Path, description = "Workflow ID"), ApplySchedulerPlanQuery),
+    request_body = models::ApplySchedulerPlanRequest,
+    responses(
+        (status = 200, description = "Successful response", body = models::ApplySchedulerPlanResponse),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (jobs outside the workflow, non-pending jobs, jobs in more than one scheduler, invalid recovery actions)", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
+    )
+)]
+pub async fn apply_scheduler_plan(
+    State(state): State<LiveRouterState>,
+    Path(id): Path<i64>,
+    Query(query): Query<ApplySchedulerPlanQuery>,
+    Extension(context): Extension<EmptyContext>,
+    Json(body): Json<models::ApplySchedulerPlanRequest>,
+) -> Response<Body> {
+    match state
+        .server
+        .apply_scheduler_plan(id, body, query.dry_run, &context)
+        .await
+    {
+        Ok(response) => apply_scheduler_plan_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
 }
 
 #[utoipa::path(
@@ -899,6 +980,45 @@ pub async fn create_user_data_list(
 ) -> Response<Body> {
     match state.server.create_user_data_list(body, &context).await {
         Ok(response) => create_user_data_list_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+#[utoipa::path(
+    post,
+    tag = "files",
+    path = "/workflows/{id}/file_stats",
+    operation_id = "update_file_stats",
+    description = "Compare a client's stat snapshot of workflow files with the stored \
+        modification times (10 ms tolerance). Changed mtimes are stored, and st_mtime is cleared \
+        for files that no longer exist. Jobs that need a changed file and are completed, failed, \
+        or canceled are reset to uninitialized, as are completed jobs with a missing output file, \
+        and every job downstream of a reset job. Each request runs in one transaction and is \
+        idempotent. With dry_run=true, reports the same result without changing anything. At most \
+        MAX_RECORD_TRANSFER_COUNT entries per request; every file must belong to the workflow.",
+    params(("id" = i64, Path, description = "Workflow ID"), UpdateFileStatsQuery),
+    request_body = models::FileStatsRequest,
+    responses(
+        (status = 200, description = "Successful response", body = models::FileStatsResponse),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (oversized batch, duplicate ids, files outside the workflow, missing st_mtime)", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
+    )
+)]
+pub async fn update_file_stats(
+    State(state): State<LiveRouterState>,
+    Path(id): Path<i64>,
+    Query(query): Query<UpdateFileStatsQuery>,
+    Extension(context): Extension<EmptyContext>,
+    Json(body): Json<models::FileStatsRequest>,
+) -> Response<Body> {
+    match state
+        .server
+        .update_file_stats(id, body, query.dry_run, &context)
+        .await
+    {
+        Ok(response) => update_file_stats_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
 }
@@ -1336,6 +1456,7 @@ pub async fn get_compute_node(
         (status = 200, description = "Successful response", body = models::ComputeNodeModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable)", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
@@ -1746,6 +1867,7 @@ pub async fn get_file(
         (status = 200, description = "Successful response", body = models::FileModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable)", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
@@ -1926,6 +2048,7 @@ pub async fn get_local_scheduler(
         (status = 200, description = "Successful response", body = models::LocalSchedulerModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable)", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
@@ -2153,7 +2276,7 @@ pub async fn get_resource_requirements(
         (status = 200, description = "Successful response", body = models::ResourceRequirementsModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
-        (status = 422, description = "Unprocessable content", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable)", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
@@ -2403,6 +2526,54 @@ pub struct JobsListQuery {
     /// these labels would claim. An empty value returns only unlabeled jobs.
     #[param(nullable = true)]
     pub labels: Option<String>,
+    /// Comma-separated job IDs to restrict to, scoped to `workflow_id`. At most
+    /// `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.
+    #[param(nullable = true, value_type = Option<Vec<i64>>, style = Form, explode = false)]
+    #[serde(default, deserialize_with = "deserialize_csv")]
+    pub ids: Option<Vec<i64>>,
+    /// Comma-separated statuses (`statuses=failed,terminated`): match any of them.
+    /// Mutually exclusive with `status` (both given returns 422).
+    #[param(nullable = true, value_type = Option<Vec<models::JobStatus>>, style = Form, explode = false)]
+    #[serde(default, deserialize_with = "deserialize_csv")]
+    pub statuses: Option<Vec<models::JobStatus>>,
+    /// Returns only the jobs that use this resource requirements record.
+    #[param(nullable = true)]
+    pub resource_requirements_id: Option<i64>,
+}
+
+/// Combine the single `status` and list `statuses` query filters; both given is a 422.
+#[allow(clippy::result_large_err)]
+fn status_filter(
+    status: Option<models::JobStatus>,
+    statuses: Option<Vec<models::JobStatus>>,
+) -> Result<Option<Vec<models::JobStatus>>, Response<Body>> {
+    match (status, statuses) {
+        (Some(_), Some(_)) => Err(error_response(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "status and statuses are mutually exclusive".to_string(),
+        )),
+        (Some(s), None) => Ok(Some(vec![s])),
+        (None, statuses) => Ok(statuses),
+    }
+}
+
+/// Deserialize a comma-separated query value (`a,b,c`) into a list. An empty
+/// value is an empty list (which matches nothing).
+fn deserialize_csv<'de, D, T>(deserializer: D) -> Result<Option<Vec<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: std::str::FromStr,
+    T::Err: std::fmt::Display,
+{
+    let Some(raw) = Option::<String>::deserialize(deserializer)? else {
+        return Ok(None);
+    };
+    raw.split(',')
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+        .map(|v| v.parse().map_err(serde::de::Error::custom))
+        .collect::<Result<Vec<T>, _>>()
+        .map(Some)
 }
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
@@ -2412,7 +2583,10 @@ pub struct DeleteJobsQuery {
 
 #[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct RetryJobQuery {
-    pub max_retries: i32,
+    /// Deprecated and ignored: the server enforces the job's failure handler limit.
+    #[param(nullable = true)]
+    #[allow(dead_code)]
+    pub max_retries: Option<i32>,
 }
 
 #[utoipa::path(
@@ -2425,6 +2599,7 @@ pub struct RetryJobQuery {
         (status = 200, description = "Successful response", body = models::ListJobsResponse),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (too many ids, or both status and statuses)", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
@@ -2433,11 +2608,15 @@ pub async fn list_jobs(
     Query(query): Query<JobsListQuery>,
     Extension(context): Extension<EmptyContext>,
 ) -> Response<Body> {
+    let status = match status_filter(query.status, query.statuses) {
+        Ok(status) => status,
+        Err(response) => return response,
+    };
     match state
         .server
         .list_jobs(
             query.workflow_id,
-            query.status,
+            status,
             query.needs_file_id,
             query.upstream_job_id,
             query.offset,
@@ -2450,6 +2629,8 @@ pub async fn list_jobs(
             query.name,
             query.command,
             query.labels,
+            query.ids,
+            query.resource_requirements_id,
             &context,
         )
         .await
@@ -2543,7 +2724,7 @@ pub async fn get_job(
         (status = 200, description = "Successful response", body = models::JobModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
-        (status = 422, description = "Unprocessable content (invalid label)", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (invalid label, a reference outside the job's workflow, or workflow_id differs from the stored value; it is immutable)", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
@@ -2755,14 +2936,10 @@ pub async fn start_job(
 pub async fn retry_job(
     State(state): State<LiveRouterState>,
     Path((id, run_id)): Path<(i64, i64)>,
-    Query(query): Query<RetryJobQuery>,
+    Query(_query): Query<RetryJobQuery>,
     Extension(context): Extension<EmptyContext>,
 ) -> Response<Body> {
-    match state
-        .server
-        .retry_job(id, run_id, query.max_retries, &context)
-        .await
-    {
+    match state.server.retry_job(id, run_id, &context).await {
         Ok(response) => retry_job_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
@@ -2929,6 +3106,7 @@ pub async fn get_user_data(
         (status = 200, description = "Successful response", body = models::UserDataModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable)", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
@@ -2991,6 +3169,16 @@ pub struct ResultsQuery {
     pub reverse_sort: Option<bool>,
     #[param(nullable = true)]
     pub all_runs: Option<bool>,
+    /// Comma-separated job IDs: restrict to results of these jobs, scoped to
+    /// `workflow_id`. At most `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.
+    #[param(nullable = true, value_type = Option<Vec<i64>>, style = Form, explode = false)]
+    #[serde(default, deserialize_with = "deserialize_csv")]
+    pub ids: Option<Vec<i64>>,
+    /// Comma-separated statuses (`statuses=failed,terminated`): match any of them.
+    /// Mutually exclusive with `status` (both given returns 422).
+    #[param(nullable = true, value_type = Option<Vec<models::JobStatus>>, style = Form, explode = false)]
+    #[serde(default, deserialize_with = "deserialize_csv")]
+    pub statuses: Option<Vec<models::JobStatus>>,
 }
 
 #[utoipa::path(
@@ -3003,6 +3191,7 @@ pub struct ResultsQuery {
         (status = 200, description = "Successful response", body = models::ListResultsResponse),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (too many ids, or both status and statuses)", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
@@ -3011,6 +3200,10 @@ pub async fn list_results(
     Query(query): Query<ResultsQuery>,
     Extension(context): Extension<EmptyContext>,
 ) -> Response<Body> {
+    let status = match status_filter(query.status, query.statuses) {
+        Ok(status) => status,
+        Err(response) => return response,
+    };
     match state
         .server
         .list_results(
@@ -3018,13 +3211,14 @@ pub async fn list_results(
             query.job_id,
             query.run_id,
             query.return_code,
-            query.status,
+            status,
             query.compute_node_id,
             query.offset,
             query.limit,
             query.sort_by,
             query.reverse_sort,
             query.all_runs,
+            query.ids,
             &context,
         )
         .await
@@ -3121,6 +3315,7 @@ pub async fn get_result(
         (status = 200, description = "Successful response", body = models::ResultModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (job_id not in the result's workflow, or workflow_id differs from the stored value; it is immutable)", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
@@ -3321,6 +3516,7 @@ pub async fn get_scheduled_compute_node(
         (status = 200, description = "scheduled compute node updated in the table.", body = models::ScheduledComputeNodesModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable)", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
@@ -3499,6 +3695,7 @@ pub async fn get_slurm_scheduler(
         (status = 200, description = "Successful response", body = models::SlurmSchedulerModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable)", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
@@ -3637,6 +3834,115 @@ pub async fn claim_action(
         .await
     {
         Ok(response) => claim_action_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+#[utoipa::path(
+    post,
+    tag = "workflow_actions",
+    path = "/workflows/{id}/actions/{action_id}/suppress",
+    operation_id = "suppress_action",
+    description = "Mark an action suppressed (executed = true, state = suppressed) so it is never \
+        claimed, without executing it. Idempotent. A persistent action can be suppressed in any \
+        state; a non-persistent action only while unclaimed (409 if it is claimed, succeeded, or \
+        failed).",
+    params(
+        ("id" = i64, Path, description = "Workflow ID"),
+        ("action_id" = i64, Path, description = "Action ID")
+    ),
+    responses(
+        (status = 200, description = "Successful response", body = models::WorkflowActionModel),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 409, description = "Action is already claimed, succeeded, or failed", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
+    )
+)]
+pub async fn suppress_action(
+    State(state): State<LiveRouterState>,
+    Path((workflow_id, action_id)): Path<(i64, i64)>,
+    Extension(context): Extension<EmptyContext>,
+) -> Response<Body> {
+    match state
+        .server
+        .suppress_action(workflow_id, action_id, &context)
+        .await
+    {
+        Ok(response) => suppress_action_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+#[utoipa::path(
+    post,
+    tag = "workflow_actions",
+    path = "/workflows/{id}/actions/{action_id}/result",
+    operation_id = "report_action_result",
+    description = "Record the outcome of a claimed action: state becomes succeeded, or failed \
+        with the given error. For a persistent action this is the latest outcome. 409 if the \
+        action has not been claimed (or was suppressed); 422 if error is set with success = true.",
+    params(
+        ("id" = i64, Path, description = "Workflow ID"),
+        ("action_id" = i64, Path, description = "Action ID")
+    ),
+    request_body = models::WorkflowActionResultRequest,
+    responses(
+        (status = 200, description = "Successful response", body = models::WorkflowActionModel),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 409, description = "Action has no claim to report a result for", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
+    )
+)]
+pub async fn report_action_result(
+    State(state): State<LiveRouterState>,
+    Path((workflow_id, action_id)): Path<(i64, i64)>,
+    Extension(context): Extension<EmptyContext>,
+    Json(body): Json<models::WorkflowActionResultRequest>,
+) -> Response<Body> {
+    match state
+        .server
+        .report_action_result(workflow_id, action_id, body, &context)
+        .await
+    {
+        Ok(response) => report_action_result_response(response),
+        Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
+    }
+}
+
+#[utoipa::path(
+    post,
+    tag = "workflow_actions",
+    path = "/workflows/{id}/actions/{action_id}/reset",
+    operation_id = "reset_action",
+    description = "Re-arm an action that is failed, suppressed, or stuck in claimed: clears \
+        executed, executed_at, executed_by, state, and error so it can be claimed again. A no-op \
+        for an action that was never claimed; 409 for a succeeded action.",
+    params(
+        ("id" = i64, Path, description = "Workflow ID"),
+        ("action_id" = i64, Path, description = "Action ID")
+    ),
+    responses(
+        (status = 200, description = "Successful response", body = models::WorkflowActionModel),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 409, description = "Action already succeeded", body = models::ErrorResponse),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
+    )
+)]
+pub async fn reset_action(
+    State(state): State<LiveRouterState>,
+    Path((workflow_id, action_id)): Path<(i64, i64)>,
+    Extension(context): Extension<EmptyContext>,
+) -> Response<Body> {
+    match state
+        .server
+        .reset_action(workflow_id, action_id, &context)
+        .await
+    {
+        Ok(response) => reset_action_response(response),
         Err(err) => error_response(StatusCode::INTERNAL_SERVER_ERROR, err.0),
     }
 }
@@ -3933,6 +4239,7 @@ pub async fn get_active_task_for_workflow(
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
         (status = 409, description = "Conflict", body = models::ErrorResponse),
+        (status = 422, description = "Job dependency graph contains a cycle", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
@@ -4123,18 +4430,57 @@ pub async fn reset_workflow_status(
     tag = "workflows",
     path = "/workflows/{id}/reset_job_status",
     operation_id = "reset_job_status",
+    description = "Reset job statuses to uninitialized. Without a body, resets every job (or, \
+        with failed_only, every failed, terminated, canceled, and pending_failed job). With a \
+        body, resets only the selected jobs in one transaction: jobs from other workflows or not \
+        in an eligible status are skipped with a reason, and the request is refused with 422 \
+        while the workflow has active compute nodes, pending or active scheduled compute nodes, \
+        or running or pending jobs, unless force=true. As with manage_status_change, resetting a \
+        terminal job also resets its direct completed or failed dependents. Does not bump the \
+        workflow run_id.",
     params(("id" = i64, Path, description = "Workflow ID"), ResetJobStatusQuery),
-    responses((status = 200, description = "Successful response", body = models::ResetJobStatusResponse))
+    request_body(
+        content = Option<models::ResetJobStatusRequest>,
+        description = "Optional selective reset"
+    ),
+    responses(
+        (status = 200, description = "Successful response", body = models::ResetJobStatusResponse),
+        (status = 403, description = "Forbidden", body = models::ErrorResponse),
+        (status = 404, description = "Not found", body = models::ErrorResponse),
+        (
+            status = 422,
+            description = "Invalid request body, or the workflow is not quiet",
+            body = models::ErrorResponse
+        ),
+        (status = 500, description = "Internal server error", body = models::ErrorResponse)
+    )
 )]
 pub async fn reset_job_status(
     State(state): State<LiveRouterState>,
     Path(id): Path<i64>,
     Query(query): Query<ResetJobStatusQuery>,
     Extension(context): Extension<EmptyContext>,
+    body: axum::body::Bytes,
 ) -> Response<Body> {
+    // No body, an empty body, and `null` all mean "no body". Parse by hand rather than with
+    // `Option<Json<_>>`: generated clients (Rust sends `null`; Python sends an empty body with a
+    // JSON content type) and plain callers that send no content type must all keep working.
+    let body = if body.iter().all(u8::is_ascii_whitespace) {
+        None
+    } else {
+        match serde_json::from_slice::<Option<models::ResetJobStatusRequest>>(&body) {
+            Ok(body) => body,
+            Err(e) => {
+                return error_response(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    format!("Invalid request body: {}", e),
+                );
+            }
+        }
+    };
     match state
         .server
-        .reset_job_status(id, query.failed_only, &context)
+        .reset_job_status(id, query.failed_only, query.force, body, &context)
         .await
     {
         Ok(response) => reset_job_status_response(response),
@@ -4591,7 +4937,7 @@ pub async fn get_ro_crate_entity(
         (status = 200, description = "Successful response", body = models::RoCrateEntityModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
-        (status = 422, description = "Unprocessable content", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content (duplicate entity, file_id not in the entity's workflow, or workflow_id differs from the stored value; it is immutable)", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]
@@ -5654,6 +6000,28 @@ mod live_router_tests {
     }
 
     #[tokio::test]
+    async fn batch_complete_jobs_route_accepts_body_larger_than_default_limit() {
+        let server = test_server_with_schema().await;
+        let router = test_router(server);
+        // Invalid JSON, so the body is rejected after the size check, not by it.
+        let body = format!("{{\"pad\": \"{}\"", "x".repeat(3 * 1024 * 1024));
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/torc-service/v1/workflows/1/batch_complete_jobs")
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(body))
+                    .expect("valid request"),
+            )
+            .await
+            .expect("batch complete response");
+
+        assert_ne!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    }
+
+    #[tokio::test]
     async fn batch_complete_jobs_round_trip_via_router() {
         let (server, _db_file) = test_server_with_file_backed_schema(4).await;
         let workflow_id = create_workflow_record(&server).await;
@@ -5678,6 +6046,8 @@ mod live_router_tests {
                     chrono::Utc::now().to_rfc3339(),
                     JobStatus::Completed,
                 ),
+                output_files: None,
+                slurm_stats: None,
             }],
         };
 
@@ -5717,6 +6087,119 @@ mod live_router_tests {
         assert_eq!(get_response.status(), StatusCode::OK);
         let job: JobModel = read_json_body(get_response).await;
         assert_eq!(job.status, Some(JobStatus::Completed));
+    }
+
+    #[tokio::test]
+    async fn list_jobs_and_results_reject_too_many_ids() {
+        // Over-cap id lists can't travel in a real URL (the http crate caps a URI at
+        // 64 KiB), so call the transport directly to exercise the server-side check.
+        let server = test_server_with_schema().await;
+        let workflow_id = create_workflow_record(&server).await;
+        let ids = vec![1; crate::MAX_RECORD_TRANSFER_COUNT as usize + 1];
+        let ctx = EmptyContext::default();
+
+        let jobs = server
+            .list_jobs(
+                workflow_id,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(ids.clone()),
+                None,
+                &ctx,
+            )
+            .await
+            .expect("list_jobs");
+        assert_eq!(
+            list_jobs_response(jobs).status(),
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+
+        let results = server
+            .list_results(
+                workflow_id,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(ids),
+                &ctx,
+            )
+            .await
+            .expect("list_results");
+        assert_eq!(
+            list_results_response(results).status(),
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+    }
+
+    #[tokio::test]
+    async fn list_jobs_parses_comma_separated_query_values() {
+        let server = test_server_with_schema().await;
+        let workflow_id = create_workflow_record(&server).await;
+        let job_id = create_job_record(&server, workflow_id).await;
+        let router = test_router(server);
+        for (query, expected) in [
+            (format!("statuses=uninitialized,ready&ids={job_id}"), 1),
+            (format!("statuses=ready%2Cblocked&ids={job_id}"), 0),
+            ("status=uninitialized".to_string(), 1),
+            ("ids=".to_string(), 0),
+        ] {
+            let response = router
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method("GET")
+                        .uri(format!(
+                            "/torc-service/v1/jobs?workflow_id={workflow_id}&{query}"
+                        ))
+                        .body(Body::empty())
+                        .expect("valid request"),
+                )
+                .await
+                .expect("router response");
+            assert_eq!(response.status(), StatusCode::OK, "query={query}");
+            let body: models::ListJobsResponse = read_json_body(response).await;
+            assert_eq!(body.total_count, expected, "query={query}");
+        }
+
+        for path in ["jobs", "results"] {
+            let response = router
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method("GET")
+                        .uri(format!(
+                            "/torc-service/v1/{path}?workflow_id={workflow_id}\
+                             &status=ready&statuses=ready,blocked"
+                        ))
+                        .body(Body::empty())
+                        .expect("valid request"),
+                )
+                .await
+                .expect("router response");
+            assert_eq!(
+                response.status(),
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "path={path}"
+            );
+        }
     }
 
     fn test_router(server: Server<EmptyContext>) -> Router {

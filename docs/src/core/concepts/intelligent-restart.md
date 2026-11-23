@@ -77,9 +77,12 @@ Reinitialization detects changes through three mechanisms:
 
 ### 1. File Modification Times
 
-For files tracked in the workflow, Torc compares the current `st_mtime` (modification time) against
-the stored value. If a file was modified since the last run, jobs that use it as input are marked
-for re-execution.
+For files tracked in the workflow, the client checks each file on disk and sends the server a
+snapshot of whether it exists and its `st_mtime` (modification time), in batches of up to 100,000
+files. The server compares the snapshot with the stored values (with a 10 ms tolerance) and stores
+the new values. A file counts as changed if its modification time differs, if it appeared, or if it
+disappeared. Completed, failed, or canceled jobs that use a changed file as input are marked for
+re-execution.
 
 ```bash
 # Modify an input file
@@ -98,20 +101,29 @@ changes like modified commands, updated scripts, or changed configuration parame
 
 ### 3. Missing Output Files
 
-If a job's output file no longer exists on disk, the job is marked for re-execution regardless of
-whether inputs changed.
+If an output file of a completed job no longer exists on disk, the job is marked for re-execution
+regardless of whether inputs changed.
+
+### Missing Required Inputs
+
+An input file that no job produces must exist. If one is missing, `reinit` (and `init`) fails unless
+you pass `--force`. Missing outputs of completed jobs are not an error; those jobs are rerun.
 
 ## The Reinitialization Process
 
 When you run `reinit`, Torc performs these steps:
 
-1. **Bump run_id** — Increments the workflow's run counter for tracking
-2. **Reset workflow status** — Clears the previous run's completion state
-3. **Check file modifications** — Compares current `st_mtime` values to stored values
-4. **Check missing outputs** — Identifies jobs whose output files no longer exist
+1. **Check required inputs** — Stats every file and, unless `--force`, fails before changing
+   anything if a required input file is missing
+2. **Bump run_id** — Increments the workflow's run counter for tracking
+3. **Reset workflow status** — Clears the previous run's completion state
+4. **Check files** — Sends the file snapshot; the server stores changed `st_mtime` values and marks
+   jobs with changed inputs or missing outputs, and every job downstream of them, `uninitialized`
 5. **Check user_data changes** — Computes and compares input hashes
-6. **Mark affected jobs** — Sets jobs needing re-execution to `uninitialized`
-7. **Re-evaluate dependencies** — Runs `initialize_jobs` to set jobs to `ready` or `blocked`
+6. **Re-evaluate dependencies** — Runs `initialize_jobs` to set jobs to `ready` or `blocked`
+
+Each file batch is applied in its own transaction. If `reinit` stops partway, run it again: it
+reaches the same end state.
 
 ## Dependency Propagation
 

@@ -250,6 +250,8 @@ mod tests {
                 status: JobStatus::Completed,
                 job_name: None,
             },
+            output_files: None,
+            slurm_stats: None,
         }
     }
 
@@ -296,6 +298,15 @@ mod tests {
             .map(|p| OfflineJournal::read_file(p).unwrap().len())
             .sum();
         assert_eq!(total, 2);
+    }
+
+    #[test]
+    fn test_entry_without_payload_fields_still_parses() {
+        // Journals written before `output_files`/`slurm_stats` existed must still replay.
+        let old = serde_json::to_value(sample_entry(10, 42)).unwrap();
+        assert!(old.get("output_files").is_none() && old.get("slurm_stats").is_none());
+        let entry: JobCompletionEntry = serde_json::from_value(old).unwrap();
+        assert_eq!(entry, sample_entry(10, 42));
     }
 
     #[test]

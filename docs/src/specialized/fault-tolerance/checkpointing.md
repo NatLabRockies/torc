@@ -209,10 +209,11 @@ Three pieces work together here:
   exits with code 42. Each retry picks up from the last checkpoint, so the simulation makes progress
   across multiple Slurm allocations.
 
-- **`max_retries`** controls how many checkpoint cycles the job is allowed. Set this high enough to
-  cover the worst case: if each allocation provides ~2 hours of compute and the total job needs ~40
-  hours, you need at least 20 retries. Setting it generously (e.g., 100) is safe — the job exits
-  with code 0 once it finishes, so unused retries cost nothing.
+- **`max_retries`** controls how many checkpoint cycles the job is allowed. It counts every attempt,
+  including the first run. Set it high enough to cover the worst case: if each allocation provides
+  ~2 hours of compute and the total job needs ~40 hours, you need at least 20 attempts
+  (`max_retries: 20`). Setting it generously (e.g., 100) is safe — the job exits with code 0 once it
+  finishes, so unused retries cost nothing.
 
 ## Step 3: Submit and Run
 
@@ -282,7 +283,8 @@ of checkpoint cycles.
 
 6. Torc sees exit code 42 (non-zero), marks the job as failed, and consults the failure handler.
 
-7. The failure handler matches exit code 42 and schedules a retry (up to `max_retries` times).
+7. The failure handler matches exit code 42 and schedules a retry, until the job has run
+   `max_retries` times in total.
 
 8. On retry, the script calls `load_checkpoint()` and resumes from where it left off.
 

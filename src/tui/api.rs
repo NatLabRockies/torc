@@ -158,6 +158,9 @@ impl TorcClient {
             name,    // name
             command, // command
             None,    // label
+            None,    // ids
+            None,    // statuses
+            None,    // resource_requirements_id
         )
         .context("Failed to list jobs")?;
 
@@ -212,6 +215,8 @@ impl TorcClient {
             None,        // sort_by
             None,        // reverse_sort
             None,        // all_runs
+            None,        // ids
+            None,        // statuses
         )
         .context("Failed to list results")?;
 
@@ -358,6 +363,8 @@ impl TorcClient {
             executed_by: None,
             persistent: false,
             is_recovery: false,
+            state: None,
+            error: None,
         };
 
         apis::workflow_actions_api::create_workflow_action(&self.config, workflow_id, action)
@@ -400,30 +407,22 @@ impl TorcClient {
         apis::jobs_api::get_job(&self.config, job_id).context("Failed to get job")
     }
 
-    pub fn cancel_job(&self, job_id: i64) -> Result<()> {
-        // Get the existing job, update status, and PUT back
-        let mut job = self.get_job(job_id)?;
-        job.status = Some(JobStatus::Canceled);
-
-        apis::jobs_api::update_job(&self.config, job_id, job).context("Failed to cancel job")?;
-
-        Ok(())
-    }
-
-    pub fn terminate_job(&self, job_id: i64) -> Result<()> {
-        let mut job = self.get_job(job_id)?;
-        job.status = Some(JobStatus::Terminated);
-
-        apis::jobs_api::update_job(&self.config, job_id, job).context("Failed to terminate job")?;
-
-        Ok(())
-    }
-
+    /// Retry via the server's retry endpoint, which sets Ready and bumps attempt_id.
+    /// (update_job cannot change status.) The server enforces the job's failure handler limit.
     pub fn retry_job(&self, job_id: i64) -> Result<()> {
-        let mut job = self.get_job(job_id)?;
-        job.status = Some(JobStatus::Ready);
+        let job = self.get_job(job_id)?;
+        let workflow = apis::workflows_api::get_workflow(&self.config, job.workflow_id)
+            .context("Failed to get workflow")?;
+        let run_id = workflow.run_id.unwrap_or(1);
 
-        apis::jobs_api::update_job(&self.config, job_id, job).context("Failed to retry job")?;
+        apis::jobs_api::retry_job(
+            &self.config,
+            job_id,
+            run_id,
+            // Required by servers older than API 1.1.0; newer servers ignore it.
+            Some(i32::MAX),
+        )
+        .context("Failed to retry job")?;
 
         Ok(())
     }

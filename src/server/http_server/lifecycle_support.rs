@@ -1,7 +1,252 @@
 use super::*;
-use crate::server::api::database_lock_aware_error;
+use crate::server::api::{
+    begin_immediate, database_error_with_msg, database_lock_aware_error, parse_job_status,
+};
 
 impl<C> Server<C> {
+    pub(super) async fn manage_job_status_change(
+        &self,
+        job: &models::JobModel,
+        run_id: i64,
+    ) -> Result<(), ApiError> {
+        let job_id = job
+            .id
+            .ok_or_else(|| ApiError("Job ID is required".to_string()))?;
+        let new_status = job
+            .status
+            .as_ref()
+            .ok_or_else(|| ApiError("Job status is required".to_string()))?;
+
+        debug!(
+            "manage_job_status_change: job_id={}, new_status={}, run_id={}",
+            job_id, new_status, run_id
+        );
+
+        let current_job =
+            match sqlx::query!("SELECT status, workflow_id FROM job WHERE id = ?", job_id)
+                .fetch_optional(self.pool.as_ref())
+                .await
+            {
+                Ok(Some(row)) => row,
+                Ok(None) => {
+                    error!("Job not found job_id={}", job_id);
+                    return Err(ApiError("Job not found".to_string()));
+                }
+                Err(e) => {
+                    error!("Database error looking up job: {}", e);
+                    return Err(ApiError("Database error".to_string()));
+                }
+            };
+
+        let current_status = parse_job_status(current_job.status as i32, job_id)?;
+
+        if current_status == *new_status {
+            debug!(
+                "manage_job_status_change: job_id={} already has status '{}', no change needed",
+                job_id, current_status
+            );
+            return Ok(());
+        }
+
+        debug!(
+            "manage_job_status_change: job_id={} status change from '{}' to '{}'",
+            job_id, current_status, new_status
+        );
+
+        if let Err(e) = self.validate_run_id(current_job.workflow_id, run_id).await {
+            error!("manage_job_status_change: {}", e);
+            return Err(ApiError(e));
+        }
+
+        if new_status.is_complete() {
+            let result_record = match sqlx::query!(
+                "SELECT return_code FROM result WHERE job_id = ? AND run_id = ?",
+                job_id,
+                run_id
+            )
+            .fetch_optional(self.pool.as_ref())
+            .await
+            {
+                Ok(result) => result,
+                Err(e) => {
+                    error!("Database error checking for result: {}", e);
+                    return Err(ApiError("Database error".to_string()));
+                }
+            };
+
+            if result_record.is_none() {
+                error!("No result found for job_id={} run_id={}", job_id, run_id);
+                return Err(ApiError(
+                    "No result found when transitioning to terminal status".to_string(),
+                ));
+            }
+        }
+
+        let new_status_int = new_status.to_int();
+
+        // Resolving a PendingFailed job (AI classification decided "fail"). The terminal
+        // UPDATE below skips PendingFailed rows for idempotency, so handle it here. Only Failed
+        // is allowed: the existing result records a failed attempt. Update that result row too
+        // so job and result status agree.
+        if current_status == models::JobStatus::PendingFailed && new_status.is_complete() {
+            if *new_status != models::JobStatus::Failed {
+                return Err(ApiError(format!(
+                    "job_id={} is pending_failed; it can only be resolved to failed (or retried)",
+                    job_id
+                )));
+            }
+            let pending_failed_int = models::JobStatus::PendingFailed.to_int();
+            let mut tx = begin_immediate(&self.pool)
+                .await
+                .map_err(|e| database_lock_aware_error(e, "Failed to begin transaction"))?;
+            // Re-check the run inside the transaction: the earlier run_id validation ran
+            // before the write lock, so a workflow reset could have committed since.
+            let result = sqlx::query(
+                "UPDATE job SET status = ?, unblocking_processed = 0, start_time = NULL, compute_node_id = NULL \
+                 WHERE id = ? AND status = ? \
+                 AND workflow_id IN (SELECT id FROM workflow WHERE run_id = ?)",
+            )
+            .bind(new_status_int)
+            .bind(job_id)
+            .bind(pending_failed_int)
+            .bind(run_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to update job status"))?;
+            if result.rows_affected() == 0 {
+                let _ = tx.rollback().await;
+                return Err(ApiError(format!(
+                    "job_id={} is no longer pending_failed in run_id={}",
+                    job_id, run_id
+                )));
+            }
+            // Only the attempt being classified: an earlier attempt classified as retry keeps
+            // its own result row.
+            sqlx::query(
+                "UPDATE result SET status = ? WHERE job_id = ? AND run_id = ? AND status = ? \
+                 AND attempt_id = (SELECT attempt_id FROM job WHERE id = ?)",
+            )
+            .bind(new_status_int)
+            .bind(job_id)
+            .bind(run_id)
+            .bind(pending_failed_int)
+            .bind(job_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to update result status"))?;
+            tx.commit()
+                .await
+                .map_err(|e| database_lock_aware_error(e, "Failed to commit transaction"))?;
+            self.signal_job_completion();
+            return Ok(());
+        }
+
+        if new_status.is_complete() {
+            let completed_int = models::JobStatus::Completed.to_int();
+            let failed_int = models::JobStatus::Failed.to_int();
+            let canceled_int = models::JobStatus::Canceled.to_int();
+            let terminated_int = models::JobStatus::Terminated.to_int();
+            let disabled_int = models::JobStatus::Disabled.to_int();
+            let pending_failed_int = models::JobStatus::PendingFailed.to_int();
+            match sqlx::query!(
+                "UPDATE job SET status = ?, unblocking_processed = 0, start_time = NULL, compute_node_id = NULL WHERE id = ? AND status NOT IN (?, ?, ?, ?, ?, ?)",
+                new_status_int,
+                job_id,
+                completed_int,
+                failed_int,
+                canceled_int,
+                terminated_int,
+                disabled_int,
+                pending_failed_int,
+            )
+            .execute(self.pool.as_ref())
+            .await
+            {
+                Ok(result) => {
+                    if result.rows_affected() == 0 {
+                        let current = sqlx::query_scalar!(
+                            "SELECT status FROM job WHERE id = ?",
+                            job_id
+                        )
+                        .fetch_optional(self.pool.as_ref())
+                        .await
+                        .map_err(|e| {
+                            database_error_with_msg(e, "Failed to re-check job status")
+                        })?;
+
+                        match current {
+                            Some(status_int) => {
+                                let status = models::JobStatus::from_int(status_int as i32)
+                                    .unwrap_or(models::JobStatus::Failed);
+                                if status.is_complete() {
+                                    debug!(
+                                        "job_id={} already in terminal status={}, treating as idempotent success",
+                                        job_id, status
+                                    );
+                                    return Ok(());
+                                }
+                                error!(
+                                    "job_id={} has unexpected status={} after conditional update matched 0 rows",
+                                    job_id, status
+                                );
+                                return Err(ApiError(format!(
+                                    "job_id={} is in unexpected status={}",
+                                    job_id, status
+                                )));
+                            }
+                            None => {
+                                error!("job_id={} was deleted during status transition", job_id);
+                                return Err(ApiError(format!("job_id={} not found", job_id)));
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    return Err(database_error_with_msg(e, "Failed to update job status"));
+                }
+            }
+            self.signal_job_completion();
+            debug!(
+                "Marked job_id={} as complete, unblocking will be processed by background task",
+                job_id
+            );
+        } else {
+            match sqlx::query!(
+                "UPDATE job SET status = ?, start_time = NULL, compute_node_id = NULL WHERE id = ?",
+                new_status_int,
+                job_id
+            )
+            .execute(self.pool.as_ref())
+            .await
+            {
+                Ok(result) => {
+                    if result.rows_affected() == 0 {
+                        error!(
+                            "No rows affected for job_id={} when updating status",
+                            job_id
+                        );
+                        return Err(ApiError(
+                            "Failed to update job status: no rows affected".to_string(),
+                        ));
+                    }
+                }
+                Err(e) => {
+                    return Err(database_error_with_msg(e, "Failed to update job status"));
+                }
+            }
+        }
+
+        if current_status.is_complete() && !new_status.is_complete() {
+            debug!(
+                "manage_job_status_change: reverting completed job_id={}, resetting downstream jobs",
+                job_id
+            );
+            self.update_jobs_from_completion_reversal(job_id).await?;
+        }
+
+        Ok(())
+    }
+
     pub(super) async fn batch_unblock_jobs_tx(
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
         workflow_id: i64,
@@ -194,5 +439,110 @@ impl<C> Server<C> {
         }
 
         Ok(())
+    }
+
+    pub(super) async fn update_jobs_from_completion_reversal(
+        &self,
+        job_id: i64,
+    ) -> Result<(), ApiError> {
+        debug!(
+            "update_jobs_from_completion_reversal: resetting downstream jobs for job_id={}",
+            job_id
+        );
+
+        let uninitialized_status = models::JobStatus::Uninitialized.to_int();
+
+        // BEGIN IMMEDIATE: the first statement on this tx is a SELECT, which would
+        // acquire a WAL read snapshot under BEGIN DEFERRED and then risk
+        // SQLITE_BUSY_SNAPSHOT (517) on the recursive UPDATE that follows.
+        // See server/api.rs::begin_immediate.
+        let mut tx = match begin_immediate(&self.pool).await {
+            Ok(tx) => tx,
+            Err(e) => {
+                error!("Failed to begin transaction for completion reversal: {}", e);
+                return Err(ApiError("Database error".to_string()));
+            }
+        };
+
+        let workflow_id = match sqlx::query!("SELECT workflow_id FROM job WHERE id = ?", job_id)
+            .fetch_optional(&mut *tx)
+            .await
+        {
+            Ok(Some(row)) => row.workflow_id,
+            Ok(None) => {
+                error!("Job with id {} not found", job_id);
+                return Err(ApiError("Job not found".to_string()));
+            }
+            Err(e) => {
+                error!("Database error finding job {}: {}", job_id, e);
+                return Err(ApiError("Database error".to_string()));
+            }
+        };
+
+        let result = sqlx::query!(
+            r#"
+            WITH RECURSIVE downstream_jobs(job_id, level) AS (
+                SELECT
+                    jbb.job_id,
+                    0 as level
+                FROM job_depends_on jbb
+                WHERE jbb.depends_on_job_id = ?
+                  AND jbb.workflow_id = ?
+
+                UNION ALL
+
+                SELECT
+                    jbb.job_id,
+                    dj.level + 1 as level
+                FROM downstream_jobs dj
+                JOIN job_depends_on jbb ON jbb.depends_on_job_id = dj.job_id
+                WHERE jbb.workflow_id = ?
+                  AND dj.level < 100
+            )
+            UPDATE job
+            SET status = ?, start_time = NULL, compute_node_id = NULL
+            WHERE workflow_id = ?
+              AND id IN (SELECT DISTINCT job_id FROM downstream_jobs)
+            "#,
+            job_id,
+            workflow_id,
+            workflow_id,
+            uninitialized_status,
+            workflow_id
+        )
+        .execute(&mut *tx)
+        .await;
+
+        match result {
+            Ok(result) => {
+                let affected_rows = result.rows_affected();
+                debug!(
+                    "update_jobs_from_completion_reversal: reset {} downstream jobs for job_id={}",
+                    affected_rows, job_id
+                );
+
+                if let Err(e) = tx.commit().await {
+                    error!(
+                        "Failed to commit transaction for completion reversal: {}",
+                        e
+                    );
+                    return Err(ApiError("Database error".to_string()));
+                }
+
+                info!(
+                    "Successfully reset {} downstream jobs for job_id={} in workflow={}",
+                    affected_rows, job_id, workflow_id
+                );
+
+                Ok(())
+            }
+            Err(e) => {
+                error!(
+                    "Database error during completion reversal for job {}: {}",
+                    job_id, e
+                );
+                Err(ApiError("Database error".to_string()))
+            }
+        }
     }
 }

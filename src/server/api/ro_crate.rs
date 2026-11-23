@@ -188,6 +188,23 @@ impl RoCrateApiImpl {
             }
         };
 
+        // st_mtime is also set on output files once their job completes, so exclude any
+        // file a job produces; otherwise re-initializing after a run records outputs as inputs.
+        let output_file_ids: std::collections::HashSet<i64> =
+            sqlx::query_scalar("SELECT file_id FROM job_output_file WHERE workflow_id = $1")
+                .bind(workflow_id)
+                .fetch_all(self.context.pool.as_ref())
+                .await
+                .map_err(|e| {
+                    super::database_error_with_msg(e, "Failed to list output files for RO-Crate")
+                })?
+                .into_iter()
+                .collect();
+        let input_files: Vec<_> = input_files
+            .into_iter()
+            .filter(|f| !output_file_ids.contains(&f.id))
+            .collect();
+
         // Get existing RO-Crate entities by file_id for upsert
         let existing_entities: std::collections::HashMap<i64, (i64, String)> = match sqlx::query!(
             r#"
@@ -639,18 +656,49 @@ where
             context.get().0.clone()
         );
 
+        let pool = self.context.pool.as_ref();
+        // Reject a workflow_id change before checking file_id, so the file check only ever runs
+        // against the stored (authorized) workflow and cannot probe another workflow's files.
+        if super::ref_outside_workflow(pool, "ro_crate_entity", "id", id, body.workflow_id)
+            .await?
+            .is_some()
+        {
+            return Ok(
+                if super::workflow_id_mismatch(pool, "ro_crate_entity", id).await? {
+                    UpdateRoCrateEntityResponse::UnprocessableContentErrorResponse(
+                        super::workflow_id_immutable_response(),
+                    )
+                } else {
+                    UpdateRoCrateEntityResponse::NotFoundErrorResponse(resource_not_found_response(
+                        "RO-Crate entity",
+                        id,
+                    ))
+                },
+            );
+        }
+
+        // body.workflow_id now equals the stored workflow_id.
+        if let Some(file_id) = body.file_id
+            && let Some(err) =
+                super::ref_outside_workflow(pool, "file", "file_id", file_id, body.workflow_id)
+                    .await?
+        {
+            return Ok(UpdateRoCrateEntityResponse::UnprocessableContentErrorResponse(err));
+        }
+
         let metadata_str = serialize_metadata(&body.metadata)?;
         let result = match sqlx::query!(
             r#"
             UPDATE ro_crate_entity
             SET file_id = $1, entity_id = $2, entity_type = $3, metadata = $4
-            WHERE id = $5
+            WHERE id = $5 AND workflow_id = $6
             "#,
             body.file_id,
             body.entity_id,
             body.entity_type,
             metadata_str,
             id,
+            body.workflow_id,
         )
         .execute(self.context.pool.as_ref())
         .await
@@ -681,9 +729,18 @@ where
         };
 
         if result.rows_affected() == 0 {
-            return Ok(UpdateRoCrateEntityResponse::NotFoundErrorResponse(
-                resource_not_found_response("RO-Crate entity", id),
-            ));
+            return Ok(
+                if super::workflow_id_mismatch(pool, "ro_crate_entity", id).await? {
+                    UpdateRoCrateEntityResponse::UnprocessableContentErrorResponse(
+                        super::workflow_id_immutable_response(),
+                    )
+                } else {
+                    UpdateRoCrateEntityResponse::NotFoundErrorResponse(resource_not_found_response(
+                        "RO-Crate entity",
+                        id,
+                    ))
+                },
+            );
         }
 
         body.id = Some(id);

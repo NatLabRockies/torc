@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            UPDATE user_data\n            SET\n                name = COALESCE($1, name),\n                is_ephemeral = COALESCE($2, is_ephemeral),\n                data = COALESCE($3, data)\n            WHERE id = $4 AND workflow_id = $5\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "0bb049173d8b8775eba045b4eaeb1d63a585f76709087b1642405dca82735152"
+}

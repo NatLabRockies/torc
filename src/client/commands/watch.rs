@@ -179,6 +179,9 @@ fn count_ready_unplanned_jobs(
         None,     // name
         None,     // command
         Some(""), // label: unlabeled jobs only
+        None,     // ids
+        None,     // statuses
+        None,     // resource_requirements_id
     )
     .map_err(|e| format!("Failed to count ready jobs: {}", e))?
     .total_count;
@@ -199,6 +202,9 @@ fn count_ready_unplanned_jobs(
         None,     // name
         None,     // command
         Some(""), // label: unlabeled jobs only
+        None,     // ids
+        None,     // statuses
+        None,     // resource_requirements_id
     )
     .map_err(|e| format!("Failed to count unplanned ready jobs: {}", e))?
     .total_count;

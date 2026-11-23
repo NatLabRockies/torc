@@ -22,7 +22,6 @@ use clap::{CommandFactory, FromArgMatches, Parser};
 use rmcp::{ServiceExt, model::CallToolRequestParams, transport::child_process::TokioChildProcess};
 use rust_embed::Embed;
 use serde::{Deserialize, Serialize};
-use std::path::Path as FsPath;
 use std::process::Command as StdCommand;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
@@ -105,6 +104,9 @@ struct AppState {
     /// Secret that API and proxy requests must carry (header or `token` query parameter). None
     /// on a UNIX socket, whose file permissions already restrict access, or with --no-token.
     token: Option<String>,
+    /// PIDs of the live `torc run` processes started from the dashboard, by workflow id, so they
+    /// can be stopped after the browser stops following them. A workflow can have several.
+    local_runs: Mutex<std::collections::HashMap<String, Vec<u32>>>,
 }
 
 /// Header carrying the dashboard token. Not `Authorization`, which the proxy passes through to
@@ -479,11 +481,13 @@ async fn main() -> Result<()> {
     } else {
         dash_config.api_url.clone()
     };
-    let torc_bin = if explicit("torc_bin") {
+    // Some commands run in the workflow's submission directory, so a relative path like
+    // ./target/release/torc must not be resolved from there.
+    let torc_bin = absolute_if_relative_path(if explicit("torc_bin") {
         cli.torc_bin.clone()
     } else {
         dash_config.torc_bin.clone()
-    };
+    });
     let torc_server_bin = if explicit("torc_server_bin") {
         cli.torc_server_bin.clone()
     } else {
@@ -913,6 +917,7 @@ async fn main() -> Result<()> {
         llm_model: RwLock::new(llm_model),
         mcp_client: Mutex::new(None),
         allowed_hosts,
+        local_runs: Mutex::new(std::collections::HashMap::new()),
     });
 
     // Build router
@@ -940,7 +945,10 @@ async fn main() -> Result<()> {
         .route("/api/cli/run-stream", get(cli_run_stream_handler))
         .route("/api/cli/recover", post(cli_recover_handler))
         .route("/api/cli/sync-status", post(cli_sync_status_handler))
-        .route("/api/cli/export", post(cli_export_handler))
+        .route("/api/cli/op", post(cli_op_handler))
+        .route("/api/cli/stop-run", post(cli_stop_run_handler))
+        .route("/api/download/export", get(download_export_handler))
+        .route("/api/download/logs", get(download_logs_handler))
         .route("/api/cli/import", post(cli_import_handler))
         .route("/api/cli/read-file", post(cli_read_file_handler))
         .route("/api/cli/write-file", post(cli_write_file_handler))
@@ -1075,6 +1083,30 @@ fn stop_process(pid: u32) {
     let _ = StdCommand::new("taskkill")
         .args(["/PID", &pid.to_string(), "/T", "/F"])
         .status();
+}
+
+/// `bin` made absolute against the current directory if it is a relative path (`./torc`,
+/// `bin/torc`). A bare name like `torc` is left alone so it is still found on PATH.
+fn absolute_if_relative_path(bin: String) -> String {
+    let path = std::path::Path::new(&bin);
+    if path.is_relative()
+        && path.components().count() > 1
+        && let Ok(abs) = std::path::absolute(path)
+    {
+        return abs.to_string_lossy().into_owned();
+    }
+    bin
+}
+
+/// Stops the process with this PID when dropped, unless cleared first.
+struct KillOnDrop(Option<u32>);
+
+impl Drop for KillOnDrop {
+    fn drop(&mut self) {
+        if let Some(pid) = self.0 {
+            stop_process(pid);
+        }
+    }
 }
 
 // ============== Static File Handlers ==============
@@ -1338,18 +1370,6 @@ struct CliResponse {
 }
 
 #[derive(Deserialize)]
-struct ExportRequest {
-    workflow_id: String,
-    /// Output file path on the server (default: workflow_<id>.json in current dir)
-    #[serde(default)]
-    output: Option<String>,
-    #[serde(default)]
-    include_results: bool,
-    #[serde(default)]
-    include_events: bool,
-}
-
-#[derive(Deserialize)]
 struct ImportRequest {
     /// Server-side file path to import from (mutually exclusive with content)
     #[serde(default)]
@@ -1404,9 +1424,10 @@ async fn cli_create_handler(
 
     let result = if req.is_file {
         // Spec is a file path
+        let spec = expand_tilde(&req.spec).to_string_lossy().into_owned();
         run_torc_command(
             &state.torc_bin,
-            &["-f", "json", "create", &req.spec],
+            &["-f", "json", "create", &spec],
             &state.api_url,
         )
         .await
@@ -1519,10 +1540,10 @@ async fn cli_create_slurm_handler(
     let result = if req.is_file {
         // Spec is a file path - two-step process: generate schedulers then create
         // Step 1: Generate Slurm schedulers
+        let spec = expand_tilde(&req.spec).to_string_lossy().into_owned();
         let slurm_spec_path = format!(
             "{}_slurm.yaml",
-            req.spec
-                .trim_end_matches(".yaml")
+            spec.trim_end_matches(".yaml")
                 .trim_end_matches(".yml")
                 .trim_end_matches(".json")
                 .trim_end_matches(".json5")
@@ -1535,7 +1556,7 @@ async fn cli_create_slurm_handler(
         }
         gen_args.push("-o");
         gen_args.push(&slurm_spec_path);
-        gen_args.push(&req.spec);
+        gen_args.push(&spec);
 
         let gen_result = run_torc_command(&state.torc_bin, &gen_args, &state.api_url).await;
         if !gen_result.success {
@@ -1649,9 +1670,10 @@ async fn cli_validate_handler(
 ) -> impl IntoResponse {
     let result = if req.is_file {
         // Spec is a file path
+        let spec = expand_tilde(&req.spec).to_string_lossy().into_owned();
         run_torc_command(
             &state.torc_bin,
-            &["-f", "json", "create", &req.spec, "--dry-run"],
+            &["-f", "json", "create", &spec, "--dry-run"],
             &state.api_url,
         )
         .await
@@ -1913,7 +1935,6 @@ async fn cli_run_stream_handler(
         // Spawn the command with piped stdout/stderr
         let mut child = match Command::new(&torc_bin)
             .args(&args)
-            .kill_on_drop(kill_on_drop)
             .env("TORC_API_URL", &api_url)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
@@ -1934,6 +1955,38 @@ async fn cli_run_stream_handler(
         // Read stdout and stderr
         let stdout = child.stdout.take();
         let stderr = child.stderr.take();
+
+        // Wait for the process in its own task, so a run outlives this stream (the browser may
+        // leave) and stays stoppable through `local_runs` until it exits.
+        let pid = child.id();
+        if let (false, Some(pid)) = (kill_on_drop, pid) {
+            state
+                .local_runs
+                .lock()
+                .await
+                .entry(workflow_id.clone())
+                .or_default()
+                .push(pid);
+        }
+        let (exit_tx, exit_rx) = tokio::sync::oneshot::channel();
+        {
+            let state = state.clone();
+            let workflow_id = workflow_id.clone();
+            tokio::spawn(async move {
+                let status = child.wait().await;
+                let mut runs = state.local_runs.lock().await;
+                if let (Some(pid), Some(pids)) = (pid, runs.get_mut(&workflow_id)) {
+                    pids.retain(|&p| p != pid);
+                    if pids.is_empty() {
+                        runs.remove(&workflow_id);
+                    }
+                }
+                drop(runs);
+                let _ = exit_tx.send(status);
+            });
+        }
+        // A watch only observes, so stop it if the browser stops listening.
+        let mut watch_guard = KillOnDrop(if kill_on_drop { pid } else { None });
 
         // Create channels for stdout/stderr lines
         let (tx, mut rx) = tokio::sync::mpsc::channel::<(String, String)>(100);
@@ -2087,7 +2140,11 @@ async fn cli_run_stream_handler(
         }
 
         // Wait for the process to exit
-        match child.wait().await {
+        let status = exit_rx
+            .await
+            .unwrap_or_else(|_| Err(std::io::Error::other("process waiter stopped")));
+        watch_guard.0 = None;
+        match status {
             Ok(status) => {
                 let exit_code = status.code().unwrap_or(-1);
                 yield Ok(Event::default()
@@ -2111,104 +2168,83 @@ async fn cli_run_stream_handler(
     Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
 }
 
-/// Workflow recovery handler
-/// Runs `torc -f json recover` for the specified workflow
-/// Supports dry-run mode to preview changes before applying
+/// Run `torc -f json <args>` and wrap the result in the envelope the dashboard expects:
+/// `{success, data, stdout, stderr, exit_code}`, plus `error` on failure. `data` is the parsed
+/// stdout, or null when it is not JSON. `cwd` sets the working directory (e.g., the workflow's
+/// submission directory, so relative paths resolve as they would for the user).
+async fn run_torc_json(state: &AppState, args: &[String], cwd: Option<&str>) -> serde_json::Value {
+    let mut full = vec!["-f".to_string(), "json".to_string()];
+    full.extend_from_slice(args);
+    info!("Running: {} {}", state.torc_bin, full.join(" "));
+    let mut cmd = Command::new(&state.torc_bin);
+    cmd.args(&full).env("TORC_API_URL", &state.api_url);
+    if let Some(dir) = cwd {
+        cmd.current_dir(expand_tilde(dir));
+    }
+    let output = match cmd.output().await {
+        Ok(output) => output,
+        Err(e) => {
+            return serde_json::json!({
+                "success": false,
+                "error": format!("Failed to execute torc: {}", e),
+            });
+        }
+    };
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    let data = serde_json::from_str::<serde_json::Value>(stdout.trim()).ok();
+    let mut body = serde_json::json!({
+        "success": output.status.success(),
+        "data": data,
+        "stdout": stdout,
+        "stderr": stderr,
+        "exit_code": output.status.code(),
+    });
+    if !output.status.success() {
+        warn!("Command failed: {} {}", state.torc_bin, full.join(" "));
+        let error = data
+            .as_ref()
+            .and_then(|d| d.get("error"))
+            .and_then(|e| e.as_str())
+            .map(str::to_string)
+            .unwrap_or_else(|| {
+                if stderr.trim().is_empty() {
+                    stdout.trim().to_string()
+                } else {
+                    stderr.trim().to_string()
+                }
+            });
+        body["error"] = serde_json::Value::String(error);
+    }
+    body
+}
+
+/// Workflow recovery handler: `torc -f json recover`, with --dry-run to preview changes.
 async fn cli_recover_handler(
     State(state): State<Arc<AppState>>,
     Json(req): Json<RecoverRequest>,
 ) -> impl IntoResponse {
     info!(
-        "Running recover for workflow: {} (dry_run={})",
+        "Running recover workflow_id={} dry_run={}",
         req.workflow_id, req.dry_run
     );
-
-    let torc_bin = state.torc_bin.clone();
-    let api_url = state.api_url.clone();
-
-    // Build command arguments
     let mut args = vec![
-        "-f".to_string(),
-        "json".to_string(),
         "recover".to_string(),
         req.workflow_id.clone(),
         "-o".to_string(),
-        req.output_dir.clone(),
+        expand_tilde(&req.output_dir).to_string_lossy().into_owned(),
         "--memory-multiplier".to_string(),
         req.memory_multiplier.to_string(),
         "--runtime-multiplier".to_string(),
         req.runtime_multiplier.to_string(),
     ];
-
     if req.dry_run {
         args.push("--dry-run".to_string());
     }
-
     if req.retry_unknown {
         args.push("--retry-unknown".to_string());
     }
-
-    let args_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-
-    // Run the command and capture output
-    let output = Command::new(&torc_bin)
-        .args(&args_refs)
-        .env("TORC_API_URL", &api_url)
-        .output()
-        .await;
-
-    match output {
-        Ok(output) => {
-            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            let exit_code = output.status.code();
-
-            // Try to parse stdout as JSON (since we requested -f json)
-            // If parsing fails, return raw output
-            if output.status.success() {
-                // Return the JSON directly if it parses
-                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) {
-                    Json(serde_json::json!({
-                        "success": true,
-                        "data": json,
-                        "stderr": stderr,
-                        "exit_code": exit_code
-                    }))
-                } else {
-                    // JSON parsing failed, return raw output
-                    Json(serde_json::json!({
-                        "success": true,
-                        "stdout": stdout,
-                        "stderr": stderr,
-                        "exit_code": exit_code
-                    }))
-                }
-            } else {
-                // Command failed - try to extract error from JSON output
-                let error_msg = if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout)
-                {
-                    json.get("error")
-                        .and_then(|e| e.as_str())
-                        .unwrap_or(&stderr)
-                        .to_string()
-                } else {
-                    stderr.clone()
-                };
-
-                Json(serde_json::json!({
-                    "success": false,
-                    "error": error_msg,
-                    "stdout": stdout,
-                    "stderr": stderr,
-                    "exit_code": exit_code
-                }))
-            }
-        }
-        Err(e) => Json(serde_json::json!({
-            "success": false,
-            "error": format!("Failed to execute recover command: {}", e)
-        })),
-    }
+    Json(run_torc_json(&state, &args, None).await)
 }
 
 /// Sync job statuses with Slurm — detect and fail orphaned running jobs
@@ -2218,82 +2254,390 @@ async fn cli_sync_status_handler(
     Json(req): Json<SyncStatusRequest>,
 ) -> impl IntoResponse {
     info!(
-        "Running sync-status for workflow: {} (dry_run={})",
+        "Running sync-status workflow_id={} dry_run={}",
         req.workflow_id, req.dry_run
     );
-
     let mut args = vec![
-        "-f".to_string(),
-        "json".to_string(),
         "workflows".to_string(),
         "sync-status".to_string(),
         req.workflow_id.clone(),
     ];
-
     if req.dry_run {
         args.push("--dry-run".to_string());
     }
+    Json(run_torc_json(&state, &args, None).await)
+}
 
-    let args_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+/// A dashboard operation that maps to one `torc` command. `params` holds the op's options;
+/// each op reads only the keys it knows, so the browser cannot pass arbitrary CLI arguments.
+#[derive(Deserialize)]
+struct OpRequest {
+    op: String,
+    #[serde(default)]
+    workflow_id: Option<i64>,
+    #[serde(flatten)]
+    params: serde_json::Map<String, serde_json::Value>,
+}
 
-    let output = Command::new(&state.torc_bin)
-        .args(&args_refs)
-        .env("TORC_API_URL", &state.api_url)
-        .output()
-        .await;
+/// The `torc` arguments for an [`OpRequest`].
+struct OpCommand {
+    args: Vec<String>,
+    /// Working directory for the command, if not torc-dash's own.
+    cwd: Option<String>,
+    /// Spec written for the command to read; deleted afterwards.
+    temp_file: Option<String>,
+}
 
-    match output {
-        Ok(output) => {
-            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            let exit_code = output.status.code();
+/// Run one whitelisted `torc` command and return its JSON envelope (see `run_torc_json`).
+async fn cli_op_handler(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<OpRequest>,
+) -> impl IntoResponse {
+    match build_op(&req) {
+        Ok(cmd) => {
+            let result = run_torc_json(&state, &cmd.args, cmd.cwd.as_deref()).await;
+            if let Some(path) = cmd.temp_file {
+                let _ = tokio::fs::remove_file(path).await;
+            }
+            Json(result)
+        }
+        Err(error) => Json(serde_json::json!({ "success": false, "error": error })),
+    }
+}
 
-            if output.status.success() {
-                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) {
-                    Json(serde_json::json!({
-                        "success": true,
-                        "data": json,
-                        "stderr": stderr,
-                        "exit_code": exit_code
-                    }))
-                } else {
-                    Json(serde_json::json!({
-                        "success": true,
-                        "stdout": stdout,
-                        "stderr": stderr,
-                        "exit_code": exit_code
-                    }))
+fn build_op(req: &OpRequest) -> Result<OpCommand, String> {
+    let p = &req.params;
+    let flag = |k: &str| p.get(k).and_then(|v| v.as_bool()).unwrap_or(false);
+    let num = |k: &str| p.get(k).and_then(|v| v.as_f64());
+    let int = |k: &str| p.get(k).and_then(|v| v.as_i64());
+    let text = |k: &str| {
+        p.get(k)
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+    };
+    let id = || {
+        req.workflow_id
+            .map(|i| i.to_string())
+            .ok_or_else(|| "workflow_id is required".to_string())
+    };
+    let s = |v: &str| v.to_string();
+    let mut cmd = OpCommand {
+        args: Vec::new(),
+        cwd: None,
+        temp_file: None,
+    };
+
+    cmd.args = match req.op.as_str() {
+        "diagnose" => vec![s("workflows"), s("diagnose"), id()?],
+        "list-actions" => vec![s("workflows"), s("list-actions"), id()?],
+        "slurm-usage" => vec![s("slurm"), s("usage"), id()?],
+        "check-resources" => {
+            let mut a = vec![s("workflows"), s("check-resources"), id()?];
+            if flag("all") {
+                a.push(s("--all"));
+            }
+            if flag("include_failed") {
+                a.push(s("--include-failed"));
+            }
+            a
+        }
+        "correct-resources" => {
+            let mut a = vec![s("workflows"), s("correct-resources"), id()?];
+            for (key, opt) in [
+                ("memory_multiplier", "--memory-multiplier"),
+                ("cpu_multiplier", "--cpu-multiplier"),
+                ("runtime_multiplier", "--runtime-multiplier"),
+            ] {
+                if let Some(m) = num(key) {
+                    a.extend([s(opt), m.to_string()]);
                 }
+            }
+            if flag("dry_run") {
+                a.push(s("--dry-run"));
+            }
+            if flag("no_downsize") {
+                a.push(s("--no-downsize"));
+            }
+            a
+        }
+        "archive" => {
+            let ids: Vec<String> = p
+                .get("workflow_ids")
+                .and_then(|v| v.as_array())
+                .map(|ids| {
+                    ids.iter()
+                        .filter_map(|i| i.as_i64())
+                        .map(|i| i.to_string())
+                        .collect()
+                })
+                .unwrap_or_default();
+            if ids.is_empty() {
+                return Err("workflow_ids is required".to_string());
+            }
+            let mut a = vec![s("workflows"), s("archive"), flag("archived").to_string()];
+            a.extend(ids);
+            a
+        }
+        "update-workflow" => {
+            let mut a = vec![s("workflows"), s("update"), id()?];
+            if let Some(name) = text("name") {
+                a.extend([s("--name"), name]);
+            }
+            // Description and project may be cleared, so take them verbatim.
+            for (key, opt) in [("description", "--description"), ("project", "--project")] {
+                if let Some(v) = p.get(key).and_then(|v| v.as_str()) {
+                    a.extend([s(opt), v.to_string()]);
+                }
+            }
+            a
+        }
+        "schedule-nodes" => {
+            let scheduler = int("scheduler_config_id")
+                .ok_or_else(|| "scheduler_config_id is required".to_string())?;
+            let mut a = vec![
+                s("slurm"),
+                s("schedule-nodes"),
+                id()?,
+                s("--scheduler-config-id"),
+                scheduler.to_string(),
+                s("--num-hpc-jobs"),
+                int("num_allocations").unwrap_or(1).max(1).to_string(),
+                s("--no-prompts"),
+            ];
+            if let Some(dir) = text("output_dir") {
+                a.extend([
+                    s("--output"),
+                    expand_tilde(&dir).to_string_lossy().into_owned(),
+                ]);
+            }
+            if let Some(m) = int("max_parallel_jobs") {
+                a.extend([s("--max-parallel-jobs"), m.to_string()]);
+            }
+            if flag("suppress_actions") {
+                a.push(s("--suppress-actions"));
+            }
+            if flag("start_one_worker_per_node") {
+                a.push(s("--start-one-worker-per-node"));
+            }
+            // sbatch inherits the working directory; use the submission directory so jobs run
+            // where the workflow was created.
+            cmd.cwd = text("cwd");
+            a
+        }
+        "plan-allocations" => {
+            // The spec is a file on this host (`spec_path`) or inline content (`spec`).
+            let path = if let Some(path) = text("spec_path") {
+                expand_tilde(&path).to_string_lossy().into_owned()
             } else {
-                let error_msg = if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout)
-                {
-                    json.get("error")
-                        .and_then(|e| e.as_str())
-                        .unwrap_or(&stderr)
-                        .to_string()
-                } else {
-                    stderr.clone()
-                };
+                let spec = p
+                    .get("spec")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| "spec or spec_path is required".to_string())?;
+                let raw_ext = text("file_extension").unwrap_or_else(|| s(".yaml"));
+                let ext = validate_file_extension(&raw_ext)
+                    .ok_or_else(|| format!("Invalid file extension '{}'", raw_ext))?;
+                // Same location `create` uses, so relative paths in the spec resolve alike.
+                let path = format!("torc_spec_{}{}", uuid::Uuid::new_v4(), ext);
+                std::fs::write(&path, spec).map_err(|e| format!("Failed to write spec: {}", e))?;
+                cmd.temp_file = Some(path.clone());
+                path
+            };
+            let mut a = vec![s("slurm"), s("plan-allocations"), path];
+            if let Some(account) = text("account") {
+                a.extend([s("--account"), account]);
+            }
+            if let Some(profile) = text("profile") {
+                a.extend([s("--profile"), profile]);
+            }
+            // Without live sinfo/squeue, e.g. when planning for another cluster's profile.
+            if flag("offline") {
+                a.push(s("--offline"));
+            }
+            a
+        }
+        "list-access-groups" => vec![s("access-groups"), s("list"), s("--limit"), s("1000")],
+        "list-workflow-groups" => vec![s("access-groups"), s("list-workflow-groups"), id()?],
+        "add-workflow-group" | "remove-workflow-group" => {
+            let group = int("group_id").ok_or_else(|| "group_id is required".to_string())?;
+            let verb = if req.op == "add-workflow-group" {
+                "add-workflow"
+            } else {
+                "remove-workflow"
+            };
+            vec![s("access-groups"), s(verb), id()?, group.to_string()]
+        }
+        other => return Err(format!("Unknown operation '{}'", other)),
+    };
+    Ok(cmd)
+}
 
-                Json(serde_json::json!({
-                    "success": false,
-                    "error": error_msg,
-                    "stdout": stdout,
-                    "stderr": stderr,
-                    "exit_code": exit_code
-                }))
+#[derive(Deserialize)]
+struct DownloadQuery {
+    workflow_id: i64,
+    #[serde(default)]
+    include_results: bool,
+    #[serde(default)]
+    include_events: bool,
+    /// Log directory for the bundle (absolute, or relative to torc-dash's working directory).
+    #[serde(default)]
+    output_dir: Option<String>,
+    /// Suggested file name for the export.
+    #[serde(default)]
+    filename: Option<String>,
+}
+
+/// `Content-Disposition` for a download, keeping only safe file-name characters.
+fn attachment(name: &str) -> String {
+    let safe: String = name
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || "._-".contains(c) {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    format!("attachment; filename=\"{}\"", safe)
+}
+
+fn download_error(msg: String) -> axum::response::Response {
+    (StatusCode::INTERNAL_SERVER_ERROR, msg).into_response()
+}
+
+/// Download `torc workflows export` as a JSON file (to the browser, not the torc-dash host).
+async fn download_export_handler(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Query(q): axum::extract::Query<DownloadQuery>,
+) -> axum::response::Response {
+    let id = q.workflow_id.to_string();
+    let mut args = vec!["workflows", "export", &id];
+    if q.include_results {
+        args.push("--include-results");
+    }
+    if q.include_events {
+        args.push("--include-events");
+    }
+    let result = run_torc_command(&state.torc_bin, &args, &state.api_url).await;
+    if !result.success {
+        return download_error(result.stderr);
+    }
+    let name = q
+        .filename
+        .unwrap_or_else(|| format!("workflow_{}.json", q.workflow_id));
+    (
+        [
+            (header::CONTENT_TYPE, "application/json".to_string()),
+            (header::CONTENT_DISPOSITION, attachment(&name)),
+        ],
+        result.stdout,
+    )
+        .into_response()
+}
+
+/// Download `torc logs bundle` (a .tar.gz of the workflow's logs) without leaving a copy behind.
+async fn download_logs_handler(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Query(q): axum::extract::Query<DownloadQuery>,
+) -> axum::response::Response {
+    let dir = match tempfile::tempdir() {
+        Ok(dir) => dir,
+        Err(e) => return download_error(format!("Failed to create temp dir: {}", e)),
+    };
+    let id = q.workflow_id.to_string();
+    let output_dir = expand_tilde(q.output_dir.as_deref().unwrap_or("torc_output"))
+        .to_string_lossy()
+        .into_owned();
+    let bundle_dir = dir.path().to_string_lossy().into_owned();
+    let args = [
+        "logs",
+        "bundle",
+        &id,
+        "--output-dir",
+        &output_dir,
+        "--bundle-dir",
+        &bundle_dir,
+    ];
+    let result = run_torc_command(&state.torc_bin, &args, &state.api_url).await;
+    let name = format!("wf{}.tar.gz", q.workflow_id);
+    let file = match tokio::fs::File::open(dir.path().join(&name)).await {
+        Ok(file) if result.success => file,
+        Ok(_) => return download_error(result.stderr),
+        Err(e) => return download_error(format!("{}\n{}", result.stderr, e)),
+    };
+    // Stream the file; the stream owns the temp dir, which is removed when it finishes.
+    let stream = async_stream::stream! {
+        let _dir = dir;
+        let mut file = file;
+        let mut buf = vec![0u8; 64 * 1024];
+        loop {
+            match file.read(&mut buf).await {
+                Ok(0) => break,
+                Ok(n) => yield Ok::<_, std::io::Error>(axum::body::Bytes::copy_from_slice(&buf[..n])),
+                Err(e) => {
+                    yield Err(e);
+                    break;
+                }
             }
         }
-        Err(e) => Json(serde_json::json!({
-            "success": false,
-            "error": format!("Failed to execute sync-status command: {}", e)
-        })),
+    };
+    (
+        [
+            (header::CONTENT_TYPE, "application/gzip".to_string()),
+            (header::CONTENT_DISPOSITION, attachment(&name)),
+        ],
+        axum::body::Body::from_stream(stream),
+    )
+        .into_response()
+}
+
+#[derive(Deserialize)]
+struct StopRunRequest {
+    workflow_id: String,
+}
+
+/// Stop a `torc run` started from the dashboard. SIGTERM makes the job runner terminate its
+/// jobs and exit, as Slurm does at walltime. Windows has no such signal: `taskkill /F` would kill
+/// the runner before it records its jobs as terminated, leaving them marked running, so Stop is
+/// refused there (and hidden in the UI via `can_stop_runs`).
+async fn cli_stop_run_handler(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<StopRunRequest>,
+) -> impl IntoResponse {
+    if !cfg!(unix) {
+        return (
+            StatusCode::NOT_IMPLEMENTED,
+            Json(serde_json::json!({
+                "success": false,
+                "error": "Stopping a local run is not supported on Windows",
+            })),
+        );
     }
+    let pids = state
+        .local_runs
+        .lock()
+        .await
+        .get(&req.workflow_id)
+        .cloned()
+        .unwrap_or_default();
+    for &pid in &pids {
+        info!(
+            "Stopping local run workflow_id={} pid={}",
+            req.workflow_id, pid
+        );
+        stop_process(pid);
+    }
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({ "success": true, "stopped": !pids.is_empty() })),
+    )
 }
 
 /// Read file contents from filesystem
 async fn cli_read_file_handler(Json(req): Json<ReadFileRequest>) -> impl IntoResponse {
-    let path = FsPath::new(&req.path);
+    let path = expand_tilde(&req.path);
     let exists = path.exists();
 
     if !exists {
@@ -2318,7 +2662,7 @@ async fn cli_read_file_handler(Json(req): Json<ReadFileRequest>) -> impl IntoRes
     }
 
     // Read the file contents
-    match tokio::fs::read_to_string(&req.path).await {
+    match tokio::fs::read_to_string(&path).await {
         Ok(content) => {
             // Check if it's JSON by file extension and try to parse
             let is_json = req.path.to_lowercase().ends_with(".json")
@@ -2419,7 +2763,10 @@ fn read_resource_samples(
         .add(b' ');
     let uri = format!(
         "file:{}?immutable=1",
-        percent_encoding::utf8_percent_encode(&req.db_path, URI_RESERVED)
+        percent_encoding::utf8_percent_encode(
+            &expand_tilde(&req.db_path).to_string_lossy(),
+            URI_RESERVED
+        )
     );
     let conn = Connection::open_with_flags(
         &uri,
@@ -2560,12 +2907,21 @@ fn complete_utf8_len(buf: &[u8]) -> usize {
     }
 }
 
+/// Expand a leading `~` or `~/` to the home directory; the browser sends paths verbatim and
+/// neither the filesystem nor the torc CLI expands `~`.
+fn expand_tilde(path: &str) -> std::path::PathBuf {
+    let rest = path
+        .strip_prefix('~')
+        .filter(|r| r.is_empty() || r.starts_with(std::path::is_separator));
+    match (rest, dirs::home_dir()) {
+        (Some(rest), Some(home)) => home.join(rest.trim_start_matches(std::path::is_separator)),
+        _ => std::path::PathBuf::from(path),
+    }
+}
+
 async fn tail_file(path: &str, offset: Option<u64>) -> std::io::Result<TailFileResponse> {
     use tokio::io::AsyncSeekExt;
-    let path = match (path.strip_prefix("~/"), std::env::var_os("HOME")) {
-        (Some(rest), Some(home)) => std::path::Path::new(&home).join(rest),
-        _ => std::path::PathBuf::from(path),
-    };
+    let path = expand_tilde(path);
     let mut file = match open_nonblocking(&path).await {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             // A missing directory means a wrong output dir (or a job on another host), not a
@@ -2652,7 +3008,7 @@ async fn cli_write_file_handler(Json(req): Json<WriteFileRequest>) -> impl IntoR
         error: Some(error),
         exists,
     };
-    let path = match std::path::absolute(req.path.trim()) {
+    let path = match std::path::absolute(expand_tilde(req.path.trim())) {
         Ok(p) if !req.path.trim().is_empty() => p,
         _ => return Json(fail("Enter a file path".into(), false)),
     };
@@ -2698,44 +3054,6 @@ async fn workflow_schema_handler() -> impl IntoResponse {
     )
 }
 
-/// Export a workflow to a JSON file on the server
-async fn cli_export_handler(
-    State(state): State<Arc<AppState>>,
-    Json(req): Json<ExportRequest>,
-) -> impl IntoResponse {
-    // Default output path: workflow_<id>.json in current directory
-    let default_output = format!("workflow_{}.json", req.workflow_id);
-    let output_raw = req.output.as_deref().unwrap_or(&default_output);
-
-    // Resolve to absolute path so the user knows exactly where the file goes
-    let output_path = FsPath::new(output_raw);
-    let output_abs = if output_path.is_relative() {
-        std::env::current_dir()
-            .map(|cwd| cwd.join(output_path).to_string_lossy().to_string())
-            .unwrap_or_else(|_| output_raw.to_string())
-    } else {
-        output_raw.to_string()
-    };
-
-    let mut args = vec![
-        "-f",
-        "json",
-        "workflows",
-        "export",
-        &req.workflow_id,
-        "-o",
-        &output_abs,
-    ];
-    if req.include_results {
-        args.push("--include-results");
-    }
-    if req.include_events {
-        args.push("--include-events");
-    }
-    let result = run_torc_command(&state.torc_bin, &args, &state.api_url).await;
-    Json(result)
-}
-
 /// Import a workflow from a server-side file path or uploaded content
 async fn cli_import_handler(
     State(state): State<Arc<AppState>>,
@@ -2743,9 +3061,11 @@ async fn cli_import_handler(
 ) -> impl IntoResponse {
     // Determine the file path to import from
     let temp_path_owned;
+    let expanded_path;
     let import_path = if let Some(ref path) = req.file_path {
         // Use server-side file path directly
-        path.as_str()
+        expanded_path = expand_tilde(path).to_string_lossy().into_owned();
+        expanded_path.as_str()
     } else if let Some(ref content) = req.content {
         // Write uploaded content to a temp file
         let unique_id = uuid::Uuid::new_v4();
@@ -2872,28 +3192,53 @@ async fn cli_plot_resources_handler(
         });
     }
 
-    // Create a temp directory for output
-    let temp_dir = std::env::temp_dir().join(format!("torc_plots_{}", std::process::id()));
-    let has_custom_output_dir = req.output_dir.is_some();
-    let output_dir = req
-        .output_dir
-        .map(std::path::PathBuf::from)
-        .unwrap_or(temp_dir.clone());
+    // Each request gets its own temp dir, so concurrent requests can't read or delete each
+    // other's plots.
+    let mut temp_dir = None;
+    let output_dir = match req.output_dir.as_deref() {
+        Some(dir) => expand_tilde(dir),
+        None => match tempfile::Builder::new().prefix("torc_plots_").tempdir() {
+            Ok(dir) => temp_dir.insert(dir).path().to_path_buf(),
+            Err(e) => {
+                return Json(PlotResourcesResponse {
+                    success: false,
+                    plots: vec![],
+                    error: Some(format!("Failed to create output directory: {}", e)),
+                });
+            }
+        },
+    };
+    let response = plot_resources(&state.torc_bin, &req, &output_dir).await;
+    // Dropping a TempDir deletes it synchronously; keep that off the async worker threads.
+    if let Some(dir) = temp_dir {
+        tokio::task::spawn_blocking(move || dir.close());
+    }
+    Json(response)
+}
 
-    if let Err(e) = tokio::fs::create_dir_all(&output_dir).await {
-        return Json(PlotResourcesResponse {
+async fn plot_resources(
+    torc_bin: &str,
+    req: &PlotResourcesRequest,
+    output_dir: &std::path::Path,
+) -> PlotResourcesResponse {
+    if let Err(e) = tokio::fs::create_dir_all(output_dir).await {
+        return PlotResourcesResponse {
             success: false,
             plots: vec![],
             error: Some(format!("Failed to create output directory: {}", e)),
-        });
+        };
     }
 
     // Build command arguments
     let mut args: Vec<&str> = vec!["plot-resources"];
 
     // Add all database paths
-    let db_paths: Vec<&str> = req.db_paths.iter().map(|s| s.as_str()).collect();
-    args.extend(db_paths.iter());
+    let db_paths: Vec<String> = req
+        .db_paths
+        .iter()
+        .map(|p| expand_tilde(p).to_string_lossy().into_owned())
+        .collect();
+    args.extend(db_paths.iter().map(String::as_str));
 
     let output_dir_str = output_dir.to_string_lossy().to_string();
     args.push("--output-dir");
@@ -2905,25 +3250,25 @@ async fn cli_plot_resources_handler(
     args.push("--format");
     args.push("json");
 
-    info!("Running: {} {}", state.torc_bin, args.join(" "));
+    info!("Running: {} {}", torc_bin, args.join(" "));
 
-    let output = Command::new(&state.torc_bin).args(&args).output().await;
+    let output = Command::new(torc_bin).args(&args).output().await;
 
     match output {
         Ok(output) => {
             if !output.status.success() {
                 let stderr = String::from_utf8_lossy(&output.stderr);
-                return Json(PlotResourcesResponse {
+                return PlotResourcesResponse {
                     success: false,
                     plots: vec![],
                     error: Some(format!("Command failed: {}", stderr)),
-                });
+                };
             }
 
             // Read all generated JSON files
             let mut plots = Vec::new();
 
-            match tokio::fs::read_dir(&output_dir).await {
+            match tokio::fs::read_dir(output_dir).await {
                 Ok(mut entries) => {
                     while let Ok(Some(entry)) = entries.next_entry().await {
                         let path = entry.path();
@@ -2953,33 +3298,28 @@ async fn cli_plot_resources_handler(
                     }
                 }
                 Err(e) => {
-                    return Json(PlotResourcesResponse {
+                    return PlotResourcesResponse {
                         success: false,
                         plots: vec![],
                         error: Some(format!("Failed to read output directory: {}", e)),
-                    });
+                    };
                 }
-            }
-
-            // Clean up temp directory if we created it
-            if !has_custom_output_dir {
-                let _ = tokio::fs::remove_dir_all(&temp_dir).await;
             }
 
             // Sort plots by name for consistent ordering
             plots.sort_by(|a, b| a.name.cmp(&b.name));
 
-            Json(PlotResourcesResponse {
+            PlotResourcesResponse {
                 success: true,
                 plots,
                 error: None,
-            })
+            }
         }
-        Err(e) => Json(PlotResourcesResponse {
+        Err(e) => PlotResourcesResponse {
             success: false,
             plots: vec![],
             error: Some(format!("Failed to execute command: {}", e)),
-        }),
+        },
     }
 }
 
@@ -2987,7 +3327,7 @@ async fn cli_plot_resources_handler(
 async fn cli_list_resource_dbs_handler(
     Json(req): Json<ListResourceDbsRequest>,
 ) -> impl IntoResponse {
-    let base_path = FsPath::new(&req.base_dir);
+    let base_path = &expand_tilde(&req.base_dir);
 
     if !base_path.exists() {
         return Json(ListResourceDbsResponse {
@@ -3106,13 +3446,14 @@ async fn cli_slurm_parse_logs_handler(
     Json(req): Json<SlurmParseLogsRequest>,
 ) -> impl IntoResponse {
     let workflow_id_str = req.workflow_id.to_string();
+    let output_dir = expand_tilde(&req.output_dir).to_string_lossy().into_owned();
 
     let mut args = vec![
         "-f",
         "json",
         "slurm",
         "parse-logs",
-        &req.output_dir,
+        &output_dir,
         "--workflow-id",
         &workflow_id_str,
     ];
@@ -3173,6 +3514,7 @@ async fn cli_slurm_sacct_handler(
     Json(req): Json<SlurmSacctRequest>,
 ) -> impl IntoResponse {
     let workflow_id_str = req.workflow_id.to_string();
+    let output_dir = expand_tilde(&req.output_dir).to_string_lossy().into_owned();
 
     let args = vec![
         "-f",
@@ -3181,7 +3523,7 @@ async fn cli_slurm_sacct_handler(
         "sacct",
         &workflow_id_str,
         "--output-dir",
-        &req.output_dir,
+        &output_dir,
     ];
 
     info!("Running: {} {}", state.torc_bin, args.join(" "));
@@ -3629,6 +3971,8 @@ struct VersionResponse {
     mismatch_severity: Option<String>,
     /// torc-server URL this dashboard talks to, without any embedded credentials.
     api_url: String,
+    /// Whether Stop can end a local run cleanly here (see `cli_stop_run_handler`).
+    can_stop_runs: bool,
 }
 
 /// Return the torc-dash version and check server version compatibility
@@ -3688,6 +4032,7 @@ async fn version_handler(State(state): State<Arc<AppState>>) -> impl IntoRespons
         version_mismatch,
         mismatch_severity,
         api_url: redact_url(&state.api_url),
+        can_stop_runs: cfg!(unix),
     })
 }
 
@@ -5083,9 +5428,72 @@ async fn run_torc_command(torc_bin: &str, args: &[&str], api_url: &str) -> CliRe
 mod tests {
     use super::{
         ResourceSamplesRequest, allowed_host_list, anthropic_api_base, apply_spec_edit,
-        check_request, read_resource_samples, same_secret, tail_file, take_token_param,
-        workflow_id_from_resource_db_name,
+        check_request, expand_tilde, read_resource_samples, same_secret, tail_file,
+        take_token_param, workflow_id_from_resource_db_name,
     };
+
+    #[test]
+    fn relative_bin_paths_become_absolute_but_bare_names_stay() {
+        assert_eq!(super::absolute_if_relative_path("torc".into()), "torc");
+        let rel = super::absolute_if_relative_path("./target/release/torc".into());
+        assert!(std::path::Path::new(&rel).is_absolute(), "{rel}");
+        assert!(rel.ends_with("torc"), "{rel}");
+        let abs = std::env::temp_dir()
+            .join("torc")
+            .to_string_lossy()
+            .into_owned();
+        assert_eq!(super::absolute_if_relative_path(abs.clone()), abs);
+    }
+
+    fn op_args(body: serde_json::Value) -> Result<Vec<String>, String> {
+        let req: super::OpRequest = serde_json::from_value(body).unwrap();
+        super::build_op(&req).map(|cmd| cmd.args)
+    }
+
+    #[test]
+    fn ops_map_only_known_params_to_cli_args() {
+        assert_eq!(
+            op_args(serde_json::json!({
+                "op": "archive", "workflow_ids": [3, 4], "archived": true, "extra": "--evil"
+            }))
+            .unwrap(),
+            ["workflows", "archive", "true", "3", "4"]
+        );
+        assert_eq!(
+            op_args(serde_json::json!({
+                "op": "correct-resources", "workflow_id": 7, "memory_multiplier": 1.5,
+                "dry_run": true
+            }))
+            .unwrap(),
+            [
+                "workflows",
+                "correct-resources",
+                "7",
+                "--memory-multiplier",
+                "1.5",
+                "--dry-run"
+            ]
+        );
+        assert_eq!(
+            op_args(serde_json::json!({
+                "op": "schedule-nodes", "workflow_id": 7, "scheduler_config_id": 2,
+                "num_allocations": 0
+            }))
+            .unwrap(),
+            [
+                "slurm",
+                "schedule-nodes",
+                "7",
+                "--scheduler-config-id",
+                "2",
+                "--num-hpc-jobs",
+                "1",
+                "--no-prompts"
+            ]
+        );
+        assert!(op_args(serde_json::json!({ "op": "diagnose" })).is_err());
+        assert!(op_args(serde_json::json!({ "op": "admin", "workflow_id": 1 })).is_err());
+    }
 
     #[test]
     fn resource_samples_see_only_checkpointed_data() {
@@ -5332,6 +5740,25 @@ mod tests {
             anthropic_api_base(" https://x.services.ai.azure.com/anthropic/v1"),
             "https://x.services.ai.azure.com/anthropic/v1"
         );
+    }
+
+    #[test]
+    fn expand_tilde_only_expands_a_leading_home_component() {
+        let home = dirs::home_dir().unwrap();
+        assert_eq!(expand_tilde("~"), home);
+        assert_eq!(expand_tilde("~/runs/out"), home.join("runs/out"));
+        assert_eq!(expand_tilde("~bob/x"), std::path::PathBuf::from("~bob/x"));
+        assert_eq!(
+            expand_tilde("/abs/~/x"),
+            std::path::PathBuf::from("/abs/~/x")
+        );
+        // Backslash is a filename character on Unix, a separator on Windows.
+        let backslash = if cfg!(windows) {
+            home.join("x")
+        } else {
+            std::path::PathBuf::from("~\\x")
+        };
+        assert_eq!(expand_tilde("~\\x"), backslash);
     }
 
     #[test]

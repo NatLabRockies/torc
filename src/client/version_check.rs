@@ -133,6 +133,57 @@ impl VersionCheckResult {
     }
 }
 
+/// First HTTP API version whose `batch_complete_jobs` stores the `output_files` and
+/// `slurm_stats` of a completion entry.
+const COMPLETION_METADATA_API_VERSION: (u32, u32, u32) = (1, 1, 0);
+
+impl VersionCheckResult {
+    /// True if the server stores the output mtimes and Slurm stats sent with a completion.
+    /// Older servers silently ignore them, so callers must write them separately. False when
+    /// the server's API version is unknown: a separate write to a current server is harmless,
+    /// while a dropped mtime makes a later reinitialize rerun downstream jobs.
+    pub fn server_stores_completion_metadata(&self) -> bool {
+        self.server_api_version
+            .as_deref()
+            .and_then(parse_version)
+            .is_some_and(|v| v >= COMPLETION_METADATA_API_VERSION)
+    }
+
+    /// True if the server has the `update_file_stats` endpoint (API 1.1.0).
+    pub fn server_supports_file_stats(&self) -> bool {
+        self.server_api_version
+            .as_deref()
+            .and_then(parse_version)
+            .is_some_and(|v| v >= (1, 1, 0))
+    }
+
+    /// True if the server has the `apply_scheduler_plan` endpoint (API 1.1.0).
+    pub fn server_supports_apply_scheduler_plan(&self) -> bool {
+        self.server_api_version
+            .as_deref()
+            .and_then(parse_version)
+            .is_some_and(|v| v >= (1, 1, 0))
+    }
+
+    /// True if `reset_job_status` reads its JSON body (job ids, statuses, dry run) (API 1.1.0).
+    /// Older servers ignore the body and reset every job in the workflow.
+    pub fn server_supports_selective_reset(&self) -> bool {
+        self.server_api_version
+            .as_deref()
+            .and_then(parse_version)
+            .is_some_and(|v| v >= (1, 1, 0))
+    }
+
+    /// True if the server records action outcomes and has the `suppress`, `result`, and `reset`
+    /// action endpoints (API 1.1.0).
+    pub fn server_supports_action_outcomes(&self) -> bool {
+        self.server_api_version
+            .as_deref()
+            .and_then(parse_version)
+            .is_some_and(|v| v >= (1, 1, 0))
+    }
+}
+
 /// Parses a version string into (major, minor, patch) components.
 /// Returns None if parsing fails.
 /// Handles formats like "0.8.0", "v0.8.0", "0.8.0-beta", "0.8.0 (abc1234)"

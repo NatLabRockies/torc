@@ -392,6 +392,9 @@ fn test_env_merge_includes_workflow_env(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
+        None, // resource_requirements_id
     )
     .unwrap()
     .items
@@ -454,6 +457,9 @@ fn test_spawned_jobs_have_origin_spawn(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
+        None, // resource_requirements_id
     )
     .unwrap()
     .items
@@ -549,7 +555,7 @@ fn test_retried_jobs_have_origin_retry(start_server: &ServerProcess) {
         JobStatus::Failed,
     );
     apis::jobs_api::complete_job(config, job, JobStatus::Failed, run_id, fail).unwrap();
-    apis::jobs_api::retry_job(config, job, run_id, 3).unwrap();
+    apis::jobs_api::retry_job(config, job, run_id, None).unwrap();
 
     let retried = apis::jobs_api::get_job(config, job).unwrap();
     assert_eq!(
@@ -603,7 +609,7 @@ fn test_retry_preserves_spawn_origin(start_server: &ServerProcess) {
         JobStatus::Failed,
     );
     apis::jobs_api::complete_job(config, worker_id, JobStatus::Failed, run_id, fail).unwrap();
-    apis::jobs_api::retry_job(config, worker_id, run_id, 3).unwrap();
+    apis::jobs_api::retry_job(config, worker_id, run_id, None).unwrap();
 
     let retried = apis::jobs_api::get_job(config, worker_id).unwrap();
     assert_eq!(
@@ -727,6 +733,9 @@ fn test_runner_flow_continuation_and_convergence(start_server: &ServerProcess) {
             None, // name
             None, // command
             None, // labels
+            None, // ids
+            None, // statuses
+            None, // resource_requirements_id
         )
         .expect("list_jobs")
         .items
@@ -884,6 +893,9 @@ fn test_append_only_history(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
+        None, // resource_requirements_id
     )
     .unwrap()
     .items
@@ -906,6 +918,9 @@ fn test_append_only_history(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
+        None, // resource_requirements_id
     )
     .unwrap()
     .items
@@ -981,6 +996,9 @@ fn test_idempotent_replay(start_server: &ServerProcess) {
             None, // name
             None, // command
             None, // labels
+            None, // ids
+            None, // statuses
+            None, // resource_requirements_id
         )
         .unwrap()
         .items
@@ -1073,6 +1091,9 @@ fn test_max_iterations_cap(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
+        None, // resource_requirements_id
     )
     .unwrap()
     .items
@@ -1095,6 +1116,9 @@ fn test_max_iterations_cap(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
+        None, // resource_requirements_id
     )
     .unwrap()
     .items

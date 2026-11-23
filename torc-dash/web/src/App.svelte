@@ -22,6 +22,8 @@
   import ExecutionPanel from "./features/workflows/ExecutionPanel.svelte";
   // Starts the event stream at load so the sidebar badge updates on any tab.
   import "./features/events/eventWatcher.svelte";
+  // Desktop notifications when followed workflows finish.
+  import "./features/notify/notify.svelte";
   import ResourcesTab from "./features/resources/ResourcesTab.svelte";
   import WorkflowsTab from "./features/workflows/WorkflowsTab.svelte";
 
@@ -55,9 +57,11 @@
     server_version: string | null;
     version_mismatch: string | null;
     mismatch_severity: "major" | "minor" | "patch" | null;
+    can_stop_runs?: boolean;
   }>("/api/version")
     .then((r) => {
       app.version = r.version;
+      app.canStopRuns = r.can_stop_runs ?? true;
       serverVersion = r.server_version;
       versionWarning = r.version_mismatch;
       // Patch differences only get the sidebar cue; minor ones a passing warning.

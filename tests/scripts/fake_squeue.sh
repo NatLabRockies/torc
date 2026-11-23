@@ -3,7 +3,7 @@
 # Fake squeue command for testing
 # Simulates Slurm's squeue command
 
-JOBS_FILE="${TMPDIR:-/tmp}/fake_slurm_jobs.txt"
+JOBS_FILE="${TORC_FAKE_SLURM_STATE_DIR:-${TMPDIR:-/tmp}}/fake_slurm_jobs.txt"
 
 # Create empty jobs file if it doesn't exist
 if [ ! -f "$JOBS_FILE" ]; then

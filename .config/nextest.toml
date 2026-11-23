@@ -1,81 +1,38 @@
-# Nextest configuration for test serialization
-# Tests with #[serial] attributes need to be grouped here since
-# nextest runs tests in separate processes.
+# Nextest configuration.
+#
+# nextest runs every test in its own process, so in-process state (env vars, `#[serial]`, and
+# `#[once]` fixtures such as `start_server`) is never shared between tests: each test gets its
+# own server and temp database. Tests therefore run fully in parallel. The one piece of
+# cross-process state, the fake Slurm scripts' job files, is isolated per process via
+# `fake_slurm_state_dir()` in tests/common.rs. Before adding a test group here, make sure the
+# tests really share state across processes (fixed paths, fixed ports, the repo directory).
+
+experimental = ["setup-scripts"]
+
+# Build the torc/torc-server/etc. binaries once before any test runs, instead of every test
+# process invoking `cargo build` and contending on the cargo lock. Unix only (shell script);
+# on Windows tests fall back to building themselves.
+[scripts.setup.build-binaries]
+command = 'tests/scripts/nextest_build_binaries.sh'
+slow-timeout = { period = "300s" }
+
+[[profile.default.scripts]]
+platform = { host = 'cfg(unix)' }
+filter = 'all()'
+setup = 'build-binaries'
 
 [profile.default]
-# Allow extra time for the first test in each file, which may trigger a cargo
-# build of server/runner binaries via build_test_binaries() in the #[once]
-# fixture. Multiple test files start in parallel, and while cargo serializes
-# concurrent builds via its lock, the waiting processes can exceed the default
-# 60-second timeout.
+# Generous ceiling for heavy end-to-end tests on loaded CI runners (and for the first test on
+# Windows, which still builds the binaries itself).
 slow-timeout = { period = "120s", terminate-after = 3 }
-
-[test-groups]
-# Slurm mock tests - modify PATH and mock executables
-serial-slurm = { max-threads = 1 }
-# Groups for tests that explicitly use #[serial] in the code
-serial-entities = { max-threads = 1 }
-serial-workflows = { max-threads = 1 }
-serial-auth = { max-threads = 1 }
-serial-jobs = { max-threads = 1 }
-serial-ro-crate = { max-threads = 1 }
-serial-compute = { max-threads = 1 }
-# test_workflow_actions shares a single server (a #[once] fixture) across ~60 tests, several of
-# which spawn the torc CLI and issue many sequential HTTP calls. At full parallelism that saturates
-# the shared server's SQLite connection pool and a few tests hang to the slow-timeout. Bound this
-# binary to a few concurrent tests (empirically stable) instead of fully serializing it.
-workflow-actions = { max-threads = 4 }
-
-# Slurm mock tests
-[[profile.default.overrides]]
-filter = 'binary_id(torc::test_slurm_commands) | binary_id(torc::test_srun_args) | binary_id(torc::test_hpc) | binary_id(torc::test_direct_mode_e2e) | binary_id(torc::test_execution_config) | binary_id(torc::test_multi_node_slurm) | binary_id(torc::test_slurm_regenerate) | binary_id(torc::test_slurm_stats)'
-test-group = 'serial-slurm'
-
-# Entity CRUD tests
-[[profile.default.overrides]]
-filter = 'binary_id(torc::test_files) | binary_id(torc::test_user_data) | binary_id(torc::test_resource_requirements) | binary_id(torc::test_events) | binary_id(torc::test_results)'
-test-group = 'serial-entities'
-
-# Jobs tests
-[[profile.default.overrides]]
-filter = 'binary_id(torc::test_jobs) | binary_id(torc::test_jobs_create_from_file) | binary_id(torc::test_jobs_list_resource_requirements)'
-test-group = 'serial-jobs'
-
-# Workflow tests
-[[profile.default.overrides]]
-filter = 'binary_id(torc::test_workflows) | binary_id(torc::test_full_workflows) | binary_id(torc::test_workflow_spec) | binary_id(torc::test_workflow_manager) | binary_id(torc::test_workflow_actions_integration) | binary_id(torc::test_workflow_export) | binary_id(torc::test_auto_schedule) | binary_id(torc::test_log_bundles)'
-test-group = 'serial-workflows'
-
-# Compute node and job claiming tests
-[[profile.default.overrides]]
-filter = 'binary_id(torc::test_completion_reversal) | binary_id(torc::test_claim_next_jobs) | binary_id(torc::test_claim_jobs_based_on_resources) | binary_id(torc::test_orphaned_jobs) | binary_id(torc::test_scheduled_compute_nodes) | binary_id(torc::test_create_node_resources) | binary_id(torc::test_list_required_existing_files) | binary_id(torc::test_correct_resources) | binary_id(torc::test_remote_workers) | binary_id(torc::test_ai_assisted_recovery)'
-test-group = 'serial-compute'
 
 # Race-condition tests: reserve the entire test runner so the machine is as idle
 # as possible while they run. Each spawns many OS threads to provoke genuine
 # claim/complete contention; if other test binaries steal CPU, the OS can
-# serialize those threads and mask a race (a false negative). The serial-compute
-# group's max-threads=1 only stops *other compute tests* from running alongside
-# — it does NOT keep the rest of the nextest run off the machine.
+# serialize those threads and mask a race (a false negative).
 # threads-required = "num-test-threads" makes nextest run each of these alone.
 # (Only the internally-multithreaded tests need this; the deterministic
 # test_two_runners_complete_same_job_rejected does not depend on timing.)
 [[profile.default.overrides]]
 filter = 'test(=test_concurrent_claim_and_complete) | test(=test_prepare_next_jobs_concurrent_allocation) | test(=test_prepare_next_jobs_concurrent_small_batches)'
 threads-required = 'num-test-threads'
-
-# Auth and access control tests
-[[profile.default.overrides]]
-filter = 'binary_id(torc::test_access_groups) | binary_id(torc::test_reload_auth) | binary_id(torc::test_htpasswd) | binary_id(torc::test_tls) | binary_id(torc::test_sse_events) | binary_id(torc::test_command_utils)'
-test-group = 'serial-auth'
-
-# RO-Crate tests
-[[profile.default.overrides]]
-filter = 'binary_id(torc::test_auto_ro_crate) | binary_id(torc::test_ro_crate) | binary_id(torc::test_ro_crate_dataset)'
-test-group = 'serial-ro-crate'
-
-# Workflow action tests share one server across many CLI-spawning tests; bound concurrency
-# (see the workflow-actions test-group note above).
-[[profile.default.overrides]]
-filter = 'binary_id(torc::test_workflow_actions)'
-test-group = 'workflow-actions'

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            UPDATE result\n            SET\n                job_id = COALESCE($1, job_id)\n                ,run_id = COALESCE($2, run_id)\n                ,return_code = COALESCE($3, return_code)\n                ,exec_time_minutes = COALESCE($4, exec_time_minutes)\n                ,completion_time = COALESCE($5, completion_time)\n                ,status = COALESCE($6, status)\n            WHERE id = $7 AND workflow_id = $8\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 8
+    },
+    "nullable": []
+  },
+  "hash": "7e2b19da052e2d496aa485fc66ce3fc34c90feca31256fc7bfc9245a69617dbc"
+}

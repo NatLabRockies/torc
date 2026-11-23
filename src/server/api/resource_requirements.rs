@@ -626,18 +626,16 @@ where
         match sqlx::query!(
             r#"
             UPDATE resource_requirements
-            SET workflow_id = $1,
-                name = $2,
-                num_cpus = $3,
-                num_gpus = $4,
-                num_nodes = $5,
-                memory = $6,
-                runtime = $7,
-                memory_bytes = $8,
-                runtime_s = $9
-            WHERE id = $10
+            SET name = $1,
+                num_cpus = $2,
+                num_gpus = $3,
+                num_nodes = $4,
+                memory = $5,
+                runtime = $6,
+                memory_bytes = $7,
+                runtime_s = $8
+            WHERE id = $9 AND workflow_id = $10
             "#,
-            body.workflow_id,
             body.name,
             body.num_cpus,
             body.num_gpus,
@@ -647,10 +645,25 @@ where
             memory_bytes,
             runtime_seconds,
             id,
+            body.workflow_id,
         )
         .execute(self.context.pool.as_ref())
         .await
         {
+            Ok(result) if result.rows_affected() == 0 => {
+                let pool = self.context.pool.as_ref();
+                if super::workflow_id_mismatch(pool, "resource_requirements", id).await? {
+                    Ok(
+                        UpdateResourceRequirementsResponse::UnprocessableContentErrorResponse(
+                            super::workflow_id_immutable_response(),
+                        ),
+                    )
+                } else {
+                    Ok(UpdateResourceRequirementsResponse::NotFoundErrorResponse(
+                        resource_not_found_response("Resource requirements", id),
+                    ))
+                }
+            }
             Ok(_) => {
                 info!(
                     "Updated resource requirements with id: {} (name: {:?})",

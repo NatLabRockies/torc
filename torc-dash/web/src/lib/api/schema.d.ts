@@ -884,6 +884,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/workflows/{id}/actions/{action_id}/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Re-arm an action that is failed, suppressed, or stuck in claimed: clears executed, executed_at, executed_by, state, and error so it can be claimed again. A no-op for an action that was never claimed; 409 for a succeeded action. */
+        post: operations["reset_action"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workflows/{id}/actions/{action_id}/result": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Record the outcome of a claimed action: state becomes succeeded, or failed with the given error. For a persistent action this is the latest outcome. 409 if the action has not been claimed (or was suppressed); 422 if error is set with success = true. */
+        post: operations["report_action_result"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workflows/{id}/actions/{action_id}/suppress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Mark an action suppressed (executed = true, state = suppressed) so it is never claimed, without executing it. Idempotent. A persistent action can be suppressed in any state; a non-persistent action only while unclaimed (409 if it is claimed, succeeded, or failed). */
+        post: operations["suppress_action"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/workflows/{id}/active_task": {
         parameters: {
             query?: never;
@@ -894,6 +945,23 @@ export interface paths {
         get: operations["get_active_task_for_workflow"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workflows/{id}/apply_scheduler_plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Apply a client-computed Slurm scheduler plan in one transaction. Every job must belong to the workflow, be pending (uninitialized, blocked, or ready), and appear in at most one scheduler; otherwise the plan is rejected and nothing changes. When suppress_existing_schedule_actions is set, the workflow's non-recovery, unexecuted schedule_nodes actions (persistent ones included) are suppressed. The schedulers are created, their jobs are assigned, and an on_jobs_ready recovery action is created for each recovery_actions entry, armed from the gating jobs' current statuses. The response lists the created IDs and which actions are pending (ready to submit now). With dry_run=true, the same result is reported and nothing is stored. */
+        post: operations["apply_scheduler_plan"];
         delete?: never;
         options?: never;
         head?: never;
@@ -990,6 +1058,23 @@ export interface paths {
         get: operations["list_failure_handlers"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/workflows/{id}/file_stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Compare a client's stat snapshot of workflow files with the stored modification times (10 ms tolerance). Changed mtimes are stored, and st_mtime is cleared for files that no longer exist. Jobs that need a changed file and are completed, failed, or canceled are reset to uninitialized, as are completed jobs with a missing output file, and every job downstream of a reset job. Each request runs in one transaction and is idempotent. With dry_run=true, reports the same result without changing anything. At most MAX_RECORD_TRANSFER_COUNT entries per request; every file must belong to the workflow. */
+        post: operations["update_file_stats"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1213,6 +1298,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description Reset job statuses to uninitialized. Without a body, resets every job (or, with failed_only, every failed, terminated, canceled, and pending_failed job). With a body, resets only the selected jobs in one transaction: jobs from other workflows or not in an eligible status are skipped with a reason, and the request is refused with 422 while the workflow has active compute nodes, pending or active scheduled compute nodes, or running or pending jobs, unless force=true. As with manage_status_change, resetting a terminal job also resets its direct completed or failed dependents. Does not bump the workflow run_id. */
         post: operations["reset_job_status"];
         delete?: never;
         options?: never;
@@ -1406,6 +1492,49 @@ export interface components {
              * @description Number of rows affected by a write statement, when applicable.
              */
             rows_affected?: number | null;
+        };
+        /** @description A recovery action created by `apply_scheduler_plan`. */
+        AppliedSchedulerAction: {
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            num_allocations: number;
+            /**
+             * @description True if every gating job is ready, so the action can be submitted now. Otherwise it waits
+             *     for the remaining gating jobs to become ready.
+             */
+            pending: boolean;
+            /** Format: int64 */
+            scheduler_id: number;
+        };
+        /** @description A scheduler plan computed by the client, applied by `apply_scheduler_plan`. */
+        ApplySchedulerPlanRequest: {
+            recovery_actions?: components["schemas"]["SchedulerPlanAction"][];
+            schedulers: components["schemas"]["SchedulerPlanEntry"][];
+            /**
+             * @description Suppress the workflow's non-recovery, unexecuted `schedule_nodes` actions (persistent ones
+             *     included) so they cannot start allocations alongside the new schedulers.
+             */
+            suppress_existing_schedule_actions?: boolean;
+        };
+        /**
+         * @description IDs created by `apply_scheduler_plan`. In a dry run, the IDs are those that would have been
+         *     assigned; nothing is stored.
+         */
+        ApplySchedulerPlanResponse: {
+            /**
+             * @description Created recovery actions, in the order of the request's `recovery_actions`. A recovery
+             *     action whose scheduler has no pending jobs left is not created.
+             */
+            actions: components["schemas"]["AppliedSchedulerAction"][];
+            /** @description Created scheduler IDs, in the order of the request's `schedulers`. */
+            scheduler_ids: number[];
+            /**
+             * @description Planned jobs left out because they were no longer uninitialized, blocked, or ready when
+             *     the plan was applied (e.g. a running allocation claimed them after planning).
+             */
+            skipped_job_ids?: number[];
+            suppressed_action_ids: number[];
         };
         /**
          * @description Request body for `POST /workflows/{id}/archive`. Setting `is_archived`
@@ -1671,6 +1800,51 @@ export interface components {
             /** Format: int64 */
             workflow_id: number;
         };
+        /** @description A file whose stored modification time differs from the observation. */
+        FileStatChange: {
+            /** Format: int64 */
+            file_id: number;
+            /** @description `modified`, `appeared`, or `disappeared`. */
+            reason: string;
+        };
+        /** @description A client's observation of one file on disk, sent to `update_file_stats`. */
+        FileStatEntry: {
+            /** @description Whether the file exists. */
+            exists: boolean;
+            /**
+             * Format: int64
+             * @description File ID. Must belong to the workflow in the request path.
+             */
+            id: number;
+            /**
+             * Format: double
+             * @description Modification time in seconds since the Unix epoch. Required when `exists` is true.
+             */
+            st_mtime?: number | null;
+        };
+        /** @description A batch of file observations (at most `MAX_RECORD_TRANSFER_COUNT` entries). */
+        FileStatsRequest: {
+            files: components["schemas"]["FileStatEntry"][];
+        };
+        /** @description A job reset to uninitialized because of a file change. */
+        FileStatsResetJob: {
+            /** Format: int64 */
+            job_id: number;
+            name: string;
+            /**
+             * @description `input_changed` (an input file changed), `output_missing` (an output file of a completed
+             *     job is missing), or `downstream` (depends, directly or transitively, on a reset job).
+             */
+            reason: string;
+            /** @description Status before the reset. */
+            status: components["schemas"]["JobStatus"];
+        };
+        FileStatsResponse: {
+            changed_files: components["schemas"]["FileStatChange"][];
+            /** @description Files in the batch that some job needs, no job produces, and that do not exist. */
+            missing_required_file_ids: number[];
+            reset_jobs: components["schemas"]["FileStatsResetJob"][];
+        };
         FilesModel: {
             files: components["schemas"]["FileModel"][];
         };
@@ -1697,9 +1871,22 @@ export interface components {
         JobCompletionEntry: {
             /** Format: int64 */
             job_id: number;
+            /**
+             * @description Modification times of the job's output files, recorded when the job finished.
+             *     Applied in the same transaction as the completion, and only if it is accepted.
+             *     A `file_id` that is not an output file of this job is skipped; the completion is
+             *     still applied.
+             */
+            output_files?: components["schemas"]["OutputFileStat"][] | null;
             result: components["schemas"]["ResultModel"];
             /** Format: int64 */
             run_id: number;
+            /**
+             * @description Slurm accounting stats for the job step. Stored only if the completion is accepted.
+             *     Stats whose `workflow_id`, `job_id`, `run_id`, or `attempt_id` do not match the
+             *     completion are skipped; the completion is still applied.
+             */
+            slurm_stats?: components["schemas"]["SlurmStatsModel"];
             status: components["schemas"]["JobStatus"];
         };
         JobCompletionError: {
@@ -2123,6 +2310,13 @@ export interface components {
          * @enum {string}
          */
         MonitorGranularity: "summary" | "time_series";
+        /** @description An output file's modification time, as observed by the job runner at completion. */
+        OutputFileStat: {
+            /** Format: int64 */
+            file_id: number;
+            /** Format: double */
+            st_mtime: number;
+        };
         PingResponse: {
             status: string;
         };
@@ -2139,13 +2333,50 @@ export interface components {
             /** Format: int64 */
             workflow_id: number;
         };
+        /**
+         * @description Optional body for `reset_job_status`. Sending it switches the endpoint to a selective reset:
+         *     only the listed jobs in the listed statuses are reset, in one transaction that first checks
+         *     that the workflow is quiet (see the endpoint description).
+         */
+        ResetJobStatusRequest: {
+            /** @description Report what would be reset without changing anything. */
+            dry_run?: boolean | null;
+            /** @description Jobs to reset. Omit to select every job in the workflow whose status is in `statuses`. */
+            job_ids?: number[] | null;
+            /**
+             * @description Statuses a job must be in to be reset. Defaults to the recoverable statuses: failed,
+             *     terminated, canceled, and pending_failed.
+             */
+            statuses?: components["schemas"]["JobStatus"][] | null;
+        };
         ResetJobStatusResponse: {
+            /**
+             * @description Direct completed or failed dependents of reset terminal jobs that were also reset (or,
+             *     for a dry run, would be) as a side effect. Disjoint from `reset`. Set only when the
+             *     request has a body.
+             */
+            downstream_reset?: number[] | null;
+            /**
+             * @description IDs of the jobs reset (or, for a dry run, that would be reset). Set only when the
+             *     request has a body.
+             */
+            reset?: number[] | null;
             reset_type?: string | null;
+            /**
+             * @description Requested jobs that were not reset, with the reason. Set only when the request has a
+             *     body.
+             */
+            skipped?: components["schemas"]["ResetJobStatusSkipped"][] | null;
             status: string;
             /** Format: int64 */
             updated_count: number;
             /** Format: int64 */
             workflow_id: number;
+        };
+        ResetJobStatusSkipped: {
+            /** Format: int64 */
+            job_id: number;
+            reason: string;
         };
         /**
          * @description Configuration for resource monitoring.
@@ -2303,6 +2534,24 @@ export interface components {
             status: string;
             /** Format: int64 */
             workflow_id: number;
+        };
+        /** @description An `on_jobs_ready` recovery action that schedules nodes for one planned scheduler. */
+        SchedulerPlanAction: {
+            /** @description Jobs that gate the action. Must be a subset of that scheduler's `job_ids`. */
+            job_ids: number[];
+            /** Format: int64 */
+            num_allocations: number;
+            /**
+             * Format: int64
+             * @description Index into `schedulers` of the scheduler this action submits.
+             */
+            scheduler_index: number;
+        };
+        /** @description A Slurm scheduler to create and the pending jobs to assign to it. */
+        SchedulerPlanEntry: {
+            job_ids: number[];
+            /** @description The scheduler to create. `id` is ignored; `workflow_id` is taken from the request path. */
+            scheduler: components["schemas"]["SlurmSchedulerModel"];
         };
         /**
          * @description One Slurm-job-to-Torc-job correlation row: the Slurm job that ran a given
@@ -2509,6 +2758,8 @@ export interface components {
         WorkflowActionModel: {
             action_config: unknown;
             action_type: string;
+            /** @description Error reported by the claimer when `state` is `failed`. */
+            error?: string | null;
             /** @default false */
             executed: boolean;
             executed_at?: string | null;
@@ -2527,6 +2778,12 @@ export interface components {
              */
             required_triggers: number;
             /**
+             * @description Outcome of the action: `claimed`, `succeeded`, `failed`, or `suppressed`. Null if it was
+             *     never claimed (or was claimed through a server older than API 1.1.0). Set by the server;
+             *     ignored on create.
+             */
+            state?: string | null;
+            /**
              * Format: int64
              * @default 0
              */
@@ -2534,6 +2791,12 @@ export interface components {
             trigger_type: string;
             /** Format: int64 */
             workflow_id: number;
+        };
+        /** @description Outcome of a claimed workflow action, reported by the claimer after executing it. */
+        WorkflowActionResultRequest: {
+            /** @description Why the action failed. Only allowed when `success` is false. */
+            error?: string | null;
+            success: boolean;
         };
         WorkflowModel: {
             /**
@@ -3422,6 +3685,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Internal server error */
             500: {
                 headers: {
@@ -4293,6 +4565,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Internal server error */
             500: {
                 headers: {
@@ -4391,6 +4672,18 @@ export interface operations {
                  *     these labels would claim. An empty value returns only unlabeled jobs.
                  */
                 labels?: string | null;
+                /**
+                 * @description Comma-separated job IDs to restrict to, scoped to `workflow_id`. At most
+                 *     `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.
+                 */
+                ids?: number[] | null;
+                /**
+                 * @description Comma-separated statuses (`statuses=failed,terminated`): match any of them.
+                 *     Mutually exclusive with `status` (both given returns 422).
+                 */
+                statuses?: components["schemas"]["JobStatus"][] | null;
+                /** @description Returns only the jobs that use this resource requirements record. */
+                resource_requirements_id?: number | null;
             };
             header?: never;
             path?: never;
@@ -4418,6 +4711,15 @@ export interface operations {
             };
             /** @description Not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable content (too many ids, or both status and statuses) */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4638,7 +4940,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unprocessable content (invalid label) */
+            /** @description Unprocessable content (invalid label, a reference outside the job's workflow, or workflow_id differs from the stored value; it is immutable) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4822,8 +5124,9 @@ export interface operations {
     };
     retry_job: {
         parameters: {
-            query: {
-                max_retries: number;
+            query?: {
+                /** @description Deprecated and ignored: the server enforces the job's failure handler limit. */
+                max_retries?: number | null;
             };
             header?: never;
             path: {
@@ -5248,6 +5551,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Internal server error */
             500: {
                 headers: {
@@ -5591,7 +5903,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unprocessable content */
+            /** @description Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5675,6 +5987,16 @@ export interface operations {
                 sort_by?: string | null;
                 reverse_sort?: boolean | null;
                 all_runs?: boolean | null;
+                /**
+                 * @description Comma-separated job IDs: restrict to results of these jobs, scoped to
+                 *     `workflow_id`. At most `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.
+                 */
+                ids?: number[] | null;
+                /**
+                 * @description Comma-separated statuses (`statuses=failed,terminated`): match any of them.
+                 *     Mutually exclusive with `status` (both given returns 422).
+                 */
+                statuses?: components["schemas"]["JobStatus"][] | null;
             };
             header?: never;
             path?: never;
@@ -5702,6 +6024,15 @@ export interface operations {
             };
             /** @description Not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable content (too many ids, or both status and statuses) */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5906,6 +6237,15 @@ export interface operations {
             };
             /** @description Not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable content (job_id not in the result's workflow, or workflow_id differs from the stored value; it is immutable) */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6127,7 +6467,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unprocessable content */
+            /** @description Unprocessable content (duplicate entity, file_id not in the entity's workflow, or workflow_id differs from the stored value; it is immutable) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6446,6 +6786,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Internal server error */
             500: {
                 headers: {
@@ -6746,6 +7095,15 @@ export interface operations {
             };
             /** @description Not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable) */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7206,6 +7564,15 @@ export interface operations {
             };
             /** @description Not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable) */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7817,6 +8184,202 @@ export interface operations {
             };
         };
     };
+    reset_action: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workflow ID */
+                id: number;
+                /** @description Action ID */
+                action_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowActionModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action already succeeded */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    report_action_result: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workflow ID */
+                id: number;
+                /** @description Action ID */
+                action_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkflowActionResultRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowActionModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action has no claim to report a result for */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    suppress_action: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Workflow ID */
+                id: number;
+                /** @description Action ID */
+                action_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowActionModel"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Action is already claimed, succeeded, or failed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     get_active_task_for_workflow: {
         parameters: {
             query?: never;
@@ -7840,6 +8403,71 @@ export interface operations {
             };
             /** @description Workflow not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    apply_scheduler_plan: {
+        parameters: {
+            query?: {
+                dry_run?: boolean | null;
+            };
+            header?: never;
+            path: {
+                /** @description Workflow ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplySchedulerPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplySchedulerPlanResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable content (jobs outside the workflow, non-pending jobs, jobs in more than one scheduler, invalid recovery actions) */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8166,6 +8794,71 @@ export interface operations {
             };
         };
     };
+    update_file_stats: {
+        parameters: {
+            query?: {
+                dry_run?: boolean | null;
+            };
+            header?: never;
+            path: {
+                /** @description Workflow ID */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FileStatsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileStatsResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable content (oversized batch, duplicate ids, files outside the workflow, missing st_mtime) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     initialize_jobs: {
         parameters: {
             query?: {
@@ -8220,6 +8913,15 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Job dependency graph contains a cycle */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8655,7 +9357,16 @@ export interface operations {
     reset_job_status: {
         parameters: {
             query?: {
+                /**
+                 * @description Without a body: reset only failed, terminated, canceled, and pending_failed jobs.
+                 *     Ignored when a body is sent.
+                 */
                 failed_only?: boolean | null;
+                /**
+                 * @description With a body: reset even if the workflow has active compute nodes, pending or active
+                 *     scheduled compute nodes, or running or pending jobs.
+                 */
+                force?: boolean | null;
             };
             header?: never;
             path: {
@@ -8664,7 +9375,12 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        /** @description Optional selective reset */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ResetJobStatusRequest"];
+            };
+        };
         responses: {
             /** @description Successful response */
             200: {
@@ -8673,6 +9389,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResetJobStatusResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Invalid request body, or the workflow is not quiet */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };

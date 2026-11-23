@@ -253,7 +253,7 @@ def create_jobs(api: DefaultApi, jobs: list, max_transfer_size: int = 100_000) -
     batch = []
     for job in jobs:
         batch.append(job)
-        if len(batch) > max_transfer_size:
+        if len(batch) >= max_transfer_size:
             res = send_api_command(api.create_jobs, JobsModel(jobs=batch))
             added_jobs += res.jobs
             batch.clear()

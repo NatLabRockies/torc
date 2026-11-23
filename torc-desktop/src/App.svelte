@@ -3,32 +3,70 @@
   import { listen } from "@tauri-apps/api/event";
 
   type Prompt = { id: number; prompt: string };
+  /** The form's fields as saved: the last connection, and each named profile (plus `name`). */
+  type Settings = Record<string, string>;
   const STORAGE_KEY = "torc-desktop.connection";
+  const PROFILES_KEY = "torc-desktop.profiles";
 
-  function load(): Record<string, string> {
+  function load<T>(key: string, fallback: T): T {
     try {
-      return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}");
+      return JSON.parse(localStorage.getItem(key) ?? "") ?? fallback;
     } catch {
-      return {};
+      return fallback;
     }
   }
 
-  const saved = load();
-  let mode = $state<"local" | "ssh">(saved.mode === "ssh" ? "ssh" : "local");
-  let host = $state(saved.host ?? "");
-  let setup = $state(saved.setup ?? "");
+  let mode = $state<"local" | "ssh">("local");
+  let host = $state("");
+  let setup = $state("");
   // Per mode: a login-node path rarely exists on this computer.
-  let workdir = $state(saved.workdir ?? "");
-  let localWorkdir = $state(saved.localWorkdir ?? "");
+  let workdir = $state("");
+  let localWorkdir = $state("");
   // Which torc-server the dashboard talks to, per mode. A blank URL lets torc-dash use
   // TORC_API_URL or `[dash] api_url` from the torc config where it runs.
-  let servers = $state({
-    local: {
-      private: saved.startServer === "true",
-      url: saved.serverUrl ?? "http://localhost:8080/torc-service/v1",
-    },
-    ssh: { private: saved.remotePrivate === "true", url: saved.remoteServerUrl ?? "" },
-  });
+  let servers = $state({ local: { private: false, url: "" }, ssh: { private: false, url: "" } });
+
+  function apply(s: Settings) {
+    mode = s.mode === "ssh" ? "ssh" : "local";
+    host = s.host ?? "";
+    setup = s.setup ?? "";
+    workdir = s.workdir ?? "";
+    localWorkdir = s.localWorkdir ?? "";
+    servers = {
+      local: {
+        private: s.startServer === "true",
+        // Settings saved before version 2 hold this pre-filled default, which hid TORC_API_URL;
+        // blank means the same thing. Later saves keep it as an explicit choice.
+        url:
+          !s.version && s.serverUrl === "http://localhost:8080/torc-service/v1"
+            ? ""
+            : (s.serverUrl ?? ""),
+      },
+      ssh: { private: s.remotePrivate === "true", url: s.remoteServerUrl ?? "" },
+    };
+  }
+
+  function snapshot(): Settings {
+    return {
+      version: "2",
+      mode,
+      serverUrl: servers.local.url,
+      startServer: String(servers.local.private),
+      host,
+      setup,
+      workdir,
+      localWorkdir,
+      remoteServerUrl: servers.ssh.url,
+      remotePrivate: String(servers.ssh.private),
+    };
+  }
+
+  const saved = load<Settings>(STORAGE_KEY, {});
+  apply(saved);
+  let profiles = $state<Settings[]>(load(PROFILES_KEY, []));
+  /** Name of the profile being edited; blank for an unnamed connection. */
+  let name = $state(saved.profile ?? "");
+  let current = $derived(profiles.find((p) => p.name === name.trim()));
   let busy = $state(false);
   let error = $state("");
   // Set by the Rust side when the SSH session dropped while connected.
@@ -56,29 +94,43 @@
     };
   }
 
+  function store(key: string, value: unknown) {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch {
+      // Remembering the form is a convenience only.
+    }
+  }
+
+  function pick(e: Event) {
+    const p = profiles.find((p) => p.name === (e.currentTarget as HTMLSelectElement).value);
+    if (p) apply(p);
+    name = p?.name ?? "";
+  }
+
+  /** Saves the form as the named profile, replacing one of the same name. */
+  function saveProfile() {
+    const n = name.trim();
+    if (!n) return;
+    profiles = [...profiles.filter((p) => p.name !== n), { ...snapshot(), name: n }].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+    store(PROFILES_KEY, profiles);
+  }
+
+  function deleteProfile() {
+    profiles = profiles.filter((p) => p !== current);
+    store(PROFILES_KEY, profiles);
+    name = "";
+  }
+
   async function connect(e: SubmitEvent) {
     e.preventDefault();
     busy = true;
     error = "";
     lost = false;
-    try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          mode,
-          serverUrl: servers.local.url,
-          startServer: String(servers.local.private),
-          host,
-          setup,
-          workdir,
-          localWorkdir,
-          remoteServerUrl: servers.ssh.url,
-          remotePrivate: String(servers.ssh.private),
-        }),
-      );
-    } catch {
-      // Remembering the form is a convenience only.
-    }
+    saveProfile();
+    store(STORAGE_KEY, { ...snapshot(), profile: name.trim() });
     try {
       // On success the window navigates to the dashboard and this page goes away.
       await invoke("connect", { args: connectArgs() });
@@ -101,6 +153,13 @@
 <main>
   <form class="card" onsubmit={connect}>
     <h1>Connect to Torc</h1>
+
+    {#if profiles.length}
+      <select aria-label="Saved connection" value={current?.name ?? ""} onchange={pick}>
+        <option value="">New connection</option>
+        {#each profiles as p (p.name)}<option>{p.name}</option>{/each}
+      </select>
+    {/if}
 
     <div class="seg" role="tablist">
       <button
@@ -193,6 +252,20 @@
       {/if}
     </fieldset>
 
+    <div class="field">
+      <label for="profile-name">Save as <span class="optional">(optional)</span></label>
+      <div class="row">
+        <input id="profile-name" bind:value={name} placeholder="Profile name, e.g. Kestrel" />
+        <button type="button" class="secondary" onclick={saveProfile} disabled={!name.trim()}>
+          Save
+        </button>
+        {#if current}
+          <button type="button" class="secondary" onclick={deleteProfile}>Delete</button>
+        {/if}
+      </div>
+      <span class="optional">Connecting also saves changes to the named profile.</span>
+    </div>
+
     <button type="submit" disabled={busy}>
       {busy ? "Starting…" : lost ? "Reconnect" : mode === "local" ? "Open dashboard" : "Connect"}
     </button>
@@ -273,14 +346,16 @@
     margin: 0;
     font-size: 0.9rem;
   }
-  label {
+  label,
+  .field {
     display: flex;
     flex-direction: column;
     gap: 6px;
     font-size: 0.9rem;
     font-weight: 500;
   }
-  input {
+  input,
+  select {
     font: inherit;
     padding: 9px 11px;
     border: 1px solid var(--border);
@@ -288,7 +363,8 @@
     background: var(--bg);
     color: var(--text);
   }
-  input:focus {
+  input:focus,
+  select:focus {
     outline: 2px solid var(--accent);
     outline-offset: -1px;
   }
@@ -316,6 +392,17 @@
     white-space: pre-wrap;
     word-break: break-word;
     font-size: 0.85rem;
+  }
+  .row {
+    display: flex;
+    gap: 8px;
+  }
+  .row input {
+    flex: 1;
+    min-width: 0;
+  }
+  .row button {
+    padding: 8px 14px;
   }
   .seg {
     display: grid;

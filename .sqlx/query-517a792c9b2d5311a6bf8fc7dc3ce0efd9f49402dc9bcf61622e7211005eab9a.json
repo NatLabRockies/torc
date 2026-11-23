@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            UPDATE ro_crate_entity\n            SET file_id = $1, entity_id = $2, entity_type = $3, metadata = $4\n            WHERE id = $5 AND workflow_id = $6\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "517a792c9b2d5311a6bf8fc7dc3ce0efd9f49402dc9bcf61622e7211005eab9a"
+}

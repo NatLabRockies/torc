@@ -5,31 +5,40 @@
 @doc raw"""ResetJobStatusResponse
 
     ResetJobStatusResponse(;
+        downstream_reset=nothing,
+        reset=nothing,
         reset_type=nothing,
+        skipped=nothing,
         status=nothing,
         updated_count=nothing,
         workflow_id=nothing,
     )
 
+    - downstream_reset::Vector{Int64} : Direct completed or failed dependents of reset terminal jobs that were also reset (or, for a dry run, would be) as a side effect. Disjoint from &#x60;reset&#x60;. Set only when the request has a body.
+    - reset::Vector{Int64} : IDs of the jobs reset (or, for a dry run, that would be reset). Set only when the request has a body.
     - reset_type::String
+    - skipped::Vector{ResetJobStatusSkipped} : Requested jobs that were not reset, with the reason. Set only when the request has a body.
     - status::String
     - updated_count::Int64
     - workflow_id::Int64
 """
 Base.@kwdef mutable struct ResetJobStatusResponse <: OpenAPI.APIModel
+    downstream_reset::Union{Nothing, Vector{Int64}} = nothing
+    reset::Union{Nothing, Vector{Int64}} = nothing
     reset_type::Union{Nothing, String} = nothing
+    skipped::Union{Nothing, Vector} = nothing # spec type: Union{ Nothing, Vector{ResetJobStatusSkipped} }
     status::Union{Nothing, String} = nothing
     updated_count::Union{Nothing, Int64} = nothing
     workflow_id::Union{Nothing, Int64} = nothing
 
-    function ResetJobStatusResponse(reset_type, status, updated_count, workflow_id, )
-        o = new(reset_type, status, updated_count, workflow_id, )
+    function ResetJobStatusResponse(downstream_reset, reset, reset_type, skipped, status, updated_count, workflow_id, )
+        o = new(downstream_reset, reset, reset_type, skipped, status, updated_count, workflow_id, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type ResetJobStatusResponse
 
-const _property_types_ResetJobStatusResponse = Dict{Symbol,String}(Symbol("reset_type")=>"String", Symbol("status")=>"String", Symbol("updated_count")=>"Int64", Symbol("workflow_id")=>"Int64", )
+const _property_types_ResetJobStatusResponse = Dict{Symbol,String}(Symbol("downstream_reset")=>"Vector{Int64}", Symbol("reset")=>"Vector{Int64}", Symbol("reset_type")=>"String", Symbol("skipped")=>"Vector{ResetJobStatusSkipped}", Symbol("status")=>"String", Symbol("updated_count")=>"Int64", Symbol("workflow_id")=>"Int64", )
 OpenAPI.property_type(::Type{ ResetJobStatusResponse }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_ResetJobStatusResponse[name]))}
 
 function OpenAPI.check_required(o::ResetJobStatusResponse)
@@ -40,13 +49,19 @@ function OpenAPI.check_required(o::ResetJobStatusResponse)
 end
 
 function OpenAPI.validate_properties(o::ResetJobStatusResponse)
+    OpenAPI.validate_property(ResetJobStatusResponse, Symbol("downstream_reset"), o.downstream_reset)
+    OpenAPI.validate_property(ResetJobStatusResponse, Symbol("reset"), o.reset)
     OpenAPI.validate_property(ResetJobStatusResponse, Symbol("reset_type"), o.reset_type)
+    OpenAPI.validate_property(ResetJobStatusResponse, Symbol("skipped"), o.skipped)
     OpenAPI.validate_property(ResetJobStatusResponse, Symbol("status"), o.status)
     OpenAPI.validate_property(ResetJobStatusResponse, Symbol("updated_count"), o.updated_count)
     OpenAPI.validate_property(ResetJobStatusResponse, Symbol("workflow_id"), o.workflow_id)
 end
 
 function OpenAPI.validate_property(::Type{ ResetJobStatusResponse }, name::Symbol, val)
+
+
+
 
 
 

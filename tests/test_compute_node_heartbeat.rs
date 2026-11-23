@@ -226,6 +226,8 @@ fn result_return_codes(config: &Configuration, workflow_id: i64, job_id: i64) ->
         None,
         None,
         None,
+        None,
+        None,
     )
     .expect("Failed to list results")
     .items
@@ -622,6 +624,9 @@ fn spawn_runner(
         None,
         None,
         None,
+        None,
+        None,
+        None,
     )
     .unwrap()
     .items[0]
@@ -765,7 +770,7 @@ fn test_late_completion_after_retry_is_rejected(start_server: &ServerProcess) {
     fail_node(config, old_node);
     assert_eq!(job_status(config, job_id), models::JobStatus::Failed);
 
-    apis::jobs_api::retry_job(config, job_id, run_id, 3).expect("retry_job failed");
+    apis::jobs_api::retry_job(config, job_id, run_id, Some(3)).expect("retry_job failed");
     let new_node = create_node(start_server, workflow_id, "new-host", None);
     apis::workflows_api::claim_next_jobs(config, workflow_id, Some(1), None, None, None)
         .expect("claim failed");
@@ -808,7 +813,8 @@ fn test_late_completion_after_reset_is_rejected(start_server: &ServerProcess) {
     fail_node(config, old_node);
     assert_eq!(job_status(config, job_id), models::JobStatus::Failed);
 
-    apis::workflows_api::reset_job_status(config, workflow_id, Some(true)).expect("reset failed");
+    apis::workflows_api::reset_job_status(config, workflow_id, Some(true), None, None)
+        .expect("reset failed");
     apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
         .expect("initialize failed");
     assert_eq!(job_status(config, job_id), models::JobStatus::Ready);

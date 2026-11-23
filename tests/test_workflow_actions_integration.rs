@@ -1460,3 +1460,195 @@ actions:
         let _ = handle.join();
     }
 }
+
+/// The job runner reports each claimed action's outcome: a failing command leaves the action
+/// `failed` with the error (and it is not retried), a passing one `succeeded`.
+#[rstest]
+fn test_runner_reports_action_outcomes(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let output_dir = temp_dir.path().join("torc_output");
+    let spec_path = create_spec_file(
+        temp_dir.path(),
+        r#"
+name: "test_action_outcomes"
+user: "test_user"
+jobs:
+  - name: "test_job"
+    command: "echo 'Job running'"
+actions:
+  - trigger_type: "on_workflow_start"
+    action_type: "run_commands"
+    commands:
+      - "exit 3"
+  - trigger_type: "on_workflow_start"
+    action_type: "run_commands"
+    commands:
+      - "true"
+"#,
+    );
+    let workflow_id =
+        WorkflowSpec::create_workflow_from_spec(config, &spec_path, "test_user", false)
+            .expect("Failed to create workflow from spec");
+    let workflow = apis::workflows_api::get_workflow(config, workflow_id).unwrap();
+    let torc_config = TorcConfig::load().unwrap_or_default();
+    WorkflowManager::new(config.clone(), torc_config, workflow.clone())
+        .initialize(true)
+        .expect("Failed to initialize workflow");
+    let compute_node = torc::models::ComputeNodeModel::new(
+        workflow_id,
+        "test-host".to_string(),
+        std::process::id() as i64,
+        chrono::Utc::now().to_rfc3339(),
+        4,
+        8.0,
+        0,
+        1,
+        "local".to_string(),
+        None,
+    );
+    let compute_node_id = apis::compute_nodes_api::create_compute_node(config, compute_node)
+        .unwrap()
+        .id
+        .unwrap();
+    let mut job_runner = torc::client::job_runner::JobRunner::new(
+        config.clone(),
+        workflow,
+        1,
+        compute_node_id,
+        output_dir,
+        0.1,
+        None,
+        None,
+        None,
+        torc::models::ComputeNodesResources {
+            id: None,
+            num_cpus: 4,
+            memory_gb: 8.0,
+            num_gpus: 0,
+            num_nodes: 1,
+            time_limit: None,
+            scheduler_config_id: None,
+            labels: None,
+        },
+        None,
+        None,
+        None,
+        false,
+        "test".to_string(),
+        None,
+    );
+    thread::spawn(move || {
+        let _ = job_runner.run_worker();
+    });
+
+    let states = || {
+        apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
+            .unwrap()
+            .into_iter()
+            .map(|a| (a.state, a.error))
+            .collect::<Vec<_>>()
+    };
+    assert!(
+        wait_for(
+            || states()
+                .iter()
+                .all(|(s, _)| matches!(s.as_deref(), Some("succeeded" | "failed"))),
+            15
+        ),
+        "outcomes not reported: {:?}",
+        states()
+    );
+    let states = states();
+    assert_eq!(states[0].0.as_deref(), Some("failed"));
+    assert!(
+        states[0]
+            .1
+            .as_deref()
+            .is_some_and(|e| e.contains("exit code")),
+        "{:?}",
+        states[0]
+    );
+    assert_eq!(states[1], (Some("succeeded".to_string()), None));
+}
+
+/// A `schedule_nodes` action whose `sbatch` fails (submit path, `WorkflowManager::start`) is left
+/// `failed` with sbatch's error; it is not retried, and after a reset it fires again.
+#[rstest]
+fn test_failed_sbatch_recorded_then_reset(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let sbatch = std::env::current_dir()
+        .unwrap()
+        .join("tests/scripts/fake_sbatch.sh");
+    // nextest runs each test in its own process, so these do not leak into other tests.
+    unsafe {
+        std::env::set_var("TORC_FAKE_SBATCH", &sbatch);
+        std::env::set_var("TORC_FAKE_SBATCH_FAIL", "1");
+        std::env::set_var("TMPDIR", temp_dir.path());
+    }
+    let spec_path = create_spec_file(
+        temp_dir.path(),
+        r#"
+name: "test_failed_sbatch"
+user: "test_user"
+jobs:
+  - name: "job1"
+    command: "true"
+slurm_schedulers:
+  - name: "sched"
+    account: "bad_account"
+    nodes: 1
+    walltime: "01:00:00"
+actions:
+  - trigger_type: "on_workflow_start"
+    action_type: "schedule_nodes"
+    scheduler: "sched"
+    scheduler_type: "slurm"
+    num_allocations: 1
+"#,
+    );
+    let workflow_id =
+        WorkflowSpec::create_workflow_from_spec(config, &spec_path, "test_user", false)
+            .expect("Failed to create workflow from spec");
+    let manager = || {
+        let workflow = apis::workflows_api::get_workflow(config, workflow_id).unwrap();
+        WorkflowManager::new(config.clone(), TorcConfig::default(), workflow)
+    };
+    let output_dir = temp_dir.path().join("out");
+    let start = || {
+        manager().start(
+            false,
+            None,
+            output_dir.to_str().unwrap(),
+            None,
+            None,
+            &std::collections::HashMap::new(),
+        )
+    };
+    let action = || {
+        apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
+            .unwrap()
+            .remove(0)
+    };
+
+    assert!(start().is_err(), "sbatch failure should fail start");
+    let failed = action();
+    assert_eq!(failed.state.as_deref(), Some("failed"));
+    assert!(
+        failed
+            .error
+            .as_deref()
+            .is_some_and(|e| e.contains("Invalid account")),
+        "{:?}",
+        failed.error
+    );
+    // Not retried: a second start finds nothing pending.
+    assert_eq!(start().unwrap().slurm_actions_seen, 0);
+
+    unsafe { std::env::remove_var("TORC_FAKE_SBATCH_FAIL") };
+    apis::workflow_actions_api::reset_action(config, workflow_id, failed.id.unwrap()).unwrap();
+    let outcome = start().expect("start after reset failed");
+    assert_eq!(outcome.allocations_submitted, 1);
+    assert_eq!(action().state.as_deref(), Some("succeeded"));
+}

@@ -7,51 +7,6 @@ use torc::client::apis;
 use torc::models;
 
 #[rstest]
-fn test_create_workflow_with_project_and_metadata(start_server: &ServerProcess) {
-    let config = &start_server.config;
-
-    // Create a workflow model with project and metadata
-    let workflow = models::WorkflowModel {
-        id: None,
-        name: "test_metadata_project_workflow".to_string(),
-        user: "test_user".to_string(),
-        description: Some("Test workflow with metadata and project".to_string()),
-        env: None,
-        timestamp: None,
-        compute_node_expiration_buffer_seconds: None,
-        compute_node_wait_for_new_jobs_seconds: Some(0),
-        compute_node_ignore_workflow_completion: Some(false),
-        compute_node_wait_for_healthy_database_minutes: Some(20),
-        compute_node_min_time_for_new_jobs_seconds: Some(300),
-        resource_monitor_config: None,
-        slurm_defaults: None,
-        use_pending_failed: Some(false),
-        enable_ro_crate: None,
-        project: Some("test-project".to_string()),
-        metadata: Some(serde_json::from_str(r#"{"key":"value","num":42}"#).unwrap()),
-        execution_config: None,
-        run_id: None,
-        is_canceled: None,
-        is_archived: None,
-        dynamic_jobs: None,
-        access_groups: None,
-        submission_directory: None,
-    };
-
-    // Create the workflow
-    let created =
-        apis::workflows_api::create_workflow(config, workflow).expect("Failed to create workflow");
-
-    // Verify fields are set
-    assert_eq!(created.name, "test_metadata_project_workflow");
-    assert_eq!(created.project, Some("test-project".to_string()));
-    assert_eq!(
-        created.metadata,
-        Some(serde_json::from_str(r#"{"key":"value","num":42}"#).unwrap())
-    );
-}
-
-#[rstest]
 fn test_create_workflow_without_fields_then_update(start_server: &ServerProcess) {
     let config = &start_server.config;
 

@@ -760,12 +760,13 @@ where
                 name = COALESCE($1, name),
                 is_ephemeral = COALESCE($2, is_ephemeral),
                 data = COALESCE($3, data)
-            WHERE id = $4
+            WHERE id = $4 AND workflow_id = $5
             "#,
             body.name,
             is_ephemeral_int,
             data,
-            id
+            id,
+            body.workflow_id
         )
         .execute(self.context.pool.as_ref())
         .await
@@ -777,9 +778,19 @@ where
         };
 
         if result.rows_affected() == 0 {
-            return Ok(UpdateUserDataResponse::NotFoundErrorResponse(
-                resource_not_found_response("User data", id),
-            ));
+            let pool = self.context.pool.as_ref();
+            return Ok(
+                if super::workflow_id_mismatch(pool, "user_data", id).await? {
+                    UpdateUserDataResponse::UnprocessableContentErrorResponse(
+                        super::workflow_id_immutable_response(),
+                    )
+                } else {
+                    UpdateUserDataResponse::NotFoundErrorResponse(resource_not_found_response(
+                        "User data",
+                        id,
+                    ))
+                },
+            );
         }
 
         // Return the updated user data by fetching it again

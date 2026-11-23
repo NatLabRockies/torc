@@ -68,6 +68,12 @@ POST   /workflows/{id}/claim_next_jobs           # Atomically claim ready jobs
 POST   /workflows/{id}/cancel                    # Cancel workflow execution
 POST   /workflows/{id}/reset_status              # Reset workflow state
 POST   /workflows/{id}/process_changed_job_inputs # Detect and handle input changes
+POST   /workflows/{id}/file_stats                # Apply a file stat snapshot, reset affected jobs
+POST   /workflows/{id}/apply_scheduler_plan      # Apply a Slurm scheduler plan atomically
+POST   /workflows/{id}/actions/{action_id}/claim    # Claim a workflow action for execution
+POST   /workflows/{id}/actions/{action_id}/result   # Record a claimed action's outcome
+POST   /workflows/{id}/actions/{action_id}/suppress # Disable an action without running it
+POST   /workflows/{id}/actions/{action_id}/reset    # Re-arm a failed/suppressed/stuck action
 POST   /jobs/{id}/complete                       # Mark job completed
 POST   /jobs/{id}/manage_status_change           # Transition job status
 GET    /tasks/{id}                               # Poll async task status
@@ -140,6 +146,9 @@ Task `status` progresses through `queued → running → succeeded | failed`.
 
 - `PUT` expects the complete resource representation
 - `PATCH` accepts partial updates (only fields to change)
+- `workflow_id` is immutable on records that belong to a workflow. A `PUT` whose `workflow_id`
+  differs from the stored value returns 422 (`"workflow_id cannot be changed"`) and changes nothing;
+  re-sending the stored value is fine.
 - `DELETE` on non-existent resources returns 404 (not 204)
 
 ## Request Format
@@ -279,6 +288,11 @@ Common filter parameters:
 - `name`: Filter by name (often substring match)
 - `user`: Filter by owner
 - `status`: Filter by status value
+- `statuses`: On `/jobs` and `/results`, several comma-separated status values; matches any of them
+  (`statuses=failed,terminated`). Passing both `status` and `statuses` returns 422.
+- `ids`: On `/jobs` and `/results`, restrict to these comma-separated job IDs (`ids=4,8,15`), scoped
+  to `workflow_id`. More than `MAX_RECORD_TRANSFER_COUNT` IDs returns 422; in practice, split long
+  lists across requests to stay within URL length limits.
 
 ### Sorting
 

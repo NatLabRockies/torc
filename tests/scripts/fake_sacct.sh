@@ -3,7 +3,7 @@
 # Fake sacct command for testing
 # Simulates Slurm's sacct command
 
-JOBS_FILE="${TMPDIR:-/tmp}/fake_slurm_jobs.txt"
+JOBS_FILE="${TORC_FAKE_SLURM_STATE_DIR:-${TMPDIR:-/tmp}}/fake_slurm_jobs.txt"
 
 # Check for failure simulation
 if [ -n "$TORC_FAKE_SACCT_FAIL" ]; then

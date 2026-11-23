@@ -89,6 +89,28 @@ fn test_pending_failed_status(start_server: &ServerProcess) {
     // Fetch the job again to confirm status
     let fetched_job = apis::jobs_api::get_job(config, job_id).expect("Failed to get job");
     assert_eq!(fetched_job.status, Some(JobStatus::PendingFailed));
+
+    // A second completion must not bypass classification: resolution goes through
+    // manage_status_change or retry_job.
+    let second = models::ResultModel::new(
+        job_id,
+        workflow_id,
+        run_id,
+        1,
+        compute_node_id,
+        1,
+        0.1,
+        chrono::Utc::now().to_rfc3339(),
+        JobStatus::Failed,
+    );
+    match apis::jobs_api::complete_job(config, job_id, second.status, run_id, second) {
+        Err(apis::Error::ResponseError(c)) => {
+            assert_eq!(c.status, reqwest::StatusCode::UNPROCESSABLE_ENTITY)
+        }
+        other => panic!("expected 422, got {other:?}"),
+    }
+    let fetched_job = apis::jobs_api::get_job(config, job_id).expect("Failed to get job");
+    assert_eq!(fetched_job.status, Some(JobStatus::PendingFailed));
 }
 
 /// Test listing pending_failed jobs via status filter
@@ -181,6 +203,9 @@ fn test_list_pending_failed_jobs(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
+        None, // resource_requirements_id
     )
     .expect("Failed to list pending_failed jobs");
 
@@ -246,7 +271,7 @@ fn test_reset_includes_pending_failed(start_server: &ServerProcess) {
     assert_eq!(job_before.status, Some(JobStatus::PendingFailed));
 
     // Reset failed jobs only (should include pending_failed)
-    apis::workflows_api::reset_job_status(config, workflow_id, Some(true))
+    apis::workflows_api::reset_job_status(config, workflow_id, Some(true), None, None)
         .expect("Failed to reset job status");
 
     // Verify job is now uninitialized
@@ -321,4 +346,442 @@ exit 0
 
     // The test should succeed with our mock
     assert!(result.is_ok(), "invoke_ai_agent failed: {:?}", result);
+}
+
+/// MCP classify_and_resolve_failures must apply both decisions through the API:
+/// "retry" -> Ready with attempt_id bumped, "fail" -> Failed.
+#[cfg(feature = "mcp-server")]
+#[rstest]
+fn test_classify_and_resolve_failures_applies(start_server: &ServerProcess) {
+    use torc::mcp_server::tools::{FailureClassification, classify_and_resolve_failures};
+
+    let config = &start_server.config;
+    let (workflow_id, run_id) = create_and_initialize_workflow(config, "test_classify_apply");
+
+    let mut workflow = apis::workflows_api::get_workflow(config, workflow_id).unwrap();
+    workflow.use_pending_failed = Some(true);
+    apis::workflows_api::update_workflow(config, workflow_id, workflow)
+        .expect("Failed to enable use_pending_failed");
+
+    let retry_id = create_test_job(config, workflow_id, "retry_job")
+        .id
+        .unwrap();
+    let fail_id = create_test_job(config, workflow_id, "fail_job").id.unwrap();
+    let compute_node_id = create_test_compute_node(config, workflow_id).id.unwrap();
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("Failed to reinitialize");
+
+    let resources = models::ComputeNodesResources::new(36, 100.0, 0, 1);
+    let claimed = apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        10,
+        resources,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to claim jobs");
+    assert_eq!(claimed.jobs.expect("Should return jobs").len(), 2);
+
+    for job_id in [retry_id, fail_id] {
+        apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
+            .expect("Failed to set job running");
+        let result = models::ResultModel::new(
+            job_id,
+            workflow_id,
+            run_id,
+            1,
+            compute_node_id,
+            1,
+            0.1,
+            chrono::Utc::now().to_rfc3339(),
+            JobStatus::PendingFailed,
+        );
+        apis::jobs_api::complete_job(config, job_id, result.status, run_id, result)
+            .expect("Failed to complete job");
+    }
+
+    let classification = |job_id, action: &str| FailureClassification {
+        job_id,
+        action: action.to_string(),
+        memory: None,
+        runtime: None,
+        reason: None,
+    };
+    classify_and_resolve_failures(
+        config,
+        workflow_id,
+        vec![
+            classification(retry_id, "retry"),
+            classification(fail_id, "fail"),
+        ],
+        false,
+    )
+    .expect("classify_and_resolve_failures failed");
+
+    let retried = apis::jobs_api::get_job(config, retry_id).unwrap();
+    assert_eq!(retried.status, Some(JobStatus::Ready));
+    assert_eq!(retried.attempt_id, Some(2));
+
+    let failed = apis::jobs_api::get_job(config, fail_id).unwrap();
+    assert_eq!(failed.status, Some(JobStatus::Failed));
+}
+
+/// A retry refused by the failure handler limit must not leave resource adjustments behind.
+#[cfg(feature = "mcp-server")]
+#[rstest]
+fn test_classify_refused_retry_leaves_resources_unchanged(start_server: &ServerProcess) {
+    use torc::mcp_server::tools::{FailureClassification, classify_and_resolve_failures};
+
+    let config = &start_server.config;
+    let (workflow_id, run_id) = create_and_initialize_workflow(config, "test_classify_refused");
+    let mut workflow = apis::workflows_api::get_workflow(config, workflow_id).unwrap();
+    workflow.use_pending_failed = Some(true);
+    apis::workflows_api::update_workflow(config, workflow_id, workflow).unwrap();
+
+    let handler = apis::failure_handlers_api::create_failure_handler(
+        config,
+        models::FailureHandlerModel::new(
+            workflow_id,
+            "fh".to_string(),
+            r#"[{"exit_codes":[1],"max_retries":1}]"#.to_string(),
+        ),
+    )
+    .unwrap();
+    let rr = apis::resource_requirements_api::create_resource_requirements(
+        config,
+        models::ResourceRequirementsModel {
+            id: None,
+            workflow_id,
+            name: "rr".to_string(),
+            num_cpus: 1,
+            num_gpus: 0,
+            num_nodes: 1,
+            memory: "1g".to_string(),
+            runtime: "PT10M".to_string(),
+        },
+    )
+    .unwrap();
+    let mut job = models::JobModel::new(workflow_id, "job".to_string(), "false".into());
+    job.failure_handler_id = handler.id;
+    job.resource_requirements_id = rr.id;
+    let job_id = apis::jobs_api::create_job(config, job).unwrap().id.unwrap();
+    let compute_node_id = create_test_compute_node(config, workflow_id).id.unwrap();
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None).unwrap();
+    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id).unwrap();
+    let result = models::ResultModel::new(
+        job_id,
+        workflow_id,
+        run_id,
+        1,
+        compute_node_id,
+        1,
+        0.1,
+        chrono::Utc::now().to_rfc3339(),
+        JobStatus::PendingFailed,
+    );
+    apis::jobs_api::complete_job(config, job_id, result.status, run_id, result).unwrap();
+
+    let classify = |dry_run| {
+        classify_and_resolve_failures(
+            config,
+            workflow_id,
+            vec![FailureClassification {
+                job_id,
+                action: "retry".to_string(),
+                memory: Some("4g".to_string()),
+                runtime: None,
+                reason: None,
+            }],
+            dry_run,
+        )
+        .unwrap()
+    };
+
+    // The dry-run preview must report the same refusal the apply would hit.
+    let preview = serde_json::to_string(&classify(true)).unwrap();
+    assert!(preview.contains("cannot be retried"), "{preview}");
+    assert!(!preview.contains("would_apply"), "{preview}");
+
+    classify(false);
+
+    let job = apis::jobs_api::get_job(config, job_id).unwrap();
+    assert_eq!(job.status, Some(JobStatus::PendingFailed));
+    let rr =
+        apis::resource_requirements_api::get_resource_requirements(config, rr.id.unwrap()).unwrap();
+    assert_eq!(rr.memory, "1g");
+}
+
+/// regroup_job_resources must reject a group that omits num_gpus when its jobs currently
+/// use different values, instead of silently applying the first job's value to all.
+#[cfg(feature = "mcp-server")]
+#[rstest]
+fn test_regroup_rejects_ambiguous_omitted_gpus(start_server: &ServerProcess) {
+    use torc::mcp_server::tools::{ResourceGroup, regroup_job_resources};
+
+    let config = &start_server.config;
+    let workflow_id = create_test_workflow(config, "regroup_ambiguous")
+        .id
+        .unwrap();
+
+    let mut job_ids = Vec::new();
+    for (name, gpus) in [("cpu_rr", 0), ("gpu_rr", 1)] {
+        let rr = apis::resource_requirements_api::create_resource_requirements(
+            config,
+            models::ResourceRequirementsModel {
+                id: None,
+                workflow_id,
+                name: name.to_string(),
+                num_cpus: 1,
+                num_gpus: gpus,
+                num_nodes: 1,
+                memory: "1g".to_string(),
+                runtime: "PT10M".to_string(),
+            },
+        )
+        .unwrap();
+        let mut job = models::JobModel::new(workflow_id, format!("job_{}", name), "true".into());
+        job.resource_requirements_id = rr.id;
+        job_ids.push(apis::jobs_api::create_job(config, job).unwrap().id.unwrap());
+    }
+    let rr_count = |config| {
+        apis::resource_requirements_api::list_resource_requirements(
+            config,
+            workflow_id,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap()
+        .items
+        .len()
+    };
+    let before = rr_count(config);
+
+    regroup_job_resources(
+        config,
+        workflow_id,
+        vec![ResourceGroup {
+            memory: "2g".to_string(),
+            num_cpus: 2,
+            runtime: "PT20M".to_string(),
+            num_gpus: None,
+            num_nodes: None,
+            name: Some("merged".to_string()),
+            job_ids: job_ids.clone(),
+        }],
+        false,
+    )
+    .expect("regroup_job_resources returned an error");
+
+    assert_eq!(
+        rr_count(config),
+        before,
+        "no resource requirements should be created"
+    );
+}
+
+/// Resolving the last pending_failed job to Failed completes the workflow, so it must
+/// trigger on_workflow_complete actions.
+#[rstest]
+fn test_resolving_last_pending_failed_triggers_workflow_complete(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, run_id) =
+        create_and_initialize_workflow(config, "test_pending_failed_workflow_complete");
+
+    let action = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        models::WorkflowActionModel {
+            id: None,
+            workflow_id,
+            trigger_type: "on_workflow_complete".to_string(),
+            action_type: "run_commands".to_string(),
+            action_config: serde_json::json!({"commands": ["true"]}),
+            job_ids: None,
+            trigger_count: 0,
+            required_triggers: 1,
+            executed: false,
+            executed_at: None,
+            executed_by: None,
+            persistent: false,
+            is_recovery: false,
+            state: None,
+            error: None,
+        },
+    )
+    .expect("Failed to create action");
+    let action_id = action.id.unwrap();
+
+    let job_id = create_test_job(config, workflow_id, "only_job").id.unwrap();
+    let compute_node_id = create_test_compute_node(config, workflow_id).id.unwrap();
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("Failed to reinitialize");
+    let resources = models::ComputeNodesResources::new(36, 100.0, 0, 1);
+    apis::workflows_api::claim_jobs_based_on_resources(
+        config,
+        workflow_id,
+        10,
+        resources,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to claim jobs");
+    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
+        .expect("Failed to set job running");
+    let result = models::ResultModel::new(
+        job_id,
+        workflow_id,
+        run_id,
+        1,
+        compute_node_id,
+        1,
+        0.1,
+        chrono::Utc::now().to_rfc3339(),
+        JobStatus::PendingFailed,
+    );
+    apis::jobs_api::complete_job(config, job_id, result.status, run_id, result)
+        .expect("Failed to complete job");
+
+    let triggered = |config| {
+        let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
+            .expect("Failed to get actions");
+        let a = actions
+            .iter()
+            .find(|a| a.id == Some(action_id))
+            .expect("action not found");
+        a.trigger_count >= a.required_triggers
+    };
+    assert!(
+        !triggered(config),
+        "workflow is not complete while pending_failed"
+    );
+
+    // A pending_failed job records a failed attempt; it cannot be resolved to Completed.
+    match apis::jobs_api::manage_status_change(config, job_id, JobStatus::Completed, run_id) {
+        Err(apis::Error::ResponseError(r)) => assert_eq!(r.status, 422),
+        other => panic!(
+            "expected 422 resolving pending_failed to completed, got {:?}",
+            other
+        ),
+    }
+
+    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Failed, run_id)
+        .expect("Failed to resolve pending_failed job");
+    assert!(
+        triggered(config),
+        "on_workflow_complete should be triggered"
+    );
+
+    // The result row follows the job to Failed, so status filters agree.
+    let failed_results = apis::results_api::list_results(
+        config,
+        workflow_id,
+        Some(job_id),
+        None,
+        None,
+        Some(JobStatus::Failed),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to list results");
+    assert_eq!(
+        failed_results.items.len(),
+        1,
+        "result status should be failed"
+    );
+}
+
+/// Resolving attempt 2 of a pending_failed job to Failed must leave attempt 1's result row
+/// (classified as retry earlier) unchanged.
+#[rstest]
+fn test_resolving_pending_failed_only_updates_current_attempt_result(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, run_id) =
+        create_and_initialize_workflow(config, "test_pending_failed_attempts");
+    let job_id = create_test_job(config, workflow_id, "flaky").id.unwrap();
+    let compute_node_id = create_test_compute_node(config, workflow_id).id.unwrap();
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None)
+        .expect("Failed to reinitialize");
+
+    let run_attempt_to_pending_failed = |attempt_id: i64| {
+        let resources = models::ComputeNodesResources::new(36, 100.0, 0, 1);
+        let claimed = apis::workflows_api::claim_jobs_based_on_resources(
+            config,
+            workflow_id,
+            10,
+            resources,
+            None,
+            None,
+            None,
+        )
+        .expect("Failed to claim jobs");
+        assert_eq!(claimed.jobs.expect("Should return jobs").len(), 1);
+        apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
+            .expect("Failed to set job running");
+        let result = models::ResultModel::new(
+            job_id,
+            workflow_id,
+            run_id,
+            attempt_id,
+            compute_node_id,
+            1,
+            0.1,
+            chrono::Utc::now().to_rfc3339(),
+            JobStatus::PendingFailed,
+        );
+        apis::jobs_api::complete_job(config, job_id, result.status, run_id, result)
+            .expect("Failed to complete job");
+    };
+
+    run_attempt_to_pending_failed(1);
+    // Classified as retry: Ready with attempt_id 2.
+    apis::jobs_api::retry_job(config, job_id, run_id, None).expect("Failed to retry");
+    run_attempt_to_pending_failed(2);
+    // Classified as fail.
+    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Failed, run_id)
+        .expect("Failed to resolve pending_failed job");
+
+    let results = apis::results_api::list_results(
+        config,
+        workflow_id,
+        Some(job_id),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        Some(true),
+        None,
+        None,
+    )
+    .expect("Failed to list results")
+    .items;
+    let status_of = |attempt: i64| {
+        results
+            .iter()
+            .find(|r| r.attempt_id == Some(attempt))
+            .map(|r| r.status)
+    };
+    assert_eq!(status_of(1), Some(JobStatus::PendingFailed));
+    assert_eq!(status_of(2), Some(JobStatus::Failed));
 }

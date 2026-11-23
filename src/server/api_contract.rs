@@ -388,6 +388,31 @@ pub trait TransportApiCore<C: Send + Sync> {
         context: &C,
     ) -> Result<ClaimActionResponse, ApiError>;
 
+    /// Mark a workflow action suppressed without executing it.
+    async fn suppress_action(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        context: &C,
+    ) -> Result<SuppressActionResponse, ApiError>;
+
+    /// Record the outcome of a claimed workflow action.
+    async fn report_action_result(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        body: models::WorkflowActionResultRequest,
+        context: &C,
+    ) -> Result<ReportActionResultResponse, ApiError>;
+
+    /// Re-arm a failed, suppressed, or claimed workflow action.
+    async fn reset_action(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        context: &C,
+    ) -> Result<ResetActionResponse, ApiError>;
+
     /// Update action_config for an existing workflow action (partial update).
     async fn update_workflow_action(
         &self,
@@ -526,7 +551,7 @@ pub trait TransportApiCore<C: Send + Sync> {
     async fn list_jobs(
         &self,
         workflow_id: i64,
-        status: Option<models::JobStatus>,
+        status: Option<Vec<models::JobStatus>>,
         needs_file_id: Option<i64>,
         upstream_job_id: Option<i64>,
         offset: Option<i64>,
@@ -539,6 +564,8 @@ pub trait TransportApiCore<C: Send + Sync> {
         name: Option<String>,
         command: Option<String>,
         labels: Option<String>,
+        ids: Option<Vec<i64>>,
+        resource_requirements_id: Option<i64>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError>;
 
@@ -613,13 +640,14 @@ pub trait TransportApiCore<C: Send + Sync> {
         job_id: Option<i64>,
         run_id: Option<i64>,
         return_code: Option<i64>,
-        status: Option<models::JobStatus>,
+        status: Option<Vec<models::JobStatus>>,
         compute_node_id: Option<i64>,
         offset: Option<i64>,
         limit: Option<i64>,
         sort_by: Option<String>,
         reverse_sort: Option<bool>,
         all_runs: Option<bool>,
+        ids: Option<Vec<i64>>,
         context: &C,
     ) -> Result<ListResultsResponse, ApiError>;
 
@@ -883,6 +911,24 @@ pub trait TransportApiCore<C: Send + Sync> {
         context: &C,
     ) -> Result<UpdateFileResponse, ApiError>;
 
+    /// Compare a client's file stat snapshot with stored mtimes and reset affected jobs.
+    async fn update_file_stats(
+        &self,
+        id: i64,
+        body: models::FileStatsRequest,
+        dry_run: Option<bool>,
+        context: &C,
+    ) -> Result<UpdateFileStatsResponse, ApiError>;
+
+    /// Apply a client-computed Slurm scheduler plan in one transaction.
+    async fn apply_scheduler_plan(
+        &self,
+        id: i64,
+        body: models::ApplySchedulerPlanRequest,
+        dry_run: Option<bool>,
+        context: &C,
+    ) -> Result<ApplySchedulerPlanResponse, ApiError>;
+
     /// Update a job.
     async fn update_job(
         &self,
@@ -1046,6 +1092,8 @@ pub trait TransportApiCore<C: Send + Sync> {
         &self,
         id: i64,
         failed_only: Option<bool>,
+        force: Option<bool>,
+        body: Option<models::ResetJobStatusRequest>,
         context: &C,
     ) -> Result<ResetJobStatusResponse, ApiError>;
 
@@ -1113,7 +1161,6 @@ pub trait TransportApiCore<C: Send + Sync> {
         &self,
         id: i64,
         run_id: i64,
-        max_retries: i32,
         context: &C,
     ) -> Result<RetryJobResponse, ApiError>;
 

@@ -678,30 +678,28 @@ where
             r#"
             UPDATE compute_node
             SET
-                workflow_id = COALESCE($1, workflow_id)
-                ,hostname = COALESCE($2, hostname)
-                ,pid = COALESCE($3, pid)
-                ,start_time = COALESCE($4, start_time)
-                ,duration_seconds = COALESCE($5, duration_seconds)
-                ,is_active = COALESCE($6, is_active)
-                ,num_cpus = COALESCE($7, num_cpus)
-                ,memory_gb = COALESCE($8, memory_gb)
-                ,num_gpus = COALESCE($9, num_gpus)
-                ,num_nodes = COALESCE($10, num_nodes)
-                ,time_limit = COALESCE($11, time_limit)
-                ,scheduler_config_id = COALESCE($12, scheduler_config_id)
-                ,compute_node_type = COALESCE($13, compute_node_type)
-                ,scheduler = COALESCE($14, scheduler)
-                ,sample_count = COALESCE($15, sample_count)
-                ,peak_cpu_percent = COALESCE($16, peak_cpu_percent)
-                ,avg_cpu_percent = COALESCE($17, avg_cpu_percent)
-                ,peak_memory_bytes = COALESCE($18, peak_memory_bytes)
-                ,avg_memory_bytes = COALESCE($19, avg_memory_bytes)
-                ,end_time = COALESCE($20, end_time)
-            WHERE id = $21
+                hostname = COALESCE($1, hostname)
+                ,pid = COALESCE($2, pid)
+                ,start_time = COALESCE($3, start_time)
+                ,duration_seconds = COALESCE($4, duration_seconds)
+                ,is_active = COALESCE($5, is_active)
+                ,num_cpus = COALESCE($6, num_cpus)
+                ,memory_gb = COALESCE($7, memory_gb)
+                ,num_gpus = COALESCE($8, num_gpus)
+                ,num_nodes = COALESCE($9, num_nodes)
+                ,time_limit = COALESCE($10, time_limit)
+                ,scheduler_config_id = COALESCE($11, scheduler_config_id)
+                ,compute_node_type = COALESCE($12, compute_node_type)
+                ,scheduler = COALESCE($13, scheduler)
+                ,sample_count = COALESCE($14, sample_count)
+                ,peak_cpu_percent = COALESCE($15, peak_cpu_percent)
+                ,avg_cpu_percent = COALESCE($16, avg_cpu_percent)
+                ,peak_memory_bytes = COALESCE($17, peak_memory_bytes)
+                ,avg_memory_bytes = COALESCE($18, avg_memory_bytes)
+                ,end_time = COALESCE($19, end_time)
+            WHERE id = $20 AND workflow_id = $21
             "#,
         )
-        .bind(body.workflow_id)
         .bind(body.hostname)
         .bind(body.pid)
         .bind(body.start_time)
@@ -722,6 +720,7 @@ where
         .bind(body.avg_memory_bytes)
         .bind(body.end_time)
         .bind(id)
+        .bind(body.workflow_id)
         .execute(self.context.pool.as_ref())
         .await
         {
@@ -732,9 +731,19 @@ where
         };
 
         if result.rows_affected() == 0 {
-            return Ok(UpdateComputeNodeResponse::NotFoundErrorResponse(
-                resource_not_found_response("Compute node", id),
-            ));
+            let pool = self.context.pool.as_ref();
+            return Ok(
+                if super::workflow_id_mismatch(pool, "compute_node", id).await? {
+                    UpdateComputeNodeResponse::UnprocessableContentErrorResponse(
+                        super::workflow_id_immutable_response(),
+                    )
+                } else {
+                    UpdateComputeNodeResponse::NotFoundErrorResponse(resource_not_found_response(
+                        "Compute node",
+                        id,
+                    ))
+                },
+            );
         }
 
         // Return the updated compute node by fetching it again

@@ -7,7 +7,7 @@ info:
   license:
     name: BSD-3-Clause
     identifier: BSD-3-Clause
-  version: 1.0.0
+  version: 1.1.0
 servers:
 - url: /torc-service/v1
   description: Versioned Torc API base path
@@ -673,6 +673,12 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable)
           content:
             application/json:
               schema:
@@ -1418,6 +1424,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Internal server error
           content:
@@ -1583,6 +1595,44 @@ paths:
           type:
           - string
           - 'null'
+      - name: ids
+        in: query
+        description: |-
+          Comma-separated job IDs to restrict to, scoped to `workflow_id`. At most
+          `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.
+        required: false
+        schema:
+          type:
+          - array
+          - 'null'
+          items:
+            type: integer
+            format: int64
+        style: form
+        explode: false
+      - name: statuses
+        in: query
+        description: |-
+          Comma-separated statuses (`statuses=failed,terminated`): match any of them.
+          Mutually exclusive with `status` (both given returns 422).
+        required: false
+        schema:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/JobStatus'
+        style: form
+        explode: false
+      - name: resource_requirements_id
+        in: query
+        description: Returns only the jobs that use this resource requirements record.
+        required: false
+        schema:
+          type:
+          - integer
+          - 'null'
+          format: int64
       responses:
         '200':
           description: Successful response
@@ -1598,6 +1648,12 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content (too many ids, or both status and statuses)
           content:
             application/json:
               schema:
@@ -1761,7 +1817,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
-          description: Unprocessable content (invalid label)
+          description: Unprocessable content (invalid label, a reference outside the job's workflow, or workflow_id differs from the stored value; it is immutable)
           content:
             application/json:
               schema:
@@ -1939,9 +1995,12 @@ paths:
           format: int64
       - name: max_retries
         in: query
-        required: true
+        description: 'Deprecated and ignored: the server enforces the job''s failure handler limit.'
+        required: false
         schema:
-          type: integer
+          type:
+          - integer
+          - 'null'
           format: int32
       responses:
         '200':
@@ -2304,6 +2363,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Internal server error
           content:
@@ -2632,7 +2697,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
-          description: Unprocessable content
+          description: Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable)
           content:
             application/json:
               schema:
@@ -2766,6 +2831,35 @@ paths:
           type:
           - boolean
           - 'null'
+      - name: ids
+        in: query
+        description: |-
+          Comma-separated job IDs: restrict to results of these jobs, scoped to
+          `workflow_id`. At most `MAX_RECORD_TRANSFER_COUNT` IDs; more returns 422.
+        required: false
+        schema:
+          type:
+          - array
+          - 'null'
+          items:
+            type: integer
+            format: int64
+        style: form
+        explode: false
+      - name: statuses
+        in: query
+        description: |-
+          Comma-separated statuses (`statuses=failed,terminated`): match any of them.
+          Mutually exclusive with `status` (both given returns 422).
+        required: false
+        schema:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/JobStatus'
+        style: form
+        explode: false
       responses:
         '200':
           description: Successful response
@@ -2781,6 +2875,12 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content (too many ids, or both status and statuses)
           content:
             application/json:
               schema:
@@ -2932,6 +3032,12 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content (job_id not in the result's workflow, or workflow_id differs from the stored value; it is immutable)
           content:
             application/json:
               schema:
@@ -3097,7 +3203,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
-          description: Unprocessable content
+          description: Unprocessable content (duplicate entity, file_id not in the entity's workflow, or workflow_id differs from the stored value; it is immutable)
           content:
             application/json:
               schema:
@@ -3379,6 +3485,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Internal server error
           content:
@@ -3631,6 +3743,12 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable)
           content:
             application/json:
               schema:
@@ -4077,6 +4195,12 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content (e.g. workflow_id differs from the stored value; it is immutable)
           content:
             application/json:
               schema:
@@ -4679,6 +4803,174 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ClaimActionResponse'
+  /workflows/{id}/actions/{action_id}/reset:
+    post:
+      tags:
+      - workflow_actions
+      description: 'Re-arm an action that is failed, suppressed, or stuck in claimed: clears executed, executed_at, executed_by, state, and error so it can be claimed again. A no-op for an action that was never claimed; 409 for a succeeded action.'
+      operationId: reset_action
+      parameters:
+      - name: id
+        in: path
+        description: Workflow ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: action_id
+        in: path
+        description: Action ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowActionModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Action already succeeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /workflows/{id}/actions/{action_id}/result:
+    post:
+      tags:
+      - workflow_actions
+      description: 'Record the outcome of a claimed action: state becomes succeeded, or failed with the given error. For a persistent action this is the latest outcome. 409 if the action has not been claimed (or was suppressed); 422 if error is set with success = true.'
+      operationId: report_action_result
+      parameters:
+      - name: id
+        in: path
+        description: Workflow ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: action_id
+        in: path
+        description: Action ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowActionResultRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowActionModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Action has no claim to report a result for
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /workflows/{id}/actions/{action_id}/suppress:
+    post:
+      tags:
+      - workflow_actions
+      description: Mark an action suppressed (executed = true, state = suppressed) so it is never claimed, without executing it. Idempotent. A persistent action can be suppressed in any state; a non-persistent action only while unclaimed (409 if it is claimed, succeeded, or failed).
+      operationId: suppress_action
+      parameters:
+      - name: id
+        in: path
+        description: Workflow ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: action_id
+        in: path
+        description: Action ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowActionModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Action is already claimed, succeeded, or failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /workflows/{id}/active_task:
     get:
       tags:
@@ -4701,6 +4993,64 @@ paths:
                 $ref: '#/components/schemas/ActiveTaskResponse'
         '404':
           description: Workflow not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /workflows/{id}/apply_scheduler_plan:
+    post:
+      tags:
+      - slurm_schedulers
+      description: Apply a client-computed Slurm scheduler plan in one transaction. Every job must belong to the workflow, be pending (uninitialized, blocked, or ready), and appear in at most one scheduler; otherwise the plan is rejected and nothing changes. When suppress_existing_schedule_actions is set, the workflow's non-recovery, unexecuted schedule_nodes actions (persistent ones included) are suppressed. The schedulers are created, their jobs are assigned, and an on_jobs_ready recovery action is created for each recovery_actions entry, armed from the gating jobs' current statuses. The response lists the created IDs and which actions are pending (ready to submit now). With dry_run=true, the same result is reported and nothing is stored.
+      operationId: apply_scheduler_plan
+      parameters:
+      - name: id
+        in: path
+        description: Workflow ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: dry_run
+        in: query
+        required: false
+        schema:
+          type:
+          - boolean
+          - 'null'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplySchedulerPlanRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplySchedulerPlanResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content (jobs outside the workflow, non-pending jobs, jobs in more than one scheduler, invalid recovery actions)
           content:
             application/json:
               schema:
@@ -5024,6 +5374,64 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /workflows/{id}/file_stats:
+    post:
+      tags:
+      - files
+      description: Compare a client's stat snapshot of workflow files with the stored modification times (10 ms tolerance). Changed mtimes are stored, and st_mtime is cleared for files that no longer exist. Jobs that need a changed file and are completed, failed, or canceled are reset to uninitialized, as are completed jobs with a missing output file, and every job downstream of a reset job. Each request runs in one transaction and is idempotent. With dry_run=true, reports the same result without changing anything. At most MAX_RECORD_TRANSFER_COUNT entries per request; every file must belong to the workflow.
+      operationId: update_file_stats
+      parameters:
+      - name: id
+        in: path
+        description: Workflow ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+      - name: dry_run
+        in: query
+        required: false
+        schema:
+          type:
+          - boolean
+          - 'null'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FileStatsRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileStatsResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content (oversized batch, duplicate ids, files outside the workflow, missing st_mtime)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /workflows/{id}/initialize_jobs:
     post:
       tags:
@@ -5084,6 +5492,12 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
           description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Job dependency graph contains a cycle
           content:
             application/json:
               schema:
@@ -5540,6 +5954,7 @@ paths:
     post:
       tags:
       - workflows
+      description: 'Reset job statuses to uninitialized. Without a body, resets every job (or, with failed_only, every failed, terminated, canceled, and pending_failed job). With a body, resets only the selected jobs in one transaction: jobs from other workflows or not in an eligible status are skipped with a reason, and the request is refused with 422 while the workflow has active compute nodes, pending or active scheduled compute nodes, or running or pending jobs, unless force=true. As with manage_status_change, resetting a terminal job also resets its direct completed or failed dependents. Does not bump the workflow run_id.'
       operationId: reset_job_status
       parameters:
       - name: id
@@ -5551,11 +5966,30 @@ paths:
           format: int64
       - name: failed_only
         in: query
+        description: |-
+          Without a body: reset only failed, terminated, canceled, and pending_failed jobs.
+          Ignored when a body is sent.
         required: false
         schema:
           type:
           - boolean
           - 'null'
+      - name: force
+        in: query
+        description: |-
+          With a body: reset even if the workflow has active compute nodes, pending or active
+          scheduled compute nodes, or running or pending jobs.
+        required: false
+        schema:
+          type:
+          - boolean
+          - 'null'
+      requestBody:
+        description: Optional selective reset
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetJobStatusRequest'
       responses:
         '200':
           description: Successful response
@@ -5563,6 +5997,30 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResetJobStatusResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Invalid request body, or the workflow is not quiet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /workflows/{id}/reset_status:
     post:
       tags:
@@ -6021,6 +6479,84 @@ components:
           - 'null'
           format: int64
           description: Number of rows affected by a write statement, when applicable.
+    AppliedSchedulerAction:
+      type: object
+      description: A recovery action created by `apply_scheduler_plan`.
+      required:
+      - id
+      - scheduler_id
+      - num_allocations
+      - pending
+      properties:
+        id:
+          type: integer
+          format: int64
+        num_allocations:
+          type: integer
+          format: int64
+        pending:
+          type: boolean
+          description: |-
+            True if every gating job is ready, so the action can be submitted now. Otherwise it waits
+            for the remaining gating jobs to become ready.
+        scheduler_id:
+          type: integer
+          format: int64
+    ApplySchedulerPlanRequest:
+      type: object
+      description: A scheduler plan computed by the client, applied by `apply_scheduler_plan`.
+      required:
+      - schedulers
+      properties:
+        recovery_actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SchedulerPlanAction'
+        schedulers:
+          type: array
+          items:
+            $ref: '#/components/schemas/SchedulerPlanEntry'
+        suppress_existing_schedule_actions:
+          type: boolean
+          description: |-
+            Suppress the workflow's non-recovery, unexecuted `schedule_nodes` actions (persistent ones
+            included) so they cannot start allocations alongside the new schedulers.
+    ApplySchedulerPlanResponse:
+      type: object
+      description: |-
+        IDs created by `apply_scheduler_plan`. In a dry run, the IDs are those that would have been
+        assigned; nothing is stored.
+      required:
+      - scheduler_ids
+      - actions
+      - suppressed_action_ids
+      properties:
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AppliedSchedulerAction'
+          description: |-
+            Created recovery actions, in the order of the request's `recovery_actions`. A recovery
+            action whose scheduler has no pending jobs left is not created.
+        scheduler_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+          description: Created scheduler IDs, in the order of the request's `schedulers`.
+        skipped_job_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+          description: |-
+            Planned jobs left out because they were no longer uninitialized, blocked, or ready when
+            the plan was applied (e.g. a running allocation claimed them after planning).
+        suppressed_action_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
     ArchiveWorkflowRequest:
       type: object
       description: |-
@@ -6541,6 +7077,92 @@ components:
         workflow_id:
           type: integer
           format: int64
+    FileStatChange:
+      type: object
+      description: A file whose stored modification time differs from the observation.
+      required:
+      - file_id
+      - reason
+      properties:
+        file_id:
+          type: integer
+          format: int64
+        reason:
+          type: string
+          description: '`modified`, `appeared`, or `disappeared`.'
+    FileStatEntry:
+      type: object
+      description: A client's observation of one file on disk, sent to `update_file_stats`.
+      required:
+      - id
+      - exists
+      properties:
+        exists:
+          type: boolean
+          description: Whether the file exists.
+        id:
+          type: integer
+          format: int64
+          description: File ID. Must belong to the workflow in the request path.
+        st_mtime:
+          type:
+          - number
+          - 'null'
+          format: double
+          description: Modification time in seconds since the Unix epoch. Required when `exists` is true.
+    FileStatsRequest:
+      type: object
+      description: A batch of file observations (at most `MAX_RECORD_TRANSFER_COUNT` entries).
+      required:
+      - files
+      properties:
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileStatEntry'
+    FileStatsResetJob:
+      type: object
+      description: A job reset to uninitialized because of a file change.
+      required:
+      - job_id
+      - name
+      - status
+      - reason
+      properties:
+        job_id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        reason:
+          type: string
+          description: |-
+            `input_changed` (an input file changed), `output_missing` (an output file of a completed
+            job is missing), or `downstream` (depends, directly or transitively, on a reset job).
+        status:
+          $ref: '#/components/schemas/JobStatus'
+          description: Status before the reset.
+    FileStatsResponse:
+      type: object
+      required:
+      - changed_files
+      - reset_jobs
+      - missing_required_file_ids
+      properties:
+        changed_files:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileStatChange'
+        missing_required_file_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+          description: Files in the batch that some job needs, no job produces, and that do not exist.
+        reset_jobs:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileStatsResetJob'
     FilesModel:
       type: object
       required:
@@ -6605,11 +7227,28 @@ components:
         job_id:
           type: integer
           format: int64
+        output_files:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/OutputFileStat'
+          description: |-
+            Modification times of the job's output files, recorded when the job finished.
+            Applied in the same transaction as the completion, and only if it is accepted.
+            A `file_id` that is not an output file of this job is skipped; the completion is
+            still applied.
         result:
           $ref: '#/components/schemas/ResultModel'
         run_id:
           type: integer
           format: int64
+        slurm_stats:
+          $ref: '#/components/schemas/SlurmStatsModel'
+          description: |-
+            Slurm accounting stats for the job step. Stored only if the completion is accepted.
+            Stats whose `workflow_id`, `job_id`, `run_id`, or `attempt_id` do not match the
+            completion are skipped; the completion is still applied.
         status:
           $ref: '#/components/schemas/JobStatus'
     JobCompletionError:
@@ -7572,6 +8211,19 @@ components:
       enum:
       - summary
       - time_series
+    OutputFileStat:
+      type: object
+      description: An output file's modification time, as observed by the job runner at completion.
+      required:
+      - file_id
+      - st_mtime
+      properties:
+        file_id:
+          type: integer
+          format: int64
+        st_mtime:
+          type: number
+          format: double
     PingResponse:
       type: object
       required:
@@ -7610,6 +8262,35 @@ components:
         workflow_id:
           type: integer
           format: int64
+    ResetJobStatusRequest:
+      type: object
+      description: |-
+        Optional body for `reset_job_status`. Sending it switches the endpoint to a selective reset:
+        only the listed jobs in the listed statuses are reset, in one transaction that first checks
+        that the workflow is quiet (see the endpoint description).
+      properties:
+        dry_run:
+          type:
+          - boolean
+          - 'null'
+          description: Report what would be reset without changing anything.
+        job_ids:
+          type:
+          - array
+          - 'null'
+          items:
+            type: integer
+            format: int64
+          description: Jobs to reset. Omit to select every job in the workflow whose status is in `statuses`.
+        statuses:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/JobStatus'
+          description: |-
+            Statuses a job must be in to be reset. Defaults to the recoverable statuses: failed,
+            terminated, canceled, and pending_failed.
     ResetJobStatusResponse:
       type: object
       required:
@@ -7617,10 +8298,40 @@ components:
       - updated_count
       - status
       properties:
+        downstream_reset:
+          type:
+          - array
+          - 'null'
+          items:
+            type: integer
+            format: int64
+          description: |-
+            Direct completed or failed dependents of reset terminal jobs that were also reset (or,
+            for a dry run, would be) as a side effect. Disjoint from `reset`. Set only when the
+            request has a body.
+        reset:
+          type:
+          - array
+          - 'null'
+          items:
+            type: integer
+            format: int64
+          description: |-
+            IDs of the jobs reset (or, for a dry run, that would be reset). Set only when the
+            request has a body.
         reset_type:
           type:
           - string
           - 'null'
+        skipped:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/ResetJobStatusSkipped'
+          description: |-
+            Requested jobs that were not reset, with the reason. Set only when the request has a
+            body.
         status:
           type: string
         updated_count:
@@ -7629,6 +8340,17 @@ components:
         workflow_id:
           type: integer
           format: int64
+    ResetJobStatusSkipped:
+      type: object
+      required:
+      - job_id
+      - reason
+      properties:
+        job_id:
+          type: integer
+          format: int64
+        reason:
+          type: string
     ResourceMonitorConfig:
       type: object
       description: |-
@@ -7894,6 +8616,42 @@ components:
         workflow_id:
           type: integer
           format: int64
+    SchedulerPlanAction:
+      type: object
+      description: An `on_jobs_ready` recovery action that schedules nodes for one planned scheduler.
+      required:
+      - scheduler_index
+      - job_ids
+      - num_allocations
+      properties:
+        job_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+          description: Jobs that gate the action. Must be a subset of that scheduler's `job_ids`.
+        num_allocations:
+          type: integer
+          format: int64
+        scheduler_index:
+          type: integer
+          format: int64
+          description: Index into `schedulers` of the scheduler this action submits.
+    SchedulerPlanEntry:
+      type: object
+      description: A Slurm scheduler to create and the pending jobs to assign to it.
+      required:
+      - scheduler
+      - job_ids
+      properties:
+        job_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+        scheduler:
+          $ref: '#/components/schemas/SlurmSchedulerModel'
+          description: The scheduler to create. `id` is ignored; `workflow_id` is taken from the request path.
     SlurmJobCorrelationModel:
       type: object
       description: |-
@@ -8326,6 +9084,11 @@ components:
         action_config: {}
         action_type:
           type: string
+        error:
+          type:
+          - string
+          - 'null'
+          description: Error reported by the claimer when `state` is `failed`.
         executed:
           type: boolean
           default: false
@@ -8360,6 +9123,14 @@ components:
           type: integer
           format: int64
           default: 1
+        state:
+          type:
+          - string
+          - 'null'
+          description: |-
+            Outcome of the action: `claimed`, `succeeded`, `failed`, or `suppressed`. Null if it was
+            never claimed (or was claimed through a server older than API 1.1.0). Set by the server;
+            ignored on create.
         trigger_count:
           type: integer
           format: int64
@@ -8369,6 +9140,19 @@ components:
         workflow_id:
           type: integer
           format: int64
+    WorkflowActionResultRequest:
+      type: object
+      description: Outcome of a claimed workflow action, reported by the claimer after executing it.
+      required:
+      - success
+      properties:
+        error:
+          type:
+          - string
+          - 'null'
+          description: Why the action failed. Only allowed when `success` is false.
+        success:
+          type: boolean
     WorkflowModel:
       type: object
       required:

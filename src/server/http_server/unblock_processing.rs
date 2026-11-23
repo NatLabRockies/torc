@@ -273,6 +273,25 @@ where
         ));
     }
 
+    // Actions created after this commit (e.g. by apply_scheduler_plan) arm themselves from the
+    // committed job statuses, so the on_jobs_ready check below must skip them or it would count
+    // these jobs twice. This tx holds the write lock, so no action can be created in between.
+    let max_action_id = match sqlx::query_scalar::<_, Option<i64>>(
+        "SELECT MAX(id) FROM workflow_action WHERE workflow_id = ?",
+    )
+    .bind(workflow_id)
+    .fetch_one(&mut *tx)
+    .await
+    {
+        Ok(id) => id.unwrap_or(0),
+        Err(e) => {
+            return Err(database_lock_aware_error(
+                e,
+                "Failed to read max workflow action id",
+            ));
+        }
+    };
+
     if let Err(e) = tx.commit().await {
         debug!(
             "Failed to commit transaction for workflow {}: {}",
@@ -288,6 +307,15 @@ where
         all_ready_job_ids.len()
     );
 
+    // Cancelling the dependents of a failed job can be what completes the workflow. The
+    // completion path checked before these cancellations existed, so check again here.
+    // check_and_trigger_actions only fires actions that have not triggered yet.
+    if workflow_has_failures {
+        server
+            .trigger_workflow_complete_if_done(workflow_id, &EmptyContext::default())
+            .await;
+    }
+
     if !all_ready_job_ids.is_empty() {
         debug!(
             "process_workflow_unblocks: checking on_jobs_ready actions for {} jobs that became ready",
@@ -300,6 +328,7 @@ where
                 workflow_id,
                 "on_jobs_ready",
                 Some(all_ready_job_ids.clone()),
+                Some(max_action_id),
             )
             .await
         {

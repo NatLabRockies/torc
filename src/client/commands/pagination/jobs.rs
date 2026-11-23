@@ -16,6 +16,8 @@ pub struct JobListParams {
     pub workflow_id: i64,
     /// Filter by job status
     pub status: Option<JobStatus>,
+    /// Filter by any of these job statuses (mutually exclusive with `status`)
+    pub statuses: Option<Vec<JobStatus>>,
     /// Filter by file ID that the job needs
     pub needs_file_id: Option<i64>,
     /// Filter by upstream job ID
@@ -36,6 +38,10 @@ pub struct JobListParams {
     /// `origin IS NOT NULL` (failure-handler retries and `spawn_jobs`
     /// children); `Some(false)` returns only originally-declared jobs.
     pub origin_is_set: Option<bool>,
+    /// Restrict to these job IDs. Prefer [`paginate_jobs_by_ids`], which batches them.
+    pub ids: Option<Vec<i64>>,
+    /// Filter by resource requirements ID
+    pub resource_requirements_id: Option<i64>,
 }
 
 impl JobListParams {
@@ -45,6 +51,11 @@ impl JobListParams {
 
     pub fn with_status(mut self, status: JobStatus) -> Self {
         self.status = Some(status);
+        self
+    }
+
+    pub fn with_statuses(mut self, statuses: Vec<JobStatus>) -> Self {
+        self.statuses = Some(statuses);
         self
     }
 
@@ -141,6 +152,9 @@ impl Paginatable for JobModel {
             None, // name
             None, // command
             None, // label
+            params.ids.clone(),
+            params.statuses.clone(),
+            params.resource_requirements_id,
         )?;
 
         Ok(PaginatedResponse {
@@ -189,5 +203,35 @@ pub fn paginate_jobs(
     workflow_id: i64,
     params: JobListParams,
 ) -> Result<Vec<JobModel>, apis::Error<apis::jobs_api::ListJobsError>> {
-    iter_jobs(config, workflow_id, params).collect()
+    let statuses = params.statuses.clone();
+    let mut jobs: Vec<JobModel> =
+        iter_jobs(config, workflow_id, params).collect::<Result<_, _>>()?;
+    // Servers older than API 1.1.0 ignore `statuses` and return every job. Filter here so a
+    // caller that resets or schedules the result never acts on jobs it did not ask for.
+    if let Some(statuses) = statuses {
+        jobs.retain(|j| j.status.is_some_and(|s| statuses.contains(&s)));
+    }
+    Ok(jobs)
+}
+
+/// IDs per request in [`paginate_jobs_by_ids`]: keeps the query string well under
+/// common URL length limits (the server itself accepts up to `MAX_RECORD_TRANSFER_COUNT`).
+const IDS_PER_REQUEST: usize = 1000;
+
+/// Fetch the jobs with these IDs in `workflow_id`, batching the IDs across requests.
+/// IDs that are not in the workflow are absent from the result.
+#[allow(clippy::result_large_err)]
+pub fn paginate_jobs_by_ids(
+    config: &apis::configuration::Configuration,
+    workflow_id: i64,
+    ids: &[i64],
+    params: JobListParams,
+) -> Result<Vec<JobModel>, apis::Error<apis::jobs_api::ListJobsError>> {
+    let mut jobs = Vec::with_capacity(ids.len());
+    for chunk in ids.chunks(IDS_PER_REQUEST) {
+        let mut chunk_params = params.clone();
+        chunk_params.ids = Some(chunk.to_vec());
+        jobs.extend(paginate_jobs(config, workflow_id, chunk_params)?);
+    }
+    Ok(jobs)
 }

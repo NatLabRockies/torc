@@ -157,6 +157,113 @@ function get_workflow_actions(_api::WorkflowActionsApi, response_stream::Channel
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
+const _returntypes_report_action_result_WorkflowActionsApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => WorkflowActionModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("409", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("422", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
+)
+
+function _oacinternal_report_action_result(_api::WorkflowActionsApi, id::Int64, action_id::Int64, workflow_action_result_request::WorkflowActionResultRequest; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_report_action_result_WorkflowActionsApi, "/workflows/{id}/actions/{action_id}/result", [], workflow_action_result_request)
+    OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.path, "action_id", action_id)  # type Int64
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Record the outcome of a claimed action: state becomes succeeded, or failed with the given error. For a persistent action this is the latest outcome. 409 if the action has not been claimed (or was suppressed); 422 if error is set with success = true.
+
+Params:
+- id::Int64 (required)
+- action_id::Int64 (required)
+- workflow_action_result_request::WorkflowActionResultRequest (required)
+
+Return: WorkflowActionModel, OpenAPI.Clients.ApiResponse
+"""
+function report_action_result(_api::WorkflowActionsApi, id::Int64, action_id::Int64, workflow_action_result_request::WorkflowActionResultRequest; _mediaType=nothing)
+    _ctx = _oacinternal_report_action_result(_api, id, action_id, workflow_action_result_request; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function report_action_result(_api::WorkflowActionsApi, response_stream::Channel, id::Int64, action_id::Int64, workflow_action_result_request::WorkflowActionResultRequest; _mediaType=nothing)
+    _ctx = _oacinternal_report_action_result(_api, id, action_id, workflow_action_result_request; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
+const _returntypes_reset_action_WorkflowActionsApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => WorkflowActionModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("409", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
+)
+
+function _oacinternal_reset_action(_api::WorkflowActionsApi, id::Int64, action_id::Int64; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_reset_action_WorkflowActionsApi, "/workflows/{id}/actions/{action_id}/reset", [])
+    OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.path, "action_id", action_id)  # type Int64
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Re-arm an action that is failed, suppressed, or stuck in claimed: clears executed, executed_at, executed_by, state, and error so it can be claimed again. A no-op for an action that was never claimed; 409 for a succeeded action.
+
+Params:
+- id::Int64 (required)
+- action_id::Int64 (required)
+
+Return: WorkflowActionModel, OpenAPI.Clients.ApiResponse
+"""
+function reset_action(_api::WorkflowActionsApi, id::Int64, action_id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_reset_action(_api, id, action_id; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function reset_action(_api::WorkflowActionsApi, response_stream::Channel, id::Int64, action_id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_reset_action(_api, id, action_id; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
+const _returntypes_suppress_action_WorkflowActionsApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => WorkflowActionModel,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("409", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
+)
+
+function _oacinternal_suppress_action(_api::WorkflowActionsApi, id::Int64, action_id::Int64; _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_suppress_action_WorkflowActionsApi, "/workflows/{id}/actions/{action_id}/suppress", [])
+    OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.path, "action_id", action_id)  # type Int64
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? [] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Mark an action suppressed (executed = true, state = suppressed) so it is never claimed, without executing it. Idempotent. A persistent action can be suppressed in any state; a non-persistent action only while unclaimed (409 if it is claimed, succeeded, or failed).
+
+Params:
+- id::Int64 (required)
+- action_id::Int64 (required)
+
+Return: WorkflowActionModel, OpenAPI.Clients.ApiResponse
+"""
+function suppress_action(_api::WorkflowActionsApi, id::Int64, action_id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_suppress_action(_api, id, action_id; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function suppress_action(_api::WorkflowActionsApi, response_stream::Channel, id::Int64, action_id::Int64; _mediaType=nothing)
+    _ctx = _oacinternal_suppress_action(_api, id, action_id; _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
 const _returntypes_update_workflow_action_WorkflowActionsApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => WorkflowActionModel,
     Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
@@ -196,4 +303,7 @@ export create_workflow_action
 export delete_workflow_action
 export get_pending_actions
 export get_workflow_actions
+export report_action_result
+export reset_action
+export suppress_action
 export update_workflow_action

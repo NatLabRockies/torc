@@ -125,8 +125,8 @@ No authorization required
 [[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
 
 # **list_results**
-> list_results(_api::ResultsApi, workflow_id::Int64; job_id=nothing, run_id=nothing, return_code=nothing, status=nothing, compute_node_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, all_runs=nothing, _mediaType=nothing) -> ListResultsResponse, OpenAPI.Clients.ApiResponse <br/>
-> list_results(_api::ResultsApi, response_stream::Channel, workflow_id::Int64; job_id=nothing, run_id=nothing, return_code=nothing, status=nothing, compute_node_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, all_runs=nothing, _mediaType=nothing) -> Channel{ ListResultsResponse }, OpenAPI.Clients.ApiResponse
+> list_results(_api::ResultsApi, workflow_id::Int64; job_id=nothing, run_id=nothing, return_code=nothing, status=nothing, compute_node_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, all_runs=nothing, ids=nothing, statuses=nothing, _mediaType=nothing) -> ListResultsResponse, OpenAPI.Clients.ApiResponse <br/>
+> list_results(_api::ResultsApi, response_stream::Channel, workflow_id::Int64; job_id=nothing, run_id=nothing, return_code=nothing, status=nothing, compute_node_id=nothing, offset=nothing, limit=nothing, sort_by=nothing, reverse_sort=nothing, all_runs=nothing, ids=nothing, statuses=nothing, _mediaType=nothing) -> Channel{ ListResultsResponse }, OpenAPI.Clients.ApiResponse
 
 
 
@@ -151,6 +151,8 @@ Name | Type | Description  | Notes
  **sort_by** | **String** |  | [default to nothing]
  **reverse_sort** | **Bool** |  | [default to nothing]
  **all_runs** | **Bool** |  | [default to nothing]
+ **ids** | [**Vector{Int64}**](Int64.md) | Comma-separated job IDs: restrict to results of these jobs, scoped to &#x60;workflow_id&#x60;. At most &#x60;MAX_RECORD_TRANSFER_COUNT&#x60; IDs; more returns 422. | [default to nothing]
+ **statuses** | [**Vector{JobStatus}**](JobStatus.md) | Comma-separated statuses (&#x60;statuses&#x3D;failed,terminated&#x60;): match any of them. Mutually exclusive with &#x60;status&#x60; (both given returns 422). | [default to nothing]
 
 ### Return type
 
