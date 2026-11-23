@@ -436,7 +436,8 @@ where multiple processes might try to retry the same job.</p>
 <li><code>run_id</code> must match workflow's current run</li>
 <li>Job status must be Running, Failed, Terminated, or PendingFailed</li>
 <li>If the job has a failure handler, <code>attempt_id</code> must be less than the largest <code>max_retries</code> among
-its rules</li>
+its rules. <code>attempt_id</code> starts at 1, so <code>max_retries</code> is the total number of attempts, including
+the first run</li>
 </ol>
 <p>The server enforces the largest limit among the rules, not the limit of the rule that matched,
 because the job runner calls <code>retry_job</code> before <code>complete_job</code>, so the server does not know the exit

@@ -243,6 +243,8 @@ jobs:
 </li>
 <li>If no match or max retries exceeded: job is marked as Failed</li>
 </ol>
+<p><code>attempt_id</code> starts at 1, so <code>max_retries</code> is the total number of attempts, including the first run:
+<code>max_retries: 3</code> runs the job at most 3 times (2 retries).</p>
 <pre class="mermaid">flowchart TD
     fail[&quot;Job Fails/Terminates&lt;br/&gt;(exit code 10)&quot;]
     match{&quot;Matching rule&lt;br/&gt;for exit code?&quot;}

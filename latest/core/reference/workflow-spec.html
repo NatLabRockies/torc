@@ -407,7 +407,7 @@ job reference).</li>
 <tr><td><code>exit_codes</code></td><td>[integer]</td><td><code>[]</code></td><td>Exit codes that trigger this rule</td></tr>
 <tr><td><code>match_all_exit_codes</code></td><td>boolean</td><td><code>false</code></td><td>If true, matches any non-zero exit code</td></tr>
 <tr><td><code>recovery_script</code></td><td>string</td><td>none</td><td>Optional script to run before retrying</td></tr>
-<tr><td><code>max_retries</code></td><td>integer</td><td><code>3</code></td><td>Maximum number of retry attempts</td></tr>
+<tr><td><code>max_retries</code></td><td>integer</td><td><code>3</code></td><td>Total attempts, including the first (<code>3</code> = 2 retries)</td></tr>
 </tbody></table>
 </div>
 <h2 id="slurmschedulerspec"><a class="header" href="#slurmschedulerspec">SlurmSchedulerSpec</a></h2>
