@@ -121,11 +121,11 @@ flowchart TD
     B --> C{Has pending jobs?}
     C -->|No| D[Exit - nothing to do]
     C -->|Yes| E[Build WorkflowGraph from pending jobs]
-    E --> F[Mark existing schedule_nodes actions as executed]
-    F --> G[Group jobs using scheduler_groups]
-    G --> H[Create schedulers for each group]
-    H --> I[Update jobs with scheduler assignments]
-    I --> J[Create on_jobs_ready recovery actions for deferred groups]
+    E --> G[Group jobs using scheduler_groups]
+    G --> F[apply_scheduler_plan: one server transaction]
+    F --> H[Suppress existing schedule_nodes actions]
+    H --> I[Create schedulers and assign jobs]
+    I --> J[Create armed on_jobs_ready recovery actions]
     J --> K{Submit allocations?}
     K -->|Yes| L[Submit Slurm allocations]
     K -->|No| M[Done]
@@ -146,27 +146,7 @@ flowchart TD
     style M fill:#28a745,color:#fff
 ```
 
-### Step 1: Mark Existing Actions as Executed
-
-All existing `schedule_nodes` actions are marked as executed using the `claim_action` API. This
-prevents them from firing again and creating duplicate allocations:
-
-```mermaid
-sequenceDiagram
-    participant R as regenerate
-    participant S as Server
-    participant A as workflow_action table
-
-    R->>S: get_workflow_actions(workflow_id)
-    S-->>R: [action1, action2, ...]
-
-    loop For each schedule_nodes action
-        R->>S: claim_action(action_id)
-        S->>A: UPDATE executed=1, executed_at=NOW()
-    end
-```
-
-### Step 2: Group Jobs Using WorkflowGraph
+### Step 1: Group Jobs Using WorkflowGraph
 
 The system builds a `WorkflowGraph` from pending jobs and uses `scheduler_groups()` to group them by
 `(resource_requirements, has_dependencies)`. This aligns with the behavior of `torc slurm generate`:
@@ -204,10 +184,34 @@ flowchart TD
     style G3 fill:#28a745,color:#fff
 ```
 
-### Step 3: Create Recovery Actions for Deferred Groups
+### Step 2: Apply the Plan on the Server
 
-For groups with `has_dependencies = true`, the system creates `on_jobs_ready` recovery actions.
-These actions:
+Planning stays on the client because it depends on the HPC profile. The client sends the plan in one
+request, `POST /workflows/{id}/apply_scheduler_plan`, and the server applies it in one transaction:
+
+1. **Validate.** Every job must belong to the workflow, be pending (uninitialized, blocked, or
+   ready), and appear in at most one scheduler. Otherwise the server returns 422 and changes
+   nothing, so the existing actions stay in place.
+2. **Suppress.** The workflow's non-recovery, unexecuted `schedule_nodes` actions, persistent ones
+   included, are set to `suppressed` (and `executed`), so they cannot fire again and create
+   duplicate allocations.
+3. **Create.** The schedulers are created and their jobs are assigned with one bulk update.
+4. **Arm.** Each recovery action's `trigger_count` is set from its gating jobs' statuses inside the
+   transaction. An action whose jobs are all ready is Pending and is submitted by `--submit`. The
+   others wait for their jobs to become ready. A gate job that completes between planning and
+   applying is therefore counted.
+
+Any error from the endpoint fails the command. The request is not idempotent, so the client retries
+it only when it cannot have been applied: the connection was refused, or the server reported lock
+contention. If the request was sent but no response arrived, the command fails without retrying and
+asks you to check `torc slurm list` and `torc workflows list-actions` before rerunning, since a
+second apply would create duplicate schedulers and allocations. With `?dry_run=true` the server
+reports the same result and rolls back. `torc slurm regenerate --dry-run` does not call the
+endpoint; the plan alone answers it.
+
+### Step 3: Recovery Actions
+
+Each scheduler gets an `on_jobs_ready` recovery action. These actions:
 
 - Have `is_recovery = true` to mark them as ephemeral
 - Use a `_deferred` suffix in the scheduler name
@@ -293,6 +297,7 @@ The recovery logic is implemented in:
   `watch`, and `workflows sync-status`
 - `src/client/commands/recover.rs`: Main recovery command implementation
 - `src/client/commands/slurm.rs`: `handle_regenerate` function for Slurm scheduler regeneration
+- `src/server/api/schedulers.rs`: `apply_scheduler_plan`, which applies the plan in one transaction
 - `src/client/workflow_graph.rs`: `WorkflowGraph::from_jobs()` and `scheduler_groups()` methods
 - `src/server/api/workflow_actions.rs`: `reset_actions_for_reinitialize` function
 - `migrations/20251225000000_add_is_recovery_to_workflow_action.up.sql`: Schema migration

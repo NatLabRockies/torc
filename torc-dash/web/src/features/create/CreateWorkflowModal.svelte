@@ -1,6 +1,7 @@
 <!--
-  Create-workflow modal: upload a spec file, point at a server-side path, paste a spec, or build one
-  with the wizard. Optional Slurm scheduler generation and initialize-after-create.
+  Create-workflow modal: upload a spec file, point at a server-side path, paste a spec, list
+  commands to run, or build one with the wizard. Optional Slurm scheduler generation (with an
+  allocation-plan preview) and initialize-after-create.
 -->
 <script lang="ts">
   import { highlightByName, prettyJson } from "../../lib/highlight";
@@ -10,7 +11,8 @@
   import Modal from "../../lib/ui/Modal.svelte";
   import SegmentedTabs from "../../lib/ui/SegmentedTabs.svelte";
   import { toast } from "../../lib/ui/toast.svelte";
-  import { formatBytes } from "../../lib/format";
+  import { op } from "../../lib/api/dash";
+  import { errorText, formatBytes } from "../../lib/format";
   import {
     createWorkflow,
     getHpcProfiles,
@@ -23,13 +25,16 @@
   import { STEPS, generateSpec, newWizard } from "./spec";
   import { draft } from "../editor/draft.svelte";
   import ValidationPanel from "./ValidationPanel.svelte";
+  import AllocationPlan, { type Plan } from "./AllocationPlan.svelte";
+  import { commandsSpec } from "./commands";
   import Wizard from "./Wizard.svelte";
 
-  type Source = "upload" | "path" | "inline" | "wizard";
+  type Source = "upload" | "path" | "inline" | "commands" | "wizard";
   const SOURCES: { id: Source; label: string }[] = [
     { id: "upload", label: "Upload file" },
     { id: "path", label: "File path" },
     { id: "inline", label: "Paste spec" },
+    { id: "commands", label: "Commands" },
     { id: "wizard", label: "Wizard" },
   ];
   const FORMATS = [
@@ -47,11 +52,19 @@
   let inline = $state("");
   let inlineFormat = $state("auto");
   let wizard = $state(newWizard());
+  let commands = $state("");
+  let commandsName = $state("");
 
   let initialize = $state(true);
   let profiles = $state<HpcProfiles | null>(null);
   let useSlurm = $state(false);
+  /** HPC profile for Slurm generation: the detected one by default, or any known profile. */
+  let profile = $state<string | null>(null);
   let slurmAccount = $state("");
+  // A plan is shown only while the spec, account, and profile it was computed for are unchanged.
+  let plan = $state<{ plan: Plan; key: string } | null>(null);
+  let planning = $state(false);
+  let planError = $state<string | null>(null);
   let accountError = $state(false);
 
   let busy = $state(false);
@@ -65,7 +78,11 @@
 
   const detectedProfile = $derived(profiles?.detected_profile ?? null);
   const slurmAvailable = $derived(!!profiles?.success && (profiles.profiles?.length ?? 0) > 0);
-  const slurmActive = $derived(useSlurm && !!detectedProfile);
+  // Slurm generation needs resource requirements, which the Commands source doesn't define.
+  const slurmAllowed = $derived(slurmAvailable && source !== "commands");
+  const slurmActive = $derived(slurmAllowed && useSlurm && !!profile);
+  const planKey = $derived(JSON.stringify([specBody(), slurmAccount.trim(), profile]));
+  const shownPlan = $derived(plan?.key === planKey ? plan.plan : null);
   const onLastWizardStep = $derived(source === "wizard" && wizard.step === STEPS.length);
 
   // On open: check HPC profiles (as the legacy showModal did) and focus the first control.
@@ -74,7 +91,10 @@
     getHpcProfiles()
       .then((p) => {
         profiles = p;
-        if (!p.detected_profile) useSlurm = false;
+        if (!profile || !p.profiles?.some((x) => x.name === profile)) {
+          profile = p.detected_profile ?? p.profiles?.[0]?.name ?? null;
+        }
+        if (!profile) useSlurm = false;
       })
       .catch(() => (profiles = null));
     focusFirst();
@@ -82,9 +102,10 @@
 
   // Stale results are misleading once the input changes.
   $effect(() => {
-    void [source, upload, path, inline, inlineFormat];
+    void [source, upload, path, inline, inlineFormat, commands, commandsName];
     report = null;
     createError = null;
+    planError = null;
   });
 
   function onClose() {
@@ -156,12 +177,42 @@
         const ext = inlineFormat === "auto" ? detectFormat(inline) : inlineFormat;
         return { spec: inline, is_file: false, file_extension: ext };
       }
+      case "commands": {
+        const spec = commandsSpec(commands, commandsName);
+        return spec
+          ? { spec: JSON.stringify(spec, null, 2), is_file: false, file_extension: ".json" }
+          : "Enter at least one command";
+      }
       case "wizard":
         return {
           spec: JSON.stringify(generateSpec(wizard), null, 2),
           is_file: false,
           file_extension: ".json",
         };
+    }
+  }
+
+  /** Recommend Slurm allocations for the spec (torc slurm plan-allocations). */
+  async function previewPlan() {
+    if (source === "wizard" && !wizardRef?.ensureValid()) return;
+    const body = specBody();
+    if (typeof body === "string") return toast.info(body);
+    const key = planKey;
+    planning = true;
+    planError = null;
+    try {
+      const result = await op<Plan>("plan-allocations", {
+        ...(body.is_file ? { spec_path: body.spec } : { spec: body.spec, file_extension: body.file_extension }),
+        account: slurmAccount.trim() || undefined,
+        profile,
+        // Live sinfo/squeue only make sense on the cluster the profile describes.
+        offline: profile !== detectedProfile,
+      });
+      plan = { plan: result, key };
+    } catch (e) {
+      if (key === planKey) planError = errorText(e);
+    } finally {
+      planning = false;
     }
   }
 
@@ -192,13 +243,15 @@
     busy = true;
     createError = null;
     try {
-      const slurm = slurmActive ? { account: slurmAccount.trim(), profile: detectedProfile } : null;
+      const slurm = slurmActive ? { account: slurmAccount.trim(), profile } : null;
       const id = await createWorkflow(body, slurm);
       toast.success(id !== null ? `Created workflow ${id}` : "Workflow created");
       // Clear the form for next time.
       upload = null;
       path = "";
       inline = "";
+      commands = "";
+      commandsName = "";
       if (fileInput) fileInput.value = "";
       close();
       app.refresh();
@@ -280,7 +333,7 @@
         tabs={SOURCES}
       />
       <span class="faint hint">
-        <kbd>←</kbd><kbd>→</kbd> or <kbd>1</kbd>–<kbd>4</kbd> switch source
+        <kbd>←</kbd><kbd>→</kbd> or <kbd>1</kbd>–<kbd>{SOURCES.length}</kbd> switch source
       </span>
     </div>
 
@@ -413,8 +466,27 @@
             }}
           ></textarea>
         </div>
+      {:else if source === "commands"}
+        <label class="field">
+          Workflow name
+          <input class="input" bind:value={commandsName} placeholder="commands" autocomplete="off" />
+        </label>
+        <div class="field grow-field">
+          <label for="create-commands">Commands, one per line</label>
+          <textarea
+            id="create-commands"
+            class="input editor"
+            bind:value={commands}
+            spellcheck="false"
+            placeholder={"python train.py --seed 1\npython train.py --seed 2\n# Lines starting with # are skipped"}
+          ></textarea>
+          <span class="hint">
+            Each line becomes an independent job (job_001, job_002, …) with default resources. Use
+            the wizard or a spec for dependencies and resource requirements.
+          </span>
+        </div>
       {:else}
-        <Wizard bind:this={wizardRef} bind:w={wizard} slurm={slurmActive ? { account: slurmAccount, profile: detectedProfile } : null} />
+        <Wizard bind:this={wizardRef} bind:w={wizard} slurm={slurmActive ? { account: slurmAccount, profile } : null} />
       {/if}
     </div>
 
@@ -434,16 +506,25 @@
         <input type="checkbox" bind:checked={initialize} />
         Initialize workflow after creation
       </label>
-      {#if slurmAvailable}
+      {#if slurmAllowed}
         <div class="slurm">
-          <label class="check" class:disabled={!detectedProfile}>
-            <input type="checkbox" bind:checked={useSlurm} disabled={!detectedProfile} />
-            Generate Slurm schedulers
-            {#if detectedProfile}<span class="pill">{detectedProfile}</span>{/if}
-          </label>
+          <div class="row">
+            <label class="check" class:disabled={!profile}>
+              <input type="checkbox" bind:checked={useSlurm} disabled={!profile} />
+              Generate Slurm schedulers for
+            </label>
+            <select class="select sm" bind:value={profile} aria-label="HPC profile">
+              {#each profiles?.profiles ?? [] as p (p.name)}
+                <option value={p.name}>{p.display_name}{p.is_detected ? " (this system)" : ""}</option>
+              {/each}
+            </select>
+          </div>
           {#if !detectedProfile}
-            <span class="faint small">No HPC profile detected on this machine; Slurm generation is unavailable.</span>
-          {:else if useSlurm}
+            <span class="faint small">
+              No HPC system detected here; generation uses the chosen profile's partitions.
+            </span>
+          {/if}
+          {#if useSlurm}
             <label class="field account" class:invalid={accountError && !slurmAccount.trim()}>
               <span>Slurm account <span class="req">*</span></span>
               <input
@@ -459,6 +540,13 @@
                 <span class="hint">Used for all generated job submissions.</span>
               {/if}
             </label>
+            <div class="row">
+              <button type="button" class="btn btn-sm" onclick={previewPlan} disabled={planning}>
+                {#if planning}<span class="spinner"></span>{/if} Preview allocation plan
+              </button>
+              {#if planError}<span class="error-text small">{planError}</span>{/if}
+            </div>
+            {#if shownPlan}<AllocationPlan plan={shownPlan} />{/if}
           {/if}
         </div>
       {/if}
@@ -621,14 +709,6 @@
   }
   .small {
     font-size: 12px;
-  }
-  .pill {
-    padding: 0 8px;
-    border-radius: 999px;
-    background: var(--info-soft);
-    color: var(--info);
-    font-size: 11.5px;
-    font-weight: 500;
   }
   .account {
     max-width: 280px;

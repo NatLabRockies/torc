@@ -6,7 +6,7 @@
   import Badge from "../../lib/ui/Badge.svelte";
   import DataTable, { type Column, type SortState } from "../../lib/ui/DataTable.svelte";
   import Icon from "../../lib/ui/Icon.svelte";
-  import { deleteWorkflows } from "./actions";
+  import { archiveWorkflows, deleteWorkflows } from "./actions";
   import ImportModal from "./ImportModal.svelte";
   import WorkflowActions from "./WorkflowActions.svelte";
 
@@ -53,6 +53,11 @@
     app.accessGroup = groupInput.trim();
   }
 
+  async function bulkArchive(archived: boolean) {
+    await archiveWorkflows([...selected] as number[], archived);
+    selected.clear();
+  }
+
   async function bulkDelete() {
     const deleted = await deleteWorkflows([...selected] as number[]);
     for (const id of deleted) selected.delete(id);
@@ -95,7 +100,7 @@
 {/snippet}
 
 {#snippet actionsCell(w: Workflow)}
-  <WorkflowActions workflowId={w.id!} compact />
+  <WorkflowActions workflowId={w.id!} archived={!!w.is_archived} compact />
 {/snippet}
 
 <div class="page">
@@ -129,6 +134,14 @@
       />
       All users
     </label>
+    <label class="check" title="Include archived workflows">
+      <input
+        type="checkbox"
+        checked={app.showArchived}
+        onchange={(e) => app.setShowArchived(e.currentTarget.checked)}
+      />
+      Archived
+    </label>
     <div class="grow"></div>
     <button class="btn" onclick={() => (importOpen = true)}>
       <Icon name="download" size={14} /> Import
@@ -141,6 +154,10 @@
   {#if selected.size > 0}
     <div class="bulk">
       <strong>{selected.size} selected</strong>
+      <button class="btn btn-sm" onclick={() => bulkArchive(true)}>Archive</button>
+      {#if app.showArchived}
+        <button class="btn btn-sm" onclick={() => bulkArchive(false)}>Unarchive</button>
+      {/if}
       <button class="btn btn-sm btn-danger" onclick={bulkDelete}>
         <Icon name="trash" size={13} /> Delete selected
       </button>

@@ -122,8 +122,6 @@ Navigate to the Jobs tab (`→` then `Tab` if needed) to manage individual jobs:
 | ----------- | ------------------------------------------- |
 | `Enter`     | View job details                            |
 | `l`         | View job logs (stdout/stderr)               |
-| `C`         | Cancel job                                  |
-| `t`         | Terminate job                               |
 | `y`         | Retry failed job                            |
 | `1`/`2`/`3` | Sort by ID / Name / Status (cycles ↓ ↑ off) |
 

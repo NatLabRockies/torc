@@ -533,7 +533,7 @@ pub struct FailureHandlerRuleSpec {
     /// Optional recovery script to run before retrying
     #[serde(skip_serializing_if = "Option::is_none")]
     pub recovery_script: Option<String>,
-    /// Maximum number of retry attempts (defaults to 3)
+    /// Maximum number of attempts, including the first run (defaults to 3, i.e. 2 retries)
     #[serde(default = "FailureHandlerRuleSpec::default_max_retries")]
     pub max_retries: i32,
 }
@@ -3966,7 +3966,7 @@ impl WorkflowSpec {
         // Gate on "declared as a job input OR has st_mtime" rather than just
         // `st_mtime.is_some()`. An input file that doesn't yet exist on disk has
         // st_mtime=None here; if we skipped it, the identifier would be silently
-        // dropped because `initialize_files` later refreshes st_mtime but the
+        // dropped because initialization later refreshes st_mtime but the
         // FileSpec (and its identifier) is no longer in scope at that point. The
         // server-side filter on st_mtime still applies for *whether* init touches
         // the entity at all -- but the pre-created row carries the identifier
@@ -4354,6 +4354,8 @@ impl WorkflowSpec {
                     executed_by: None,
                     persistent: action_spec.persistent.unwrap_or(false),
                     is_recovery: false,
+                    state: None,
+                    error: None,
                 };
 
                 apis::workflow_actions_api::create_workflow_action(
@@ -6959,6 +6961,27 @@ mod tests {
             WorkflowSpec::detect_spec_format("name \"wf\"\njobs {\n  job name=\"a\"\n}"),
             Some("kdl")
         );
+    }
+
+    #[test]
+    fn test_from_spec_file_unknown_extension_falls_back_to_content() {
+        let dir = tempfile::tempdir().unwrap();
+        for (file, content) in [
+            (
+                "wf.spec",
+                r#"{"name": "wf", "jobs": [{"name": "a", "command": "echo"}]}"#,
+            ),
+            (
+                "wf2.spec",
+                "name: wf\njobs:\n  - name: a\n    command: echo\n",
+            ),
+        ] {
+            let path = dir.path().join(file);
+            fs::write(&path, content).unwrap();
+            let spec = WorkflowSpec::from_spec_file(&path).unwrap();
+            assert_eq!(spec.name, "wf");
+            assert_eq!(spec.jobs[0].name, "a");
+        }
     }
 
     #[test]

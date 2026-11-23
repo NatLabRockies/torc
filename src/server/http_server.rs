@@ -833,6 +833,22 @@ impl<C> Server<C> {
             return Err(e);
         }
 
+        // Step 1c: Reject dependency cycles, checked inside this transaction so the async
+        // task path is covered and the transport's preflight check cannot race with a
+        // concurrent dependency update. If another writer commits after this read, the
+        // writes in steps 3-4 fail on the stale snapshot and the transaction rolls back.
+        match jobs_transport::find_dependency_cycle(&mut *tx, id).await {
+            Ok(None) => {}
+            Ok(Some(cycle)) => {
+                let _ = tx.rollback().await;
+                return Err(ApiError(jobs_transport::dependency_cycle_message(&cycle)));
+            }
+            Err(e) => {
+                let _ = tx.rollback().await;
+                return Err(e);
+            }
+        }
+
         // Step 2: Uninitialize blocked jobs (only needed during reinitialization)
         // This is skipped during initial workflow start because Step 3 will set all job statuses anyway.
         // During reinitialization, this ensures jobs transitively blocked by reset jobs are also reset.
@@ -969,7 +985,7 @@ impl<C> Server<C> {
         // Activate on_workflow_start actions (workflow has started with initialization)
         if let Err(e) = self
             .workflow_actions_api
-            .check_and_trigger_actions(id, "on_workflow_start", None)
+            .check_and_trigger_actions(id, "on_workflow_start", None, None)
             .await
         {
             error!(
@@ -1006,7 +1022,7 @@ impl<C> Server<C> {
         // Check if any on_jobs_ready actions should be triggered based on job states
         if let Err(e) = self
             .workflow_actions_api
-            .check_and_trigger_actions(id, "on_jobs_ready", None)
+            .check_and_trigger_actions(id, "on_jobs_ready", None, None)
             .await
         {
             error!(
@@ -1413,6 +1429,37 @@ where
             .await
     }
 
+    async fn suppress_action(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        context: &C,
+    ) -> Result<SuppressActionResponse, ApiError> {
+        self.transport_suppress_action(workflow_id, action_id, context)
+            .await
+    }
+
+    async fn report_action_result(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        body: models::WorkflowActionResultRequest,
+        context: &C,
+    ) -> Result<ReportActionResultResponse, ApiError> {
+        self.transport_report_action_result(workflow_id, action_id, body, context)
+            .await
+    }
+
+    async fn reset_action(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        context: &C,
+    ) -> Result<ResetActionResponse, ApiError> {
+        self.transport_reset_action(workflow_id, action_id, context)
+            .await
+    }
+
     async fn update_workflow_action(
         &self,
         workflow_id: i64,
@@ -1681,7 +1728,7 @@ where
     async fn list_jobs(
         &self,
         workflow_id: i64,
-        status: Option<models::JobStatus>,
+        status: Option<Vec<models::JobStatus>>,
         needs_file_id: Option<i64>,
         upstream_job_id: Option<i64>,
         offset: Option<i64>,
@@ -1694,6 +1741,8 @@ where
         name: Option<String>,
         command: Option<String>,
         labels: Option<String>,
+        ids: Option<Vec<i64>>,
+        resource_requirements_id: Option<i64>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError> {
         self.transport_list_jobs(
@@ -1711,6 +1760,8 @@ where
             name,
             command,
             labels,
+            ids,
+            resource_requirements_id,
             context,
         )
         .await
@@ -1841,13 +1892,14 @@ where
         job_id: Option<i64>,
         run_id: Option<i64>,
         return_code: Option<i64>,
-        status: Option<models::JobStatus>,
+        status: Option<Vec<models::JobStatus>>,
         compute_node_id: Option<i64>,
         offset: Option<i64>,
         limit: Option<i64>,
         sort_by: Option<String>,
         reverse_sort: Option<bool>,
         all_runs: Option<bool>,
+        ids: Option<Vec<i64>>,
         context: &C,
     ) -> Result<ListResultsResponse, ApiError> {
         self.transport_list_results(
@@ -1862,6 +1914,7 @@ where
             sort_by,
             reverse_sort,
             all_runs,
+            ids,
             context,
         )
         .await
@@ -2270,6 +2323,32 @@ where
         self.transport_update_file(id, body, context).await
     }
 
+    /// Compare a client's file stat snapshot with stored mtimes and reset affected jobs.
+    #[instrument(level = "debug", skip(self, body, context), fields(workflow_id = id, dry_run = ?dry_run))]
+    async fn update_file_stats(
+        &self,
+        id: i64,
+        body: models::FileStatsRequest,
+        dry_run: Option<bool>,
+        context: &C,
+    ) -> Result<UpdateFileStatsResponse, ApiError> {
+        self.transport_update_file_stats(id, body, dry_run, context)
+            .await
+    }
+
+    /// Apply a client-computed Slurm scheduler plan in one transaction.
+    #[instrument(level = "debug", skip(self, body, context), fields(workflow_id = id, dry_run = ?dry_run))]
+    async fn apply_scheduler_plan(
+        &self,
+        id: i64,
+        body: models::ApplySchedulerPlanRequest,
+        dry_run: Option<bool>,
+        context: &C,
+    ) -> Result<ApplySchedulerPlanResponse, ApiError> {
+        self.transport_apply_scheduler_plan(id, body, dry_run, context)
+            .await
+    }
+
     /// Update a job.
     async fn update_job(
         &self,
@@ -2489,15 +2568,18 @@ where
     }
 
     /// Reset status for jobs to uninitialized.
-    /// If failed_only is true, only jobs with a failed result will be reset.
-    /// If failed_only is false, all jobs will be reset.
+    /// With a body, only the selected jobs are reset (see `ResetJobStatusRequest`).
+    /// Otherwise, if failed_only is true, only jobs with a failed result will be reset,
+    /// and if it is false, all jobs will be reset.
     async fn reset_job_status(
         &self,
         id: i64,
         failed_only: Option<bool>,
+        force: Option<bool>,
+        body: Option<models::ResetJobStatusRequest>,
         context: &C,
     ) -> Result<ResetJobStatusResponse, ApiError> {
-        self.transport_reset_job_status(id, failed_only, context)
+        self.transport_reset_job_status(id, failed_only, force, body, context)
             .await
     }
 
@@ -2584,11 +2666,9 @@ where
         &self,
         id: i64,
         run_id: i64,
-        max_retries: i32,
         context: &C,
     ) -> Result<RetryJobResponse, ApiError> {
-        self.transport_retry_job(id, run_id, max_retries, context)
-            .await
+        self.transport_retry_job(id, run_id, context).await
     }
 
     /// Get ready jobs that fit within the specified resource constraints.

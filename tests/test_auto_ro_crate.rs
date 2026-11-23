@@ -718,6 +718,9 @@ fn test_auto_ro_crate_diamond_workflow(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs");
 
@@ -1005,5 +1008,55 @@ fn test_auto_ro_crate_second_run_replaces_entities(start_server: &ServerProcess)
     assert_eq!(
         output_meta_run2["prov:wasAttributedTo"]["@id"], "#torc-run-id-1",
         "Output file should be attributed to the second workflow run"
+    );
+}
+
+/// Output files get st_mtime once their job completes. Re-initializing must not treat
+/// them as inputs (st_mtime is otherwise the server's input marker).
+#[rstest]
+fn test_auto_ro_crate_initialize_skips_output_files_with_mtime(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let (workflow_id, input_file_id, output_file_id, _job_id) =
+        create_ro_crate_enabled_workflow(config, temp_dir.path());
+    // Initialization clears st_mtime for files that do not exist, so the input must be on disk.
+    std::fs::write(temp_dir.path().join("input.json"), r#"{"data": "input"}"#).unwrap();
+
+    // Simulate a previous run: the runner recorded the output's mtime.
+    let mut output = apis::files_api::get_file(config, output_file_id).unwrap();
+    output.st_mtime = Some(1704153600.0);
+    apis::files_api::update_file(config, output_file_id, output).unwrap();
+
+    // WorkflowManager::initialize exercises both the server-side upsert (during
+    // initialize_jobs) and the CLI's own input-entity pass.
+    let workflow =
+        apis::workflows_api::get_workflow(config, workflow_id).expect("Failed to get workflow");
+    WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    )
+    .initialize(true)
+    .expect("Failed to initialize workflow");
+
+    let items = apis::ro_crate_api::list_ro_crate_entities(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap()
+    .items;
+    assert!(
+        items.iter().any(|e| e.file_id == Some(input_file_id)),
+        "input file should get an entity"
+    );
+    assert!(
+        !items.iter().any(|e| e.file_id == Some(output_file_id)),
+        "output file must not be recorded as an input"
     );
 }

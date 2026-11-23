@@ -4,13 +4,16 @@ use rmcp::{
     ErrorData as McpError,
     model::{CallToolResult, Resource, ResourceContents},
 };
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
 
 use crate::client::apis;
 use crate::client::apis::configuration::Configuration;
-use crate::client::commands::pagination::jobs::{JobListParams, paginate_jobs};
+use crate::client::commands::pagination::jobs::{
+    JobListParams, paginate_jobs, paginate_jobs_by_ids,
+};
 use crate::client::commands::pagination::resource_requirements::{
     ResourceRequirementsListParams, paginate_resource_requirements,
 };
@@ -20,7 +23,7 @@ use crate::client::commands::reports::{
 };
 use crate::client::log_paths;
 use crate::client::resource_correction::format_memory_bytes_short;
-use crate::models::{JobStatus, ResourceRequirementsModel};
+use crate::models::{JobModel, JobStatus, ResourceRequirementsModel};
 
 /// Helper to create an internal error
 fn internal_error(msg: String) -> McpError {
@@ -371,6 +374,11 @@ pub fn update_job_resources(
             "memory": updated.memory,
             "runtime": updated.runtime,
         },
+        "shared_record_note": format!(
+            "Updated resource_requirements_id={} ('{}'). Every job assigned to this record \
+             now uses these values, not only job_id={}.",
+            req_id, updated.name, job_id
+        ),
         "next_steps": {
             "note": "Resource updated. To restart the workflow after fixing all issues, \
                     use the recover_workflow tool (recommended) or manual commands.",
@@ -617,7 +625,8 @@ pub fn create_workflow(
             // Step 2: Create the workflow from the generated spec
             let mut cmd = torc_command();
             cmd.args(["-f", "json", "create"]);
-            cmd.args(["--user", user]);
+            // `torc create` has no --user flag; it reads the owner from TORC_USERNAME.
+            cmd.env("TORC_USERNAME", user);
 
             cmd.arg(&slurm_spec_path);
 
@@ -740,12 +749,11 @@ pub fn get_execution_plan(
         let workflow = apis::workflows_api::get_workflow(config, workflow_id)
             .map_err(|e| internal_error(format!("Failed to get workflow: {}", e)))?;
 
-        let jobs = paginate_jobs(
-            config,
-            workflow_id,
-            JobListParams::new().with_include_relationships(true),
-        )
-        .map_err(|e| internal_error(format!("Failed to list jobs: {}", e)))?;
+        let jobs = paginate_jobs(config, workflow_id, JobListParams::new())
+            .map_err(|e| internal_error(format!("Failed to list jobs: {}", e)))?;
+        let dependencies =
+            crate::client::execution_plan::fetch_dependency_edges(config, workflow_id)
+                .map_err(|e| internal_error(format!("Failed to list job dependencies: {}", e)))?;
 
         let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
             .map_err(|e| internal_error(format!("Failed to get workflow actions: {}", e)))?;
@@ -764,6 +772,7 @@ pub fn get_execution_plan(
         let plan = ExecutionPlan::from_database_models(
             &workflow,
             &jobs,
+            &dependencies,
             &actions,
             &slurm_schedulers,
             &resource_requirements,
@@ -1558,21 +1567,27 @@ pub fn classify_and_resolve_failures(
     let mut jobs_to_retry: Vec<i64> = Vec::new();
     let mut jobs_to_fail: Vec<i64> = Vec::new();
 
+    // Fetch all classified jobs in one batch; the filter is scoped to this workflow.
+    let job_ids: Vec<i64> = classifications.iter().map(|c| c.job_id).collect();
+    let jobs: HashMap<i64, JobModel> =
+        paginate_jobs_by_ids(config, workflow_id, &job_ids, JobListParams::new())
+            .map_err(|e| internal_error(format!("Failed to get jobs: {}", e)))?
+            .into_iter()
+            .filter_map(|j| j.id.map(|id| (id, j)))
+            .collect();
+
     for classification in &classifications {
         let job_id = classification.job_id;
         let action = classification.action.to_lowercase();
 
-        // Validate the job exists and is in pending_failed status
-        let job = match apis::jobs_api::get_job(config, job_id) {
-            Ok(j) => j,
-            Err(e) => {
-                results.push(serde_json::json!({
-                    "job_id": job_id,
-                    "status": "error",
-                    "message": format!("Failed to get job: {}", e),
-                }));
-                continue;
-            }
+        // Validate the job exists in this workflow and is in pending_failed status
+        let Some(job) = jobs.get(&job_id) else {
+            results.push(serde_json::json!({
+                "job_id": job_id,
+                "status": "error",
+                "message": format!("Job not found in workflow {}", workflow_id),
+            }));
+            continue;
         };
 
         if job.status != Some(JobStatus::PendingFailed) {
@@ -1592,6 +1607,29 @@ pub fn classify_and_resolve_failures(
                 "message": format!("Invalid action '{}'. Must be 'retry' or 'fail'.", action),
             }));
             continue;
+        }
+
+        // Refuse a retry the server would reject (failure handler limit) before touching
+        // resource requirements (so a refused retry leaves them unchanged) and in dry runs too.
+        if action == "retry"
+            // get_job may report a missing handler as id 0.
+            && let Some(handler_id) = job.failure_handler_id.filter(|&id| id > 0)
+        {
+            let refusal = apis::failure_handlers_api::get_failure_handler(config, handler_id)
+                .map_err(|e| e.to_string())
+                .and_then(|h| {
+                    crate::models::retry_limit_refusal(&h.rules, job.attempt_id.unwrap_or(1))
+                        .map_err(|e| e.to_string())
+                })
+                .unwrap_or_else(|e| Some(format!("Failed to check failure handler limit: {}", e)));
+            if let Some(message) = refusal {
+                results.push(serde_json::json!({
+                    "job_id": job_id,
+                    "status": "error",
+                    "message": message,
+                }));
+                continue;
+            }
         }
 
         if dry_run {
@@ -1667,83 +1705,37 @@ pub fn classify_and_resolve_failures(
         }
     }
 
-    // Apply the status changes using CLI commands (they handle the complex state transitions)
+    // Apply the status changes through the API.
     if !dry_run && (!jobs_to_retry.is_empty() || !jobs_to_fail.is_empty()) {
-        // For jobs to retry: reset to ready and bump attempt_id
-        for job_id in &jobs_to_retry {
-            // Use torc jobs update to reset to ready
-            let output = torc_command()
-                .args(["jobs", "update", &job_id.to_string(), "--status", "ready"])
-                .output();
+        let run_id = workflow.run_id.unwrap_or(1);
+        let mut outcomes: Vec<(i64, Result<(), String>)> = Vec::new();
 
-            match output {
-                Ok(out) if out.status.success() => {
-                    for r in &mut results {
-                        if r.get("job_id").and_then(|v| v.as_i64()) == Some(*job_id) {
-                            r["status"] = serde_json::json!("applied");
-                        }
-                    }
-                }
-                Ok(out) => {
-                    let stderr = String::from_utf8_lossy(&out.stderr);
-                    for r in &mut results {
-                        if r.get("job_id").and_then(|v| v.as_i64()) == Some(*job_id) {
-                            r["status"] = serde_json::json!("error");
-                            r["message"] = serde_json::json!(format!(
-                                "Failed to reset job: {}",
-                                stderr.trim()
-                            ));
-                        }
-                    }
-                }
-                Err(e) => {
-                    for r in &mut results {
-                        if r.get("job_id").and_then(|v| v.as_i64()) == Some(*job_id) {
-                            r["status"] = serde_json::json!("error");
-                            r["message"] = serde_json::json!(format!(
-                                "Failed to spawn 'torc' command: {}. Is torc in PATH?",
-                                e
-                            ));
-                        }
-                    }
-                }
-            }
+        // Retry: reset to ready and bump attempt_id. The server counts this attempt against the
+        // job's failure handler limit, if it has one.
+        for &job_id in &jobs_to_retry {
+            let outcome = apis::jobs_api::retry_job(config, job_id, run_id, Some(i32::MAX))
+                .map(|_| ())
+                .map_err(|e| format!("Failed to retry job: {}", e));
+            outcomes.push((job_id, outcome));
         }
 
-        // For jobs to fail: set to failed status
-        for job_id in &jobs_to_fail {
-            let output = torc_command()
-                .args(["jobs", "update", &job_id.to_string(), "--status", "failed"])
-                .output();
+        // Fail: move to failed so downstream cancellation fires.
+        for &job_id in &jobs_to_fail {
+            let outcome =
+                apis::jobs_api::manage_status_change(config, job_id, JobStatus::Failed, run_id)
+                    .map(|_| ())
+                    .map_err(|e| format!("Failed to mark as failed: {}", e));
+            outcomes.push((job_id, outcome));
+        }
 
-            match output {
-                Ok(out) if out.status.success() => {
-                    for r in &mut results {
-                        if r.get("job_id").and_then(|v| v.as_i64()) == Some(*job_id) {
-                            r["status"] = serde_json::json!("applied");
-                        }
-                    }
-                }
-                Ok(out) => {
-                    let stderr = String::from_utf8_lossy(&out.stderr);
-                    for r in &mut results {
-                        if r.get("job_id").and_then(|v| v.as_i64()) == Some(*job_id) {
+        for (job_id, outcome) in outcomes {
+            for r in &mut results {
+                if r.get("job_id").and_then(|v| v.as_i64()) == Some(job_id) {
+                    match &outcome {
+                        Ok(()) => r["status"] = serde_json::json!("applied"),
+                        Err(msg) => {
                             r["status"] = serde_json::json!("error");
-                            r["message"] = serde_json::json!(format!(
-                                "Failed to mark as failed: {}",
-                                stderr.trim()
-                            ));
-                        }
-                    }
-                }
-                Err(e) => {
-                    for r in &mut results {
-                        if r.get("job_id").and_then(|v| v.as_i64()) == Some(*job_id) {
-                            r["status"] = serde_json::json!("error");
-                            r["message"] = serde_json::json!(format!(
-                                "Failed to spawn 'torc' command: {}. Is torc in PATH?",
-                                e
-                            ));
+                            r["message"] = serde_json::json!(msg);
                         }
                     }
                 }
@@ -2035,6 +2027,43 @@ pub fn regroup_job_resources(
                 errors.push(format!("job_id={} appears in multiple groups", job_id));
             }
         }
+
+        // A group gets one new resource requirements record, so a value it omits is taken
+        // from the jobs' current records. That only works if those jobs agree.
+        let current = |job_id: &i64| {
+            job_map
+                .get(job_id)
+                .and_then(|j| j.resource_requirements_id)
+                .and_then(|id| rr_map.get(&id))
+        };
+        if group.num_gpus.is_none() {
+            let values: std::collections::BTreeSet<i64> = group
+                .job_ids
+                .iter()
+                .map(|id| current(id).map(|rr| rr.num_gpus).unwrap_or(0))
+                .collect();
+            if values.len() > 1 {
+                errors.push(format!(
+                    "Group index={} omits num_gpus but its jobs currently use different values \
+                     {:?}; specify num_gpus",
+                    i, values
+                ));
+            }
+        }
+        if group.num_nodes.is_none() {
+            let values: std::collections::BTreeSet<i64> = group
+                .job_ids
+                .iter()
+                .map(|id| current(id).map(|rr| rr.num_nodes).unwrap_or(1))
+                .collect();
+            if values.len() > 1 {
+                errors.push(format!(
+                    "Group index={} omits num_nodes but its jobs currently use different values \
+                     {:?}; specify num_nodes",
+                    i, values
+                ));
+            }
+        }
     }
 
     if !errors.is_empty() {
@@ -2198,6 +2227,19 @@ pub fn regroup_job_resources(
                     ));
                 }
             }
+        }
+
+        // Don't leave behind a record that no job uses.
+        if jobs_updated.is_empty() {
+            if let Err(e) =
+                apis::resource_requirements_api::delete_resource_requirement(config, new_rr_id)
+            {
+                apply_errors.push(format!(
+                    "Failed to delete unused RR id={} for group '{}': {}",
+                    new_rr_id, group_name, e
+                ));
+            }
+            continue;
         }
 
         applied_groups.push(serde_json::json!({

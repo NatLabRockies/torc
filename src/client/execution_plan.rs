@@ -11,12 +11,49 @@
 //!
 //! Built on top of WorkflowGraph for consistent dependency analysis.
 
+use crate::client::apis::configuration::Configuration;
+use crate::client::commands::pagination::{
+    JobDependencyListParams, JobFileRelationshipListParams, JobUserDataRelationshipListParams,
+    paginate_job_dependencies, paginate_job_file_relationships,
+    paginate_job_user_data_relationships,
+};
 use crate::client::workflow_graph::WorkflowGraph;
 use crate::client::workflow_spec::{WorkflowActionSpec, WorkflowSpec};
 use crate::models::{JobModel, WorkflowActionModel, WorkflowModel};
 use regex::Regex;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
+
+/// Fetch a workflow's `(job_id, depends_on_job_id)` edges: stored job dependencies plus
+/// the edges implied by files and user data (consumer depends on producer). The implied
+/// edges matter before initialization, when only explicit dependencies are stored.
+pub fn fetch_dependency_edges(
+    config: &Configuration,
+    workflow_id: i64,
+) -> Result<Vec<(i64, i64)>, Box<dyn std::error::Error>> {
+    let mut edges: Vec<(i64, i64)> =
+        paginate_job_dependencies(config, workflow_id, JobDependencyListParams::new())?
+            .into_iter()
+            .map(|d| (d.job_id, d.depends_on_job_id))
+            .collect();
+    for r in
+        paginate_job_file_relationships(config, workflow_id, JobFileRelationshipListParams::new())?
+    {
+        if let (Some(consumer), Some(producer)) = (r.consumer_job_id, r.producer_job_id) {
+            edges.push((consumer, producer));
+        }
+    }
+    for r in paginate_job_user_data_relationships(
+        config,
+        workflow_id,
+        JobUserDataRelationshipListParams::new(),
+    )? {
+        if let (Some(consumer), Some(producer)) = (r.consumer_job_id, r.producer_job_id) {
+            edges.push((consumer, producer));
+        }
+    }
+    Ok(edges)
+}
 
 /// Represents a scheduler allocation in the execution plan
 #[derive(Debug, Clone, Serialize)]
@@ -254,16 +291,20 @@ impl ExecutionPlan {
         })
     }
 
-    /// Build an execution plan from database models (workflow, jobs, actions, slurm_schedulers)
+    /// Build an execution plan from database models (workflow, jobs, actions, slurm_schedulers).
+    ///
+    /// `dependencies` are `(job_id, depends_on_job_id)` edges; get them with
+    /// [`fetch_dependency_edges`].
     pub fn from_database_models(
         _workflow: &WorkflowModel,
         jobs: &[JobModel],
+        dependencies: &[(i64, i64)],
         actions: &[WorkflowActionModel],
         slurm_schedulers: &[crate::models::SlurmSchedulerModel],
         resource_requirements: &[crate::models::ResourceRequirementsModel],
     ) -> Result<Self, Box<dyn std::error::Error>> {
         // Build the workflow graph from database models
-        let graph = WorkflowGraph::from_jobs(jobs, resource_requirements)?;
+        let graph = WorkflowGraph::from_jobs_and_edges(jobs, resource_requirements, dependencies)?;
 
         // Build scheduler ID to name map
         let scheduler_id_to_name: HashMap<i64, String> = slurm_schedulers

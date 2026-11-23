@@ -21,6 +21,18 @@ where
             .create_slurm_scheduler(body, context)
             .await
     }
+    pub(super) async fn transport_apply_scheduler_plan(
+        &self,
+        id: i64,
+        body: models::ApplySchedulerPlanRequest,
+        dry_run: Option<bool>,
+        context: &C,
+    ) -> Result<ApplySchedulerPlanResponse, ApiError> {
+        authorize_workflow!(self, id, context, ApplySchedulerPlanResponse);
+        self.schedulers_api
+            .apply_scheduler_plan(id, body, dry_run.unwrap_or(false), context)
+            .await
+    }
     pub(super) async fn transport_delete_slurm_schedulers(
         &self,
         workflow_id: i64,

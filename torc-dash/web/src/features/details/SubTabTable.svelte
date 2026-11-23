@@ -36,6 +36,7 @@
     loading,
     sort = $bindable(),
     onSlurmLogs,
+    onEdit,
     selectedJobs,
     onCellFilter,
   }: {
@@ -45,6 +46,12 @@
     loading: boolean;
     sort: SortState;
     onSlurmLogs: (schedulerId: number) => void;
+    /** Clicking a resource requirement or Slurm scheduler row edits it. */
+    onEdit: (
+      target:
+        | { kind: "resources"; record: ResourceRequirements }
+        | { kind: "scheduler"; record: SlurmScheduler },
+    ) => void;
     /** Selection for the Jobs table. */
     selectedJobs: SvelteSet<string | number>;
     onCellFilter: (key: string, value: string | number | boolean) => void;
@@ -317,6 +324,7 @@
     {onCellFilter}
     {loading}
     bind:sort
+    onRowClick={(r) => onEdit({ kind: "resources", record: r })}
     empty="No resource requirements in this workflow"
   />
 {:else if tab === "schedulers"}
@@ -328,6 +336,7 @@
     {onCellFilter}
     {loading}
     bind:sort
+    onRowClick={(s) => onEdit({ kind: "scheduler", record: s })}
     empty="No Slurm schedulers configured for this workflow"
   />
 {:else if tab === "compute_nodes"}

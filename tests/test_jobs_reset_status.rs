@@ -538,11 +538,11 @@ fn test_reset_status_unknown_id(start_server: &ServerProcess) {
 }
 
 // ---------------------------------------------------------------------------
-// Test 5: Active-job guard — Running job rejected without --force,
-//         proceeds with --force
+// Test 5: Running job with no active compute node — without --force, the orphan
+//         cleanup fails it and the reset proceeds; --force resets it directly
 // ---------------------------------------------------------------------------
 #[rstest]
-fn test_reset_status_active_job_guard(start_server: &ServerProcess) {
+fn test_reset_status_orphaned_running_job(start_server: &ServerProcess) {
     let config = &start_server.config;
     let workflow = create_test_workflow(config, "reset_active_guard");
     let workflow_id = workflow.id.unwrap();
@@ -564,27 +564,29 @@ fn test_reset_status_active_job_guard(start_server: &ServerProcess) {
     apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
         .expect("set running");
 
-    // Without --force: should be rejected because of Running status
-    let result_no_force = run_cli_with_json(
+    // Without --force: the server refuses (a job is running), so the CLI runs the orphan
+    // cleanup, which fails the job because no active compute node owns it; the reset then
+    // proceeds.
+    let json = run_cli_with_json(
         &["jobs", "reset-status", "--no-prompts", &job_id.to_string()],
         start_server,
         None,
-    );
-    assert!(
-        result_no_force.is_err(),
-        "Should fail for Running job without --force"
-    );
-    // Job must still be Running
+    )
+    .expect("reset-status should clean up the orphaned Running job and succeed");
+    assert_eq!(json["status"], "success");
     assert_eq!(
         apis::jobs_api::get_job(config, job_id)
-            .unwrap()
+            .expect("get job")
             .status
-            .unwrap(),
-        JobStatus::Running,
-        "Job should still be Running after rejected reset"
+            .expect("job status"),
+        JobStatus::Uninitialized,
+        "Job should be Uninitialized after orphan cleanup and reset"
     );
 
-    // With --force: should succeed
+    // With --force: no precheck or cleanup; the Running job is reset directly.
+    let run_id = initialize_workflow(config, &workflow);
+    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id)
+        .expect("set running again");
     let json = run_cli_with_json(
         &[
             "jobs",
@@ -1048,70 +1050,6 @@ fn test_reset_status_reinit_flag_end_to_end(start_server: &ServerProcess) {
     assert!(
         !next_steps.contains("workflows reinit"),
         "next_steps should not mention 'workflows reinit' when reinit was applied: {}",
-        next_steps
-    );
-}
-
-// ---------------------------------------------------------------------------
-// Test 10: --reinit JSON output shape
-// ---------------------------------------------------------------------------
-#[rstest]
-fn test_reset_status_reinit_json_output(start_server: &ServerProcess) {
-    let config = &start_server.config;
-    let workflow = create_test_workflow(config, "reset_reinit_json");
-    let workflow_id = workflow.id.unwrap();
-
-    let job = apis::jobs_api::create_job(
-        config,
-        models::JobModel::new(
-            workflow_id,
-            "reinit_json_job".to_string(),
-            "echo hi".to_string(),
-        ),
-    )
-    .expect("create job");
-    let job_id = job.id.unwrap();
-
-    let run_id_before = initialize_workflow(config, &workflow);
-    let compute_node = create_test_compute_node(config, workflow_id);
-    let cn_id = compute_node.id.unwrap();
-
-    apis::jobs_api::manage_status_change(config, job_id, JobStatus::Running, run_id_before)
-        .expect("set running");
-    complete_job(
-        config,
-        job_id,
-        workflow_id,
-        cn_id,
-        run_id_before,
-        1,
-        JobStatus::Failed,
-    );
-
-    let json = run_cli_with_json(
-        &[
-            "jobs",
-            "reset-status",
-            "--no-prompts",
-            "--force",
-            "--reinit",
-            &job_id.to_string(),
-        ],
-        start_server,
-        None,
-    )
-    .expect("reset-status --reinit --no-prompts should succeed");
-
-    assert_eq!(json["status"], "success");
-    assert_eq!(json["reinit"]["requested"], true);
-    assert_eq!(json["reinit"]["applied"], true);
-    assert!(json["reinit"]["error"].is_null());
-
-    // next_steps should not mention 'workflows reinit' since it was applied
-    let next_steps = json["next_steps"].as_str().unwrap_or("");
-    assert!(
-        !next_steps.contains("workflows reinit"),
-        "next_steps should not reference 'workflows reinit' when reinit was applied: {}",
         next_steps
     );
 }

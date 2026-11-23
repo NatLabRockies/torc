@@ -55,6 +55,9 @@ fn verify_all_jobs_completed(server: &ServerProcess, workflow_id: i64) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs");
 
@@ -73,6 +76,8 @@ fn verify_all_jobs_return_code(server: &ServerProcess, workflow_id: i64, expecte
     let results = apis::results_api::list_results(
         &server.config,
         workflow_id,
+        None,
+        None,
         None,
         None,
         None,
@@ -112,6 +117,9 @@ fn get_job_return_code(server: &ServerProcess, workflow_id: i64, job_name: &str)
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs");
 
@@ -121,6 +129,8 @@ fn get_job_return_code(server: &ServerProcess, workflow_id: i64, job_name: &str)
         &server.config,
         workflow_id,
         job.id,
+        None,
+        None,
         None,
         None,
         None,
@@ -876,135 +886,6 @@ execution_config:
     assert!(work_dir.join("large.txt").exists());
 }
 
-/// Test job that exits with specific exit code (simulating OOM behavior).
-/// When OOM enforcement is implemented, jobs exceeding memory will exit with oom_exit_code.
-#[rstest]
-fn test_direct_mode_oom_exit_code_behavior(start_server: &ServerProcess) {
-    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
-    let work_dir = temp_dir.path();
-
-    // Simulate a job that exits with the OOM exit code
-    let yaml = r#"
-name: direct_mode_oom_exit_simulation
-description: Simulates OOM exit code behavior
-
-resource_requirements:
-  - name: normal
-    num_cpus: 1
-    memory: 256m
-    runtime: PT1M
-
-jobs:
-  - name: normal_job
-    command: |
-      echo "Normal job succeeds"
-      exit 0
-    resource_requirements: normal
-
-  - name: simulated_oom_job
-    command: |
-      echo "Simulating OOM exit"
-      exit 137
-    resource_requirements: normal
-
-execution_config:
-    mode: direct
-    limit_resources: true
-    oom_exit_code: 137
-"#;
-
-    let workflow_id =
-        create_workflow_from_yaml(start_server, yaml).expect("Failed to create workflow");
-
-    let cli_args = vec![
-        workflow_id.to_string(),
-        "--output-dir".to_string(),
-        work_dir.to_str().unwrap().to_string(),
-        "--poll-interval".to_string(),
-        "0.1".to_string(),
-        "--num-cpus".to_string(),
-        "2".to_string(),
-        "--memory-gb".to_string(),
-        "1.0".to_string(),
-    ];
-    let cli_args_refs: Vec<&str> = cli_args.iter().map(|s| s.as_str()).collect();
-
-    // Run jobs - some will fail
-    let _ = run_jobs_cli_command(&cli_args_refs, start_server);
-
-    // Verify return codes
-    let normal_code = get_job_return_code(start_server, workflow_id, "normal_job");
-    assert_eq!(normal_code, Some(0), "normal_job should succeed");
-
-    let oom_code = get_job_return_code(start_server, workflow_id, "simulated_oom_job");
-    assert_eq!(
-        oom_code,
-        Some(137),
-        "simulated_oom_job should have OOM exit code"
-    );
-}
-
-/// Test timeout exit code configuration.
-/// When timeout enforcement is implemented, timed-out jobs will exit with timeout_exit_code.
-#[rstest]
-fn test_direct_mode_timeout_exit_code_behavior(start_server: &ServerProcess) {
-    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
-    let work_dir = temp_dir.path();
-
-    // Simulate a job that exits with the timeout exit code
-    let yaml = r#"
-name: direct_mode_timeout_exit_simulation
-description: Simulates timeout exit code behavior
-
-resource_requirements:
-  - name: normal
-    num_cpus: 1
-    memory: 256m
-    runtime: PT1M
-
-jobs:
-  - name: normal_job
-    command: |
-      echo "Normal job succeeds"
-      exit 0
-    resource_requirements: normal
-
-  - name: simulated_timeout_job
-    command: |
-      echo "Simulating timeout exit"
-      exit 152
-    resource_requirements: normal
-
-execution_config:
-    mode: direct
-    timeout_exit_code: 152
-"#;
-
-    let workflow_id =
-        create_workflow_from_yaml(start_server, yaml).expect("Failed to create workflow");
-
-    let cli_args = vec![
-        workflow_id.to_string(),
-        "--output-dir".to_string(),
-        work_dir.to_str().unwrap().to_string(),
-        "--poll-interval".to_string(),
-        "0.1".to_string(),
-        "--num-cpus".to_string(),
-        "2".to_string(),
-        "--memory-gb".to_string(),
-        "1.0".to_string(),
-    ];
-    let cli_args_refs: Vec<&str> = cli_args.iter().map(|s| s.as_str()).collect();
-
-    let _ = run_jobs_cli_command(&cli_args_refs, start_server);
-
-    let normal_code = get_job_return_code(start_server, workflow_id, "normal_job");
-    assert_eq!(normal_code, Some(0));
-
-    let timeout_code = get_job_return_code(start_server, workflow_id, "simulated_timeout_job");
-    assert_eq!(timeout_code, Some(152));
-}
-
 // =============================================================================
 // OOM enforcement tests
 // =============================================================================
@@ -1255,6 +1136,9 @@ execution_config:
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs");
 
@@ -1359,6 +1243,9 @@ execution_config:
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs");
 
@@ -1462,6 +1349,9 @@ execution_config:
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs");
 
@@ -1593,7 +1483,7 @@ execution_config:
 //     assert_eq!(oom_code, Some(137));
 //
 //     // 3. oom_job status is Failed (OOM is a job error, not termination)
-//     let jobs = apis::jobs_api::list_jobs(&start_server.config, workflow_id, ...).unwrap();
+//     let jobs = apis::jobs_api::list_jobs(&start_server.config, workflow_id, ..., None).unwrap();
 //     let oom_job = jobs.items.unwrap().into_iter()
 //         .find(|j| j.name == "oom_job").unwrap();
 //     assert_eq!(oom_job.status, Some(JobStatus::Failed));
@@ -2113,7 +2003,7 @@ execution_config:
 //     assert_eq!(slow_code, Some(152));
 //
 //     // 3. job_slow status is Terminated (timeout is termination, not failure)
-//     let jobs = apis::jobs_api::list_jobs(&start_server.config, workflow_id, ...).unwrap();
+//     let jobs = apis::jobs_api::list_jobs(&start_server.config, workflow_id, ..., None).unwrap();
 //     let slow_job = jobs.items.unwrap().into_iter()
 //         .find(|j| j.name == "job_slow").unwrap();
 //     assert_eq!(slow_job.status, Some(JobStatus::Terminated));

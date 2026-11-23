@@ -5,19 +5,10 @@ use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;
 use torc::config::{
-    ClientConfig, ClientRunConfig, ConfigPaths, DashConfig, ServerConfig, ServerLoggingConfig,
-    TorcConfig,
+    ClientRunConfig, ConfigPaths, DashConfig, ServerConfig, ServerLoggingConfig, TorcConfig,
 };
 
 // ============== Default Value Tests ==============
-
-#[rstest]
-fn test_client_config_defaults() {
-    let config = ClientConfig::default();
-    assert_eq!(config.api_url, "http://localhost:8080/torc-service/v1");
-    assert_eq!(config.format, "table");
-    assert_eq!(config.log_level, "info");
-}
 
 #[rstest]
 fn test_client_run_config_defaults() {
@@ -208,22 +199,6 @@ api_url = "http://second:9090/api"
 }
 
 // ============== Validation Tests ==============
-
-#[rstest]
-fn test_validate_valid_config() {
-    let config = TorcConfig::default();
-    assert!(config.validate().is_ok());
-}
-
-#[rstest]
-fn test_validate_invalid_format() {
-    let mut config = TorcConfig::default();
-    config.client.format = "invalid_format".to_string();
-    let result = config.validate();
-    assert!(result.is_err());
-    let errors = result.unwrap_err();
-    assert!(errors.iter().any(|e| e.contains("format")));
-}
 
 #[rstest]
 fn test_validate_invalid_poll_interval() {

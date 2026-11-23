@@ -108,6 +108,18 @@ where
             .list_required_existing_files(id, context)
             .await
     }
+    pub(super) async fn transport_update_file_stats(
+        &self,
+        id: i64,
+        body: models::FileStatsRequest,
+        dry_run: Option<bool>,
+        context: &C,
+    ) -> Result<UpdateFileStatsResponse, ApiError> {
+        authorize_workflow!(self, id, context, UpdateFileStatsResponse);
+        self.files_api
+            .update_file_stats(id, body, dry_run.unwrap_or(false), context)
+            .await
+    }
     pub(super) async fn transport_update_file(
         &self,
         id: i64,

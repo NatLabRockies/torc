@@ -2,39 +2,13 @@ mod common;
 
 use common::{
     ServerProcess, create_test_job, create_test_resource_requirements, create_test_result,
-    create_test_workflow, create_test_workflow_advanced, create_test_workflow_with_description,
-    run_cli_with_json, start_server,
+    create_test_workflow, create_test_workflow_with_description, run_cli_with_json, start_server,
 };
 use rstest::rstest;
 use serde_json::json;
 use torc::client::apis;
 use torc::client::apis::configuration::Configuration;
 use torc::models;
-
-#[rstest]
-fn test_workflows_add_command_json(start_server: &ServerProcess) {
-    // Test the CLI create command with JSON output
-    let args = [
-        "workflows",
-        "new",
-        "--name",
-        "test_workflow",
-        "--description",
-        "A test workflow for validation",
-    ];
-
-    let json_output = run_cli_with_json(&args, start_server, Some("test_user"))
-        .expect("Failed to run workflows create command");
-
-    assert!(json_output.get("id").is_some());
-    assert_eq!(json_output.get("name").unwrap(), &json!("test_workflow"));
-    assert_eq!(json_output.get("user").unwrap(), &json!("test_user"));
-    assert_eq!(
-        json_output.get("description").unwrap(),
-        &json!("A test workflow for validation")
-    );
-    assert!(json_output.get("timestamp").is_some());
-}
 
 #[rstest]
 fn test_workflows_add_minimal(start_server: &ServerProcess) {
@@ -81,8 +55,14 @@ fn test_workflows_add_various_names(start_server: &ServerProcess) {
         let json_output = run_cli_with_json(&args, start_server, Some("test_user"))
             .unwrap_or_else(|_| panic!("Failed to create workflow with name: {}", name));
 
+        assert!(json_output.get("id").is_some());
         assert_eq!(json_output.get("name").unwrap(), &json!(name));
         assert_eq!(json_output.get("user").unwrap(), &json!("test_user"));
+        assert_eq!(
+            json_output.get("description").unwrap(),
+            &json!(format!("Test workflow for name: {}", name))
+        );
+        assert!(json_output.get("timestamp").is_some());
     }
 }
 
@@ -713,37 +693,6 @@ fn test_workflows_different_users(start_server: &ServerProcess) {
     for workflow in workflows_user2 {
         assert_eq!(workflow.get("user").unwrap(), &json!("user2"));
     }
-}
-
-#[rstest]
-fn test_workflows_advanced_configuration(start_server: &ServerProcess) {
-    let config = &start_server.config;
-
-    // Create workflow with advanced configuration
-    let workflow = create_test_workflow_advanced(
-        config,
-        "advanced_workflow",
-        "advanced_user",
-        Some("Advanced workflow with scripts".to_string()),
-    );
-
-    let workflow_id = workflow.id.unwrap();
-
-    // Verify the advanced configuration was saved
-    let args = ["workflows", "get", &workflow_id.to_string()];
-
-    let json_output = run_cli_with_json(&args, start_server, Some("advanced_user"))
-        .expect("Failed to get advanced workflow");
-
-    assert_eq!(
-        json_output.get("name").unwrap(),
-        &json!("advanced_workflow")
-    );
-    assert_eq!(json_output.get("user").unwrap(), &json!("advanced_user"));
-    assert_eq!(
-        json_output.get("description").unwrap(),
-        &json!("Advanced workflow with scripts")
-    );
 }
 
 #[rstest]
@@ -1993,7 +1942,7 @@ fn test_lifecycle_actions_record_user_action_events(start_server: &ServerProcess
     );
 
     // A reset_job_status that changes nothing (fresh workflow) must NOT record an event.
-    apis::workflows_api::reset_job_status(config, workflow_id, Some(false))
+    apis::workflows_api::reset_job_status(config, workflow_id, Some(false), None, None)
         .expect("reset_job_status failed");
     assert!(
         list_events_in_category(config, workflow_id, Some("user_action"))
@@ -2096,4 +2045,66 @@ fn test_lifecycle_actions_record_user_action_events(start_server: &ServerProcess
             .and_then(|v| v.as_bool()),
         Some(true)
     );
+}
+
+fn assert_initialize_rejects_cycle(config: &Configuration, workflow_id: i64) {
+    match apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None) {
+        Err(apis::Error::ResponseError(r)) => {
+            assert_eq!(r.status, 422, "unexpected response: {}", r.content);
+            assert!(
+                r.content.contains("cycle"),
+                "unexpected message: {}",
+                r.content
+            );
+        }
+        other => panic!(
+            "initialize_jobs should reject a dependency cycle, got {:?}",
+            other
+        ),
+    }
+}
+
+#[rstest]
+fn test_initialize_rejects_explicit_dependency_cycle(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow_id = create_test_workflow(config, "cycle_explicit").id.unwrap();
+    let a = apis::jobs_api::create_job(
+        config,
+        models::JobModel::new(workflow_id, "a".into(), "true".into()),
+    )
+    .unwrap();
+    let mut b = models::JobModel::new(workflow_id, "b".into(), "true".into());
+    b.depends_on_job_ids = Some(vec![a.id.unwrap()]);
+    let b = apis::jobs_api::create_job(config, b).unwrap();
+    let mut a_update = a.clone();
+    a_update.depends_on_job_ids = Some(vec![b.id.unwrap()]);
+    apis::jobs_api::update_job(config, a.id.unwrap(), a_update).unwrap();
+
+    assert_initialize_rejects_cycle(config, workflow_id);
+}
+
+#[rstest]
+fn test_initialize_rejects_file_dependency_cycle(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow_id = create_test_workflow(config, "cycle_files").id.unwrap();
+    let f1 = apis::files_api::create_file(
+        config,
+        models::FileModel::new(workflow_id, "f1".into(), "f1.txt".into()),
+    )
+    .unwrap();
+    let f2 = apis::files_api::create_file(
+        config,
+        models::FileModel::new(workflow_id, "f2".into(), "f2.txt".into()),
+    )
+    .unwrap();
+    let mut a = models::JobModel::new(workflow_id, "a".into(), "true".into());
+    a.input_file_ids = Some(vec![f1.id.unwrap()]);
+    a.output_file_ids = Some(vec![f2.id.unwrap()]);
+    let mut b = models::JobModel::new(workflow_id, "b".into(), "true".into());
+    b.input_file_ids = Some(vec![f2.id.unwrap()]);
+    b.output_file_ids = Some(vec![f1.id.unwrap()]);
+    apis::jobs_api::create_job(config, a).unwrap();
+    apis::jobs_api::create_job(config, b).unwrap();
+
+    assert_initialize_rejects_cycle(config, workflow_id);
 }

@@ -6,30 +6,36 @@
 
     JobCompletionEntry(;
         job_id=nothing,
+        output_files=nothing,
         result=nothing,
         run_id=nothing,
+        slurm_stats=nothing,
         status=nothing,
     )
 
     - job_id::Int64
+    - output_files::Vector{OutputFileStat} : Modification times of the job&#39;s output files, recorded when the job finished. Applied in the same transaction as the completion, and only if it is accepted. A &#x60;file_id&#x60; that is not an output file of this job is skipped; the completion is still applied.
     - result::ResultModel
     - run_id::Int64
+    - slurm_stats::SlurmStatsModel : Slurm accounting stats for the job step. Stored only if the completion is accepted. Stats whose &#x60;workflow_id&#x60;, &#x60;job_id&#x60;, &#x60;run_id&#x60;, or &#x60;attempt_id&#x60; do not match the completion are skipped; the completion is still applied.
     - status::JobStatus
 """
 Base.@kwdef mutable struct JobCompletionEntry <: OpenAPI.APIModel
     job_id::Union{Nothing, Int64} = nothing
+    output_files::Union{Nothing, Vector} = nothing # spec type: Union{ Nothing, Vector{OutputFileStat} }
     result = nothing # spec type: Union{ Nothing, ResultModel }
     run_id::Union{Nothing, Int64} = nothing
+    slurm_stats = nothing # spec type: Union{ Nothing, SlurmStatsModel }
     status = nothing # spec type: Union{ Nothing, JobStatus }
 
-    function JobCompletionEntry(job_id, result, run_id, status, )
-        o = new(job_id, result, run_id, status, )
+    function JobCompletionEntry(job_id, output_files, result, run_id, slurm_stats, status, )
+        o = new(job_id, output_files, result, run_id, slurm_stats, status, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type JobCompletionEntry
 
-const _property_types_JobCompletionEntry = Dict{Symbol,String}(Symbol("job_id")=>"Int64", Symbol("result")=>"ResultModel", Symbol("run_id")=>"Int64", Symbol("status")=>"JobStatus", )
+const _property_types_JobCompletionEntry = Dict{Symbol,String}(Symbol("job_id")=>"Int64", Symbol("output_files")=>"Vector{OutputFileStat}", Symbol("result")=>"ResultModel", Symbol("run_id")=>"Int64", Symbol("slurm_stats")=>"SlurmStatsModel", Symbol("status")=>"JobStatus", )
 OpenAPI.property_type(::Type{ JobCompletionEntry }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_JobCompletionEntry[name]))}
 
 function OpenAPI.check_required(o::JobCompletionEntry)
@@ -42,8 +48,10 @@ end
 
 function OpenAPI.validate_properties(o::JobCompletionEntry)
     OpenAPI.validate_property(JobCompletionEntry, Symbol("job_id"), o.job_id)
+    OpenAPI.validate_property(JobCompletionEntry, Symbol("output_files"), o.output_files)
     OpenAPI.validate_property(JobCompletionEntry, Symbol("result"), o.result)
     OpenAPI.validate_property(JobCompletionEntry, Symbol("run_id"), o.run_id)
+    OpenAPI.validate_property(JobCompletionEntry, Symbol("slurm_stats"), o.slurm_stats)
     OpenAPI.validate_property(JobCompletionEntry, Symbol("status"), o.status)
 end
 
@@ -54,8 +62,10 @@ function OpenAPI.validate_property(::Type{ JobCompletionEntry }, name::Symbol, v
     end
 
 
+
     if name === Symbol("run_id")
         OpenAPI.validate_param(name, "JobCompletionEntry", :format, val, "int64")
     end
+
 
 end

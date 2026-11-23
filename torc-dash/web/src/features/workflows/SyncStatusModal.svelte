@@ -21,7 +21,16 @@
   };
   type Response = { success: boolean; data?: SyncData; error?: string };
 
-  let { workflowId, onclose }: { workflowId: number; onclose: () => void } = $props();
+  let {
+    workflowId,
+    retry,
+    onclose,
+  }: {
+    workflowId: number;
+    /** Offered after cleanup, when this dialog was opened because (re)initialize was blocked. */
+    retry?: { label: string; run: () => unknown };
+    onclose: () => void;
+  } = $props();
 
   let open = $state(true);
   let phase = $state<"loading" | "preview" | "applying" | "done" | "error">("loading");
@@ -50,7 +59,7 @@
       phase = "done";
       toast.success("Sync status complete");
       app.refresh();
-      setTimeout(() => (open = false), 3000);
+      if (!retry) setTimeout(() => (open = false), 3000);
     } catch (e) {
       error = `Sync failed: ${errorText(e)}`;
       phase = "error";
@@ -61,7 +70,7 @@
   const tone = (n: number, bad: "danger" | "warning") => (n > 0 ? bad : "success");
 </script>
 
-<Modal bind:open title="Sync status · workflow {workflowId}" size="lg" {onclose}>
+<Modal bind:open title="Sync status · workflow {workflowId}" size="xl" {onclose}>
   {#if phase === "loading" || phase === "applying"}
     <div class="empty">
       <span class="spinner"></span>
@@ -124,6 +133,10 @@
     </button>
     {#if phase === "preview" && hasOrphans}
       <button class="btn btn-primary" onclick={apply}>Apply cleanup</button>
+    {:else if phase === "done" && retry}
+      <button class="btn btn-primary" onclick={() => (retry.run(), (open = false))}>
+        {retry.label}
+      </button>
     {/if}
   {/snippet}
 </Modal>

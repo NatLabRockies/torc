@@ -18,34 +18,109 @@ const RESOURCE_CLAIM_ORDER_BY: &str = "\
 /// Detect a cycle in a directed graph given as adjacency lists (node -> deps).
 /// Used to reject self-referential `spawn_jobs` batches.
 fn has_cycle(adjacency: &std::collections::HashMap<&str, Vec<&str>>) -> bool {
+    find_cycle(adjacency).is_some()
+}
+
+/// Return the nodes of one cycle in a directed graph (node -> deps), if any.
+/// Iterative DFS so long dependency chains cannot overflow the stack.
+fn find_cycle<T>(adjacency: &std::collections::HashMap<T, Vec<T>>) -> Option<Vec<T>>
+where
+    T: Copy + Eq + std::hash::Hash + Ord,
+{
     #[derive(Clone, Copy, PartialEq)]
     enum Mark {
         Visiting,
         Done,
     }
-    fn dfs<'a>(
-        node: &'a str,
-        adjacency: &std::collections::HashMap<&'a str, Vec<&'a str>>,
-        marks: &mut std::collections::HashMap<&'a str, Mark>,
-    ) -> bool {
-        match marks.get(node) {
-            Some(Mark::Visiting) => return true,
-            Some(Mark::Done) => return false,
-            None => {}
+    let mut marks: std::collections::HashMap<T, Mark> = std::collections::HashMap::new();
+    let mut starts: Vec<T> = adjacency.keys().copied().collect();
+    starts.sort();
+    for start in starts {
+        if marks.contains_key(&start) {
+            continue;
         }
-        marks.insert(node, Mark::Visiting);
-        for next in adjacency.get(node).map(|v| v.as_slice()).unwrap_or(&[]) {
-            if dfs(next, adjacency, marks) {
-                return true;
+        marks.insert(start, Mark::Visiting);
+        // (node, index of the next dependency to visit); the stack is the current path.
+        let mut stack: Vec<(T, usize)> = vec![(start, 0)];
+        while let Some(&(node, idx)) = stack.last() {
+            let deps = adjacency.get(&node).map(|v| v.as_slice()).unwrap_or(&[]);
+            if idx == deps.len() {
+                marks.insert(node, Mark::Done);
+                stack.pop();
+                continue;
+            }
+            if let Some(top) = stack.last_mut() {
+                top.1 += 1;
+            }
+            let next = deps[idx];
+            match marks.get(&next) {
+                Some(Mark::Visiting) => {
+                    let pos = stack.iter().position(|(n, _)| *n == next).unwrap_or(0);
+                    return Some(stack[pos..].iter().map(|(n, _)| *n).collect());
+                }
+                Some(Mark::Done) => {}
+                None => {
+                    marks.insert(next, Mark::Visiting);
+                    stack.push((next, 0));
+                }
             }
         }
-        marks.insert(node, Mark::Done);
-        false
     }
-    let mut marks: std::collections::HashMap<&str, Mark> = std::collections::HashMap::new();
-    adjacency
-        .keys()
-        .any(|node| dfs(node, adjacency, &mut marks))
+    None
+}
+
+/// Find a cycle in the workflow's job dependency graph, combining explicit dependencies
+/// with the edges `initialize_jobs` derives from files and user_data. Takes any executor so
+/// it can run inside the initialization transaction.
+pub(super) async fn find_dependency_cycle<'e, E>(
+    executor: E,
+    workflow_id: i64,
+) -> Result<Option<Vec<i64>>, ApiError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
+    let edges: Vec<(i64, i64)> = sqlx::query_as(
+        r#"
+        SELECT job_id, depends_on_job_id FROM job_depends_on WHERE workflow_id = $1
+        UNION
+        SELECT i.job_id, o.job_id
+        FROM job_input_file i
+        JOIN job_output_file o ON i.file_id = o.file_id
+        WHERE i.workflow_id = $1
+        UNION
+        SELECT i.job_id, o.job_id
+        FROM job_input_user_data i
+        JOIN job_output_user_data o ON i.user_data_id = o.user_data_id
+        JOIN job j ON i.job_id = j.id
+        WHERE j.workflow_id = $1
+        "#,
+    )
+    .bind(workflow_id)
+    .fetch_all(executor)
+    .await
+    .map_err(|e| {
+        crate::server::api::database_error_with_msg(e, "Failed to load job dependencies")
+    })?;
+
+    let mut adjacency: std::collections::HashMap<i64, Vec<i64>> = std::collections::HashMap::new();
+    for (job_id, depends_on) in edges {
+        adjacency.entry(job_id).or_default().push(depends_on);
+    }
+    Ok(find_cycle(&adjacency))
+}
+
+/// Error message for a dependency cycle, e.g. "... cycle (job_id depends on job_id): 3 -> 5 -> 3".
+pub(super) fn dependency_cycle_message(cycle: &[i64]) -> String {
+    let path = cycle
+        .iter()
+        .chain(cycle.first())
+        .map(|job_id| job_id.to_string())
+        .collect::<Vec<_>>()
+        .join(" -> ");
+    format!(
+        "Job dependency graph contains a cycle (job_id depends on job_id): {}",
+        path
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -1039,6 +1114,16 @@ where
         );
         authorize_workflow!(self, id, context, InitializeJobsResponse);
 
+        // Reject dependency cycles (explicit, file-derived, or user_data-derived): jobs in a
+        // cycle would stay blocked forever and the workflow would never complete.
+        // initialize_jobs_core re-checks inside its transaction; this preflight gives the
+        // common case an immediate 422.
+        if let Some(cycle) = find_dependency_cycle(self.pool.as_ref(), id).await? {
+            return Ok(InitializeJobsResponse::UnprocessableContentErrorResponse(
+                message_error_response(dependency_cycle_message(&cycle)),
+            ));
+        }
+
         let username = username_from_context(context);
 
         if async_.unwrap_or(false) {
@@ -1114,7 +1199,7 @@ where
     pub(super) async fn transport_list_jobs(
         &self,
         workflow_id: i64,
-        status: Option<models::JobStatus>,
+        status: Option<Vec<models::JobStatus>>,
         needs_file_id: Option<i64>,
         upstream_job_id: Option<i64>,
         offset: Option<i64>,
@@ -1127,6 +1212,8 @@ where
         name: Option<String>,
         command: Option<String>,
         labels: Option<String>,
+        ids: Option<Vec<i64>>,
+        resource_requirements_id: Option<i64>,
         context: &C,
     ) -> Result<ListJobsResponse, ApiError> {
         let (offset, limit) = authorize_workflow_and_paginate!(
@@ -1153,6 +1240,8 @@ where
                 name,
                 command,
                 labels,
+                ids,
+                resource_requirements_id,
                 context,
             )
             .await
@@ -1272,13 +1361,10 @@ where
         &self,
         id: i64,
         run_id: i64,
-        max_retries: i32,
         context: &C,
     ) -> Result<RetryJobResponse, ApiError> {
         authorize_job!(self, id, context, RetryJobResponse);
-        self.jobs_api
-            .retry_job(id, run_id, max_retries, context)
-            .await
+        self.jobs_api.retry_job(id, run_id, context).await
     }
 
     pub(super) async fn transport_delete_job(
@@ -1294,40 +1380,55 @@ where
         &self,
         id: i64,
         failed_only: Option<bool>,
+        force: Option<bool>,
+        body: Option<models::ResetJobStatusRequest>,
         context: &C,
     ) -> Result<ResetJobStatusResponse, ApiError> {
         log_call!(
             info,
             context,
-            "reset_job_status(workflow_id={}, failed_only={:?})",
+            // Only the job id count: a selective reset can carry ~100k ids.
+            "reset_job_status(workflow_id={}, failed_only={:?}, force={:?}, job_ids={:?}, \
+             statuses={:?}, dry_run={:?})",
             id,
             failed_only,
+            force,
+            body.as_ref().and_then(|b| b.job_ids.as_ref()).map(Vec::len),
+            body.as_ref().and_then(|b| b.statuses.as_ref()),
+            body.as_ref().and_then(|b| b.dry_run),
         );
 
         authorize_workflow!(self, id, context, ResetJobStatusResponse);
 
         let failed_only_value = failed_only.unwrap_or(false);
-        let result = self
-            .jobs_api
-            .reset_job_status(id, failed_only_value, context)
-            .await?;
+        let result = match body {
+            Some(body) => {
+                self.jobs_api
+                    .reset_selected_jobs(id, body, force.unwrap_or(false))
+                    .await?
+            }
+            None => {
+                self.jobs_api
+                    .reset_job_status(id, failed_only_value, context)
+                    .await?
+            }
+        };
 
         // Skip no-op resets (e.g. the pre-step of initializing a fresh workflow) so they don't
         // show up as user actions.
         if let ResetJobStatusResponse::SuccessfulResponse(ref response) = result
             && response.updated_count > 0
         {
-            self.record_user_action_event(
-                id,
-                "reset_job_status",
-                serde_json::json!({
-                    "workflow_id": id,
-                    "failed_only": failed_only_value,
-                    "updated_count": response.updated_count,
-                }),
-                context,
-            )
-            .await;
+            let mut data = serde_json::json!({
+                "workflow_id": id,
+                "failed_only": failed_only_value,
+                "updated_count": response.updated_count,
+            });
+            if let Some(ref reset) = response.reset {
+                data["job_ids"] = serde_json::json!(reset);
+            }
+            self.record_user_action_event(id, "reset_job_status", data, context)
+                .await;
         }
 
         Ok(result)
@@ -1348,21 +1449,6 @@ where
             status,
             run_id,
         );
-
-        if status.is_complete() {
-            error!(
-                "manage_status_change: cannot set completion status '{}' for job_id={}. Use complete_job instead.",
-                status, id
-            );
-            return Ok(
-                ManageStatusChangeResponse::UnprocessableContentErrorResponse(
-                    message_error_response(format!(
-                        "Cannot set completion status '{}' via manage_status_change. Use complete_job API instead.",
-                        status
-                    )),
-                ),
-            );
-        }
 
         authorize_job!(self, id, context, ManageStatusChangeResponse);
 
@@ -1399,6 +1485,51 @@ where
                     message_error_response(e),
                 ),
             );
+        }
+
+        // Completion statuses go through complete_job, which records the result. The one
+        // exception is resolving a PendingFailed job to Failed (its result already exists),
+        // when AI classification decides the failure is permanent.
+        if status.is_complete() {
+            if current_status != models::JobStatus::PendingFailed
+                || status != models::JobStatus::Failed
+            {
+                error!(
+                    "manage_status_change: cannot set completion status '{}' for job_id={}. Use complete_job instead.",
+                    status, id
+                );
+                return Ok(
+                    ManageStatusChangeResponse::UnprocessableContentErrorResponse(
+                        message_error_response(format!(
+                            "Cannot set completion status '{}' via manage_status_change. Use complete_job API instead.",
+                            status
+                        )),
+                    ),
+                );
+            }
+            job.status = Some(status);
+            self.manage_job_status_change(&job, run_id).await?;
+            // The original complete_job already counted this job for on_jobs_complete, so
+            // only broadcast the new status and check whether the workflow is now complete.
+            self.event_broadcaster.broadcast(BroadcastEvent {
+                workflow_id: job.workflow_id,
+                timestamp: chrono::Utc::now().timestamp_millis(),
+                event_type: format!("job_{}", status.to_string().to_lowercase()),
+                severity: if status == models::JobStatus::Failed {
+                    models::EventSeverity::Error
+                } else {
+                    models::EventSeverity::Warning
+                },
+                data: serde_json::json!({
+                    "job_id": id,
+                    "job_name": job.name,
+                    "status": status.to_string(),
+                    "previous_status": current_status.to_string(),
+                }),
+            });
+            self.trigger_workflow_complete_if_done(job.workflow_id, context)
+                .await;
+            return Ok(ManageStatusChangeResponse::SuccessfulResponse(job));
         }
 
         job.status = Some(status);
@@ -1662,7 +1793,18 @@ where
             ))
         })?;
         match self
-            .apply_job_completion_state_tx(&mut tx, None, id, status, run_id, result)
+            .apply_job_completion_state_tx(
+                &mut tx,
+                None,
+                models::JobCompletionEntry {
+                    job_id: id,
+                    status,
+                    run_id,
+                    result,
+                    output_files: None,
+                    slurm_stats: None,
+                },
+            )
             .await
         {
             Ok(completion) => {
@@ -1713,11 +1855,16 @@ where
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
         expected_workflow_id: Option<i64>,
-        id: i64,
-        status: models::JobStatus,
-        run_id: i64,
-        result: models::ResultModel,
+        entry: models::JobCompletionEntry,
     ) -> Result<CompletedJobRecord, CompletionMutationError> {
+        let models::JobCompletionEntry {
+            job_id: id,
+            status,
+            run_id,
+            result,
+            output_files,
+            slurm_stats,
+        } = entry;
         if !status.is_terminal() {
             return Err(CompletionMutationError::Transport(ApiError(format!(
                 "Status '{}' is not a terminal status for job completion",
@@ -1777,7 +1924,9 @@ where
             )));
         }
 
-        if current_status.is_complete() {
+        // A pending_failed job awaits AI classification and is resolved only through
+        // manage_status_change or retry_job; a completion here would bypass that.
+        if current_status.is_complete() || current_status == models::JobStatus::PendingFailed {
             return Err(CompletionMutationError::Response(Box::new(
                 CompleteJobResponse::UnprocessableContentErrorResponse(message_error_response(
                     format!(
@@ -1953,6 +2102,96 @@ where
             }
         }
 
+        // The completion is accepted: record what the runner observed in the same transaction.
+        // Invalid metadata is skipped, never written, and never costs the completion: a
+        // file_id must be an output of this job in its workflow (enforced by the WHERE
+        // clause), and the stats must identify this job, run, and attempt.
+        for file in output_files.iter().flatten() {
+            let updated = sqlx::query!(
+                r#"
+                UPDATE file SET st_mtime = ?
+                WHERE id = ? AND workflow_id = ?
+                  AND EXISTS (SELECT 1 FROM job_output_file WHERE job_id = ? AND file_id = file.id)
+                "#,
+                file.st_mtime,
+                file.file_id,
+                job_workflow_id,
+                id
+            )
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| {
+                CompletionMutationError::Transport(database_lock_aware_error(
+                    e,
+                    "Failed to update output file st_mtime",
+                ))
+            })?;
+            if updated.rows_affected() == 0 {
+                log::warn!(
+                    "Skipping st_mtime for file_id={}: not an output file of the job \
+                     workflow_id={} job_id={}",
+                    file.file_id,
+                    job_workflow_id,
+                    id
+                );
+            }
+        }
+        let slurm_stats = slurm_stats.filter(|stats| {
+            let valid = stats.workflow_id == job_workflow_id
+                && stats.job_id == id
+                && stats.run_id == run_id
+                && stats.attempt_id == attempt_id;
+            if !valid {
+                log::warn!(
+                    "Skipping slurm_stats (workflow_id={} job_id={} run_id={} attempt_id={}) \
+                     that do not match the completion workflow_id={} job_id={} run_id={} \
+                     attempt_id={}",
+                    stats.workflow_id,
+                    stats.job_id,
+                    stats.run_id,
+                    stats.attempt_id,
+                    job_workflow_id,
+                    id,
+                    run_id,
+                    attempt_id
+                );
+            }
+            valid
+        });
+        if let Some(stats) = slurm_stats {
+            // REPLACE: a stale row for the same (job, run, attempt) must not abort the batch.
+            sqlx::query!(
+                r#"
+                INSERT OR REPLACE INTO slurm_stats
+                (workflow_id, job_id, run_id, attempt_id,
+                 slurm_job_id,
+                 max_rss_bytes, max_vm_size_bytes,
+                 max_disk_read_bytes, max_disk_write_bytes,
+                 ave_cpu_seconds, node_list)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                "#,
+                stats.workflow_id,
+                stats.job_id,
+                stats.run_id,
+                stats.attempt_id,
+                stats.slurm_job_id,
+                stats.max_rss_bytes,
+                stats.max_vm_size_bytes,
+                stats.max_disk_read_bytes,
+                stats.max_disk_write_bytes,
+                stats.ave_cpu_seconds,
+                stats.node_list,
+            )
+            .execute(&mut **tx)
+            .await
+            .map_err(|e| {
+                CompletionMutationError::Transport(database_lock_aware_error(
+                    e,
+                    "Failed to store slurm_stats",
+                ))
+            })?;
+        }
+
         // Construct a JobModel for the completion record from the row we already fetched
         // through `tx`. Relationships and optional metadata are not needed by downstream
         // consumers on the batch path (finalize_completed_jobs only reads `name`); leaving
@@ -2045,6 +2284,7 @@ where
                 workflow_id,
                 "on_jobs_complete",
                 Some(completed_job_ids.clone()),
+                None,
             )
             .await
         {
@@ -2054,38 +2294,8 @@ where
             );
         }
 
-        match self
-            .workflows_api
-            .is_workflow_complete(workflow_id, context)
-            .await
-        {
-            Ok(response) => {
-                if let IsWorkflowCompleteResponse::SuccessfulResponse(completion_status) = response
-                    && completion_status.is_complete
-                {
-                    debug!(
-                        "Workflow {} is complete, triggering on_workflow_complete actions",
-                        workflow_id
-                    );
-                    if let Err(e) = self
-                        .workflow_actions_api
-                        .check_and_trigger_actions(workflow_id, "on_workflow_complete", None)
-                        .await
-                    {
-                        error!(
-                            "Failed to check_and_trigger_actions for on_workflow_complete: {}",
-                            e
-                        );
-                    }
-                }
-            }
-            Err(e) => {
-                error!(
-                    "Failed to check if workflow {} is complete: {}",
-                    workflow_id, e
-                );
-            }
-        }
+        self.trigger_workflow_complete_if_done(workflow_id, context)
+            .await;
     }
 
     pub(super) async fn transport_batch_complete_jobs(
@@ -2118,14 +2328,7 @@ where
         for entry in body.completions {
             let job_id = entry.job_id;
             match self
-                .apply_job_completion_state_tx(
-                    &mut tx,
-                    Some(workflow_id),
-                    job_id,
-                    entry.status,
-                    entry.run_id,
-                    entry.result,
-                )
+                .apply_job_completion_state_tx(&mut tx, Some(workflow_id), entry)
                 .await
             {
                 Ok(completion) => {
@@ -2804,5 +3007,52 @@ where
         };
 
         Ok(ClaimJobsBasedOnResources::SuccessfulResponse(response))
+    }
+}
+
+// Not bound by the transport impl's context requirements, so the background unblock
+// task (which has no request context) can call it.
+impl<C> Server<C> {
+    /// Trigger on_workflow_complete actions if no jobs remain in a non-terminal state.
+    /// Generic over the context so the background unblock task can call it.
+    pub(super) async fn trigger_workflow_complete_if_done<Ctx>(
+        &self,
+        workflow_id: i64,
+        context: &Ctx,
+    ) where
+        Ctx: Has<XSpanIdString> + Send + Sync,
+    {
+        match self
+            .workflows_api
+            .is_workflow_complete(workflow_id, context)
+            .await
+        {
+            Ok(response) => {
+                if let IsWorkflowCompleteResponse::SuccessfulResponse(completion_status) = response
+                    && completion_status.is_complete
+                {
+                    debug!(
+                        "Workflow {} is complete, triggering on_workflow_complete actions",
+                        workflow_id
+                    );
+                    if let Err(e) = self
+                        .workflow_actions_api
+                        .check_and_trigger_actions(workflow_id, "on_workflow_complete", None, None)
+                        .await
+                    {
+                        error!(
+                            "Failed to check_and_trigger_actions for on_workflow_complete: {}",
+                            e
+                        );
+                    }
+                }
+            }
+            Err(e) => {
+                error!(
+                    "Failed to check if workflow {} is complete: {}",
+                    workflow_id, e
+                );
+            }
+        }
     }
 }

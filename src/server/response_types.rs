@@ -22,7 +22,8 @@ pub mod artifacts {
         GetFileResponse, GetResultResponse, GetRoCrateEntityResponse, GetUserDataResponse,
         ListFilesResponse, ListMissingUserDataResponse, ListRequiredExistingFilesResponse,
         ListResultsResponse, ListRoCrateEntitiesResponse, ListUserDataResponse, UpdateFileResponse,
-        UpdateResultResponse, UpdateRoCrateEntityResponse, UpdateUserDataResponse,
+        UpdateFileStatsResponse, UpdateResultResponse, UpdateRoCrateEntityResponse,
+        UpdateUserDataResponse,
     };
 }
 
@@ -49,9 +50,9 @@ pub mod jobs {
 
 pub mod scheduling {
     pub use crate::server::api_responses::{
-        CreateComputeNodeResponse, CreateLocalSchedulerResponse, CreateRemoteWorkersResponse,
-        CreateResourceRequirementsResponse, CreateScheduledComputeNodeResponse,
-        CreateSlurmSchedulerResponse, CreateSlurmStatsResponse,
+        ApplySchedulerPlanResponse, CreateComputeNodeResponse, CreateLocalSchedulerResponse,
+        CreateRemoteWorkersResponse, CreateResourceRequirementsResponse,
+        CreateScheduledComputeNodeResponse, CreateSlurmSchedulerResponse, CreateSlurmStatsResponse,
         DeleteAllResourceRequirementsResponse, DeleteComputeNodeResponse,
         DeleteComputeNodesResponse, DeleteLocalSchedulerResponse, DeleteLocalSchedulersResponse,
         DeleteRemoteWorkerResponse, DeleteResourceRequirementsResponse,
@@ -81,7 +82,8 @@ pub mod workflows {
         DeleteWorkflowResponse, GetActiveTaskResponse, GetPendingActionsResponse,
         GetRunningJobsResponse, GetSlurmJobCorrelationsResponse, GetWorkflowActionsResponse,
         GetWorkflowResponse, GetWorkflowStatusResponse, IsWorkflowCompleteResponse,
-        IsWorkflowUninitializedResponse, ListWorkflowsResponse, ResetWorkflowStatusResponse,
+        IsWorkflowUninitializedResponse, ListWorkflowsResponse, ReportActionResultResponse,
+        ResetActionResponse, ResetWorkflowStatusResponse, SuppressActionResponse,
         UpdateWorkflowActionResponse, UpdateWorkflowResponse,
     };
 }

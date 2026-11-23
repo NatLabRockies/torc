@@ -11,6 +11,42 @@ This can be used to construct the `OpenAPI.Clients.Client` instance.
 """
 basepath(::Type{ SlurmSchedulersApi }) = "http://localhost/torc-service/v1"
 
+const _returntypes_apply_scheduler_plan_SlurmSchedulersApi = Dict{Regex,Type}(
+    Regex("^" * replace("200", "x"=>".") * "\$") => ApplySchedulerPlanResponse,
+    Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("422", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
+)
+
+function _oacinternal_apply_scheduler_plan(_api::SlurmSchedulersApi, id::Int64, apply_scheduler_plan_request::ApplySchedulerPlanRequest; dry_run=nothing, _mediaType=nothing)
+    _ctx = OpenAPI.Clients.Ctx(_api.client, "POST", _returntypes_apply_scheduler_plan_SlurmSchedulersApi, "/workflows/{id}/apply_scheduler_plan", [], apply_scheduler_plan_request)
+    OpenAPI.Clients.set_param(_ctx.path, "id", id)  # type Int64
+    OpenAPI.Clients.set_param(_ctx.query, "dry_run", dry_run; style="form", is_explode=true)  # type Bool
+    OpenAPI.Clients.set_header_accept(_ctx, ["application/json", ])
+    OpenAPI.Clients.set_header_content_type(_ctx, (_mediaType === nothing) ? ["application/json", ] : [_mediaType])
+    return _ctx
+end
+
+@doc raw"""Apply a client-computed Slurm scheduler plan in one transaction. Every job must belong to the workflow, be pending (uninitialized, blocked, or ready), and appear in at most one scheduler; otherwise the plan is rejected and nothing changes. When suppress_existing_schedule_actions is set, the workflow's non-recovery, unexecuted schedule_nodes actions (persistent ones included) are suppressed. The schedulers are created, their jobs are assigned, and an on_jobs_ready recovery action is created for each recovery_actions entry, armed from the gating jobs' current statuses. The response lists the created IDs and which actions are pending (ready to submit now). With dry_run=true, the same result is reported and nothing is stored.
+
+Params:
+- id::Int64 (required)
+- apply_scheduler_plan_request::ApplySchedulerPlanRequest (required)
+- dry_run::Bool
+
+Return: ApplySchedulerPlanResponse, OpenAPI.Clients.ApiResponse
+"""
+function apply_scheduler_plan(_api::SlurmSchedulersApi, id::Int64, apply_scheduler_plan_request::ApplySchedulerPlanRequest; dry_run=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_apply_scheduler_plan(_api, id, apply_scheduler_plan_request; dry_run=dry_run, _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx)
+end
+
+function apply_scheduler_plan(_api::SlurmSchedulersApi, response_stream::Channel, id::Int64, apply_scheduler_plan_request::ApplySchedulerPlanRequest; dry_run=nothing, _mediaType=nothing)
+    _ctx = _oacinternal_apply_scheduler_plan(_api, id, apply_scheduler_plan_request; dry_run=dry_run, _mediaType=_mediaType)
+    return OpenAPI.Clients.exec(_ctx, response_stream)
+end
+
 const _returntypes_create_slurm_scheduler_SlurmSchedulersApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => SlurmSchedulerModel,
     Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
@@ -172,6 +208,7 @@ const _returntypes_update_slurm_scheduler_SlurmSchedulersApi = Dict{Regex,Type}(
     Regex("^" * replace("200", "x"=>".") * "\$") => SlurmSchedulerModel,
     Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
     Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("422", "x"=>".") * "\$") => ErrorResponse,
     Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
@@ -199,6 +236,7 @@ function update_slurm_scheduler(_api::SlurmSchedulersApi, response_stream::Chann
     return OpenAPI.Clients.exec(_ctx, response_stream)
 end
 
+export apply_scheduler_plan
 export create_slurm_scheduler
 export delete_slurm_scheduler
 export delete_slurm_schedulers

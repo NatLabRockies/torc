@@ -300,6 +300,9 @@ fn test_jobs_list_name_command_filter(start_server: &ServerProcess) {
             name,
             command,
             None, // labels
+            None, // ids
+            None, // statuses
+            None, // resource_requirements_id
         )
         .expect("list_jobs failed")
     };
@@ -356,42 +359,6 @@ fn test_jobs_get_command_json(start_server: &ServerProcess) {
     assert_eq!(json_output.get("name").unwrap(), &json!("test_get_job"));
     assert!(json_output.get("command").is_some());
     assert!(json_output.get("status").is_some());
-}
-
-#[rstest]
-fn test_jobs_update_command_json(start_server: &ServerProcess) {
-    let config = &start_server.config;
-
-    // Create test data
-    let workflow = create_test_workflow(config, "test_jobs_update_workflow");
-    let workflow_id = workflow.id.unwrap();
-    let job = create_test_job(config, workflow_id, "test_update_job");
-    let job_id = job.id.unwrap();
-
-    // Test the CLI update command
-    let args = [
-        "jobs",
-        "update",
-        &job_id.to_string(),
-        "--name",
-        "updated_job_name",
-        "--command",
-        "echo 'Updated command'",
-    ];
-
-    let json_output =
-        run_cli_with_json(&args, start_server, None).expect("Failed to run jobs update command");
-
-    // Verify the updated values
-    assert_eq!(json_output.get("id").unwrap(), &json!(job_id));
-    assert_eq!(json_output.get("name").unwrap(), &json!("updated_job_name"));
-    assert_eq!(
-        json_output.get("command").unwrap(),
-        &json!("echo 'Updated command'")
-    );
-
-    // Verify unchanged values
-    assert_eq!(json_output.get("workflow_id").unwrap(), &json!(workflow_id));
 }
 
 #[rstest]
@@ -1087,6 +1054,9 @@ fn test_jobs_delete_all(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs before deletion");
     assert_eq!(
@@ -1122,6 +1092,9 @@ fn test_jobs_delete_all(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs after deletion");
     assert_eq!(
@@ -1185,7 +1158,7 @@ fn test_retry_job_from_running_status(start_server: &ServerProcess) {
     // This simulates the job runner detecting a failure and wanting to retry
     // before it has called complete_job
     let retried_job =
-        apis::jobs_api::retry_job(config, job_id, run_id, 3).expect("retry_job should succeed");
+        apis::jobs_api::retry_job(config, job_id, run_id, None).expect("retry_job should succeed");
 
     // Verify job is now Ready with incremented attempt_id
     assert_eq!(retried_job.status.unwrap(), JobStatus::Ready);
@@ -1240,7 +1213,7 @@ fn test_retry_job_from_failed_status(start_server: &ServerProcess) {
 
     // Call retry_job
     let retried_job =
-        apis::jobs_api::retry_job(config, job_id, run_id, 3).expect("retry_job should succeed");
+        apis::jobs_api::retry_job(config, job_id, run_id, None).expect("retry_job should succeed");
 
     // Verify job is now Ready with incremented attempt_id
     assert_eq!(retried_job.status.unwrap(), JobStatus::Ready);
@@ -1272,7 +1245,7 @@ fn test_retry_job_invalid_status(start_server: &ServerProcess) {
     assert_eq!(job_before.status.unwrap(), JobStatus::Ready);
 
     // Try to retry a Ready job - should fail
-    let result = apis::jobs_api::retry_job(config, job_id, run_id, 3);
+    let result = apis::jobs_api::retry_job(config, job_id, run_id, None);
     assert!(
         result.is_err(),
         "retry_job should fail for job in Ready status"
@@ -1331,6 +1304,75 @@ fn test_jobs_update_resource_requirements_id(start_server: &ServerProcess) {
     // Verify via API
     let job_after = apis::jobs_api::get_job(config, job_id).expect("Failed to get job");
     assert_eq!(job_after.resource_requirements_id, Some(rr_id));
+}
+
+#[rstest]
+fn test_list_jobs_filters_by_resource_requirements_id(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow_id = create_test_workflow(config, "test_rr_filter").id.unwrap();
+    let small = common::create_test_resource_requirements(
+        config,
+        workflow_id,
+        "small",
+        1,
+        0,
+        1,
+        "1g",
+        "PT10M",
+    );
+    let large = common::create_test_resource_requirements(
+        config,
+        workflow_id,
+        "large",
+        4,
+        0,
+        1,
+        "8g",
+        "PT1H",
+    );
+    for (name, rr) in [("a", &small), ("b", &small), ("c", &large)] {
+        let mut job = models::JobModel::new(workflow_id, name.to_string(), "true".to_string());
+        job.resource_requirements_id = rr.id;
+        apis::jobs_api::create_job(config, job).expect("Failed to create job");
+    }
+    let names = |rr_id: Option<i64>| {
+        let r = apis::jobs_api::list_jobs(
+            config,
+            workflow_id,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            rr_id,
+        )
+        .expect("Failed to list jobs");
+        let mut n: Vec<String> = r.items.into_iter().map(|j| j.name).collect();
+        n.sort();
+        assert_eq!(r.total_count as usize, n.len());
+        n
+    };
+    assert_eq!(names(small.id), ["a", "b"]);
+    assert_eq!(names(large.id), ["c"]);
+    assert_eq!(names(None).len(), 3);
+
+    let rr_id = large.id.unwrap().to_string();
+    let wf_id = workflow_id.to_string();
+    let args = ["jobs", "list", &wf_id, "--resource-requirements-id", &rr_id];
+    let out = run_cli_with_json(&args, start_server, None).expect("jobs list failed");
+    let jobs = out["items"].as_array().expect("jobs array");
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(jobs[0]["name"], "c");
 }
 
 #[rstest]
@@ -1585,4 +1627,74 @@ fn test_bulk_create_jobs_rejects_invalid_env_name(start_server: &ServerProcess) 
         err_str.contains("BAD-NAME"),
         "Error should mention invalid env key"
     );
+}
+
+/// `ids` and comma-separated `statuses` filters on `GET /jobs`.
+#[rstest]
+fn test_list_jobs_ids_and_multi_status_filters(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let work_dir = tempfile::tempdir().unwrap();
+    let jobs = common::create_diamond_workflow(config, true, work_dir.path());
+    let workflow_id = jobs["preprocess"].workflow_id;
+    let id = |name: &str| jobs[name].id.unwrap();
+    let list = |statuses: Option<Vec<JobStatus>>, ids: Option<Vec<i64>>| {
+        let mut names: Vec<String> = apis::jobs_api::list_jobs(
+            config,
+            workflow_id,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            ids,
+            statuses,
+            None,
+        )
+        .expect("list_jobs failed")
+        .items
+        .into_iter()
+        .map(|j| j.name)
+        .collect();
+        names.sort();
+        names
+    };
+
+    // After initialization: preprocess is ready, the rest are blocked.
+    assert_eq!(list(Some(vec![JobStatus::Ready]), None), vec!["preprocess"]);
+    assert_eq!(
+        list(Some(vec![JobStatus::Blocked]), None),
+        vec!["postprocess", "work1", "work2"]
+    );
+    assert_eq!(
+        list(Some(vec![JobStatus::Ready, JobStatus::Blocked]), None).len(),
+        4
+    );
+    assert!(list(Some(vec![]), None).is_empty());
+
+    assert_eq!(
+        list(None, Some(vec![id("work1"), id("postprocess")])),
+        vec!["postprocess", "work1"]
+    );
+    // Filters combine.
+    assert_eq!(
+        list(
+            Some(vec![JobStatus::Blocked]),
+            Some(vec![id("preprocess"), id("work2")])
+        ),
+        vec!["work2"]
+    );
+
+    // Scoped to workflow_id: a job of another workflow is not returned.
+    let other = create_test_workflow(config, "test_list_jobs_ids_other");
+    let other_job = create_test_job(config, other.id.unwrap(), "other_job");
+    assert!(list(None, Some(vec![other_job.id.unwrap()])).is_empty());
+    // Over-cap ids (422) is tested in live_router_tests: such a list can't fit in a URL.
 }

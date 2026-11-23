@@ -214,6 +214,13 @@
             class:selected={selected.has(k)}
             class:active={activeKey !== null && activeKey === k}
             onclick={() => onRowClick?.(row)}
+            tabindex={onRowClick ? 0 : undefined}
+            onkeydown={(e) => {
+              if (onRowClick && e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+                e.preventDefault();
+                onRowClick(row);
+              }
+            }}
           >
             {#if selectable}
               <td class="check-col" onclick={(e) => e.stopPropagation()}>

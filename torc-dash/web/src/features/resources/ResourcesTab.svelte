@@ -1,7 +1,9 @@
 <script lang="ts">
-  import { onMount, untrack } from "svelte";
+  import { untrack } from "svelte";
   import { SvelteSet } from "svelte/reactivity";
+  import { api, unwrap } from "../../lib/api/client";
   import { dashPost } from "../../lib/api/dash";
+  import { resolveLogBaseDir } from "../debugging/logs";
   import { errorText, formatBytes } from "../../lib/format";
   import { app } from "../../lib/state.svelte";
   import SegmentedTabs from "../../lib/ui/SegmentedTabs.svelte";
@@ -17,8 +19,9 @@
   };
   type Plot = { name: string; data: Figure | null };
 
+  const DEFAULT_DIR = "torc_output/resource_utilization";
   let mode = $state<"plots" | "live">("plots");
-  let baseDir = $state("torc_output/resource_utilization");
+  let baseDir = $state(DEFAULT_DIR);
   let dbs = $state.raw<ResourceDb[] | null>(null);
   let scanning = $state(false);
   let scanError = $state<string | null>(null);
@@ -41,21 +44,37 @@
   let selectedPaths = $derived(selectedDbs.map((d) => d.path));
   let current = $derived(plots?.[plotIndex] ?? null);
 
+  /** Bumped per scan so a slow scan for a previous workflow can't overwrite a newer one. */
+  let scanSeq = 0;
+  let plotSeq = 0;
+
   async function scan() {
+    const seq = ++scanSeq;
+    const id = app.workflowId;
     scanning = true;
     try {
+      // Relative dirs resolve against the workflow's submission directory, not torc-dash's cwd.
+      // If the workflow can't be read (deleted, no access), fall back to cwd-relative.
+      const wf =
+        id === null
+          ? null
+          : await unwrap(api.GET("/workflows/{id}", { params: { path: { id } } })).catch(
+              () => null,
+            );
+      if (seq !== scanSeq) return;
       const res = await dashPost<{ success: boolean; databases?: ResourceDb[]; error?: string }>(
         "/api/cli/list-resource-dbs",
-        { base_dir: baseDir },
+        { base_dir: resolveLogBaseDir(baseDir.trim() || DEFAULT_DIR, wf?.submission_directory) },
       );
+      if (seq !== scanSeq) return;
       if (!res.success) throw new Error(res.error || "Scan failed");
       dbs = res.databases ?? [];
       scanError = null;
       resetForWorkflow();
     } catch (e) {
-      scanError = errorText(e);
+      if (seq === scanSeq) scanError = errorText(e);
     } finally {
-      scanning = false;
+      if (seq === scanSeq) scanning = false;
     }
   }
 
@@ -64,17 +83,24 @@
     selected.clear();
     plots = null;
     plotError = null;
+    plotSeq++; // invalidate in-flight plot requests, even after an A -> B -> A switch
+    generating = false;
     if (visible.length === 1) {
       selected.add(visible[0].path);
       if (mode === "plots") void generate();
     }
   }
 
+  // Runs on mount and on every workflow switch. Clear the previous workflow's plots right away
+  // rather than waiting for the scan, which may be slow or fail.
   $effect(() => {
     void app.workflowId;
     untrack(() => {
       showAll = false;
-      if (dbs) resetForWorkflow();
+      dbs = null;
+      scanError = null;
+      resetForWorkflow(); // no dbs yet, so this only clears
+      void scan();
     });
   });
 
@@ -98,6 +124,7 @@
   async function generate() {
     const paths = selectedPaths;
     if (paths.length === 0) return;
+    const seq = ++plotSeq;
     generating = true;
     plotError = null;
     try {
@@ -105,15 +132,16 @@
         "/api/cli/plot-resources",
         { db_paths: paths, prefix: "resource_plot" },
       );
+      if (seq !== plotSeq) return;
       if (!res.success) throw new Error(res.error || "Plot generation failed");
       plots = (res.plots ?? []).toSorted(
         (a, b) => plotRank(a.name) - plotRank(b.name) || collator.compare(a.name, b.name),
       );
       plotIndex = 0;
     } catch (e) {
-      plotError = errorText(e);
+      if (seq === plotSeq) plotError = errorText(e);
     } finally {
-      generating = false;
+      if (seq === plotSeq) generating = false;
     }
   }
 
@@ -121,10 +149,6 @@
     if (on) selected.add(path);
     else selected.delete(path);
   }
-
-  onMount(() => {
-    void scan();
-  });
 </script>
 
 <div class="page">
@@ -152,7 +176,7 @@
           >
             <label class="field grow">
               <span>Database directory</span>
-              <input class="input" bind:value={baseDir} placeholder="torc_output/resource_utilization" />
+              <input class="input" bind:value={baseDir} placeholder={DEFAULT_DIR} />
             </label>
             <button class="btn" type="submit" disabled={scanning}>
               {#if scanning}<span class="spinner"></span>{/if}Scan

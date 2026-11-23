@@ -136,6 +136,8 @@ impl Paginatable for ResultModel {
             params.sort_by.as_deref(),
             params.reverse_sort,
             params.all_runs,
+            None, // ids
+            None, // statuses
         )?;
 
         Ok(PaginatedResponse {

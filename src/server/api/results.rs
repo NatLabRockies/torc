@@ -15,8 +15,8 @@ use crate::server::api_responses::{
 use crate::models;
 
 use super::{
-    ApiContext, SqlQueryBuilder, database_error_with_msg, parse_job_status,
-    resource_not_found_response,
+    ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error_with_msg, int_in_clause,
+    message_error_response, parse_job_status, resource_not_found_response,
 };
 
 /// Trait defining result-related API operations
@@ -46,13 +46,14 @@ pub trait ResultsApi<C> {
         job_id: Option<i64>,
         run_id: Option<i64>,
         return_code: Option<i64>,
-        status: Option<models::JobStatus>,
+        status: Option<Vec<models::JobStatus>>,
         compute_node_id: Option<i64>,
         offset: i64,
         limit: i64,
         sort_by: Option<String>,
         reverse_sort: Option<bool>,
         all_runs: Option<bool>,
+        ids: Option<Vec<i64>>,
         context: &C,
     ) -> Result<ListResultsResponse, ApiError>;
 
@@ -303,13 +304,14 @@ where
         job_id: Option<i64>,
         run_id: Option<i64>,
         return_code: Option<i64>,
-        status: Option<models::JobStatus>,
+        status: Option<Vec<models::JobStatus>>,
         compute_node_id: Option<i64>,
         offset: i64,
         limit: i64,
         sort_by: Option<String>,
         reverse_sort: Option<bool>,
         all_runs: Option<bool>,
+        ids: Option<Vec<i64>>,
         context: &C,
     ) -> Result<ListResultsResponse, ApiError> {
         // all_runs defaults to false - only show current results in workflow_result table
@@ -368,9 +370,27 @@ where
             bind_values.push(Box::new(ret_code));
         }
 
-        if let Some(result_status) = &status {
-            where_conditions.push(format!("{}status = ?", col_prefix));
-            bind_values.push(Box::new(result_status.to_int()));
+        if let Some(statuses) = &status {
+            where_conditions.push(int_in_clause(
+                &format!("{}status", col_prefix),
+                statuses.iter().map(|s| s.to_int() as i64),
+            ));
+        }
+
+        if let Some(ids) = &ids {
+            if ids.len() as i64 > MAX_RECORD_TRANSFER_COUNT {
+                return Ok(ListResultsResponse::UnprocessableContentErrorResponse(
+                    message_error_response(format!(
+                        "ids has {} values; at most {} are allowed",
+                        ids.len(),
+                        MAX_RECORD_TRANSFER_COUNT
+                    )),
+                ));
+            }
+            where_conditions.push(int_in_clause(
+                &format!("{}job_id", col_prefix),
+                ids.iter().copied(),
+            ));
         }
 
         if let Some(cn_id) = compute_node_id {
@@ -423,9 +443,6 @@ where
         }
         if let Some(ret_code) = return_code {
             sqlx_query = sqlx_query.bind(ret_code);
-        }
-        if let Some(ref s) = status {
-            sqlx_query = sqlx_query.bind(s.to_int());
         }
         if let Some(cn_id) = compute_node_id {
             sqlx_query = sqlx_query.bind(cn_id);
@@ -485,9 +502,6 @@ where
         if let Some(ret_code) = return_code {
             count_sqlx_query = count_sqlx_query.bind(ret_code);
         }
-        if let Some(ref s) = status {
-            count_sqlx_query = count_sqlx_query.bind(s.to_int());
-        }
         if let Some(cn_id) = compute_node_id {
             count_sqlx_query = count_sqlx_query.bind(cn_id);
         }
@@ -531,7 +545,7 @@ where
         );
 
         // First get the existing result to ensure it exists
-        match self.get_result(id, context).await? {
+        let existing = match self.get_result(id, context).await? {
             GetResultResponse::SuccessfulResponse(result) => result,
             GetResultResponse::ForbiddenErrorResponse(err) => {
                 return Ok(UpdateResultResponse::ForbiddenErrorResponse(err));
@@ -544,6 +558,19 @@ where
             }
         };
 
+        if let Some(err) = super::ref_outside_workflow(
+            self.context.pool.as_ref(),
+            "job",
+            "job_id",
+            body.job_id,
+            // The stored workflow_id, so a changed one gets the immutability 422 below.
+            existing.workflow_id,
+        )
+        .await?
+        {
+            return Ok(UpdateResultResponse::UnprocessableContentErrorResponse(err));
+        }
+
         let status_int = body.status.to_int();
 
         let result = match sqlx::query!(
@@ -551,22 +578,21 @@ where
             UPDATE result
             SET
                 job_id = COALESCE($1, job_id)
-                ,workflow_id = COALESCE($2, workflow_id)
-                ,run_id = COALESCE($3, run_id)
-                ,return_code = COALESCE($4, return_code)
-                ,exec_time_minutes = COALESCE($5, exec_time_minutes)
-                ,completion_time = COALESCE($6, completion_time)
-                ,status = COALESCE($7, status)
-            WHERE id = $8
+                ,run_id = COALESCE($2, run_id)
+                ,return_code = COALESCE($3, return_code)
+                ,exec_time_minutes = COALESCE($4, exec_time_minutes)
+                ,completion_time = COALESCE($5, completion_time)
+                ,status = COALESCE($6, status)
+            WHERE id = $7 AND workflow_id = $8
             "#,
             body.job_id,
-            body.workflow_id,
             body.run_id,
             body.return_code,
             body.exec_time_minutes,
             body.completion_time,
             status_int,
             id,
+            body.workflow_id,
         )
         .execute(self.context.pool.as_ref())
         .await
@@ -578,9 +604,16 @@ where
         };
 
         if result.rows_affected() == 0 {
-            return Ok(UpdateResultResponse::NotFoundErrorResponse(
-                resource_not_found_response("Result", id),
-            ));
+            let pool = self.context.pool.as_ref();
+            return Ok(if super::workflow_id_mismatch(pool, "result", id).await? {
+                UpdateResultResponse::UnprocessableContentErrorResponse(
+                    super::workflow_id_immutable_response(),
+                )
+            } else {
+                UpdateResultResponse::NotFoundErrorResponse(resource_not_found_response(
+                    "Result", id,
+                ))
+            });
         }
 
         // Return the updated result by fetching it again

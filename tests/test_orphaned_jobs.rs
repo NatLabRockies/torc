@@ -157,6 +157,9 @@ fn test_start_job_sets_active_compute_node_id(start_server: &ServerProcess) {
         None,                  // name
         None,                  // command
         None,                  // labels
+        None,                  // ids
+        None,                  // statuses
+        None,                  // resource_requirements_id
     )
     .expect("Failed to list jobs");
 
@@ -235,6 +238,9 @@ fn test_complete_job_clears_active_compute_node_id(start_server: &ServerProcess)
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs before completion");
     assert_eq!(jobs_before.items.len(), 1);
@@ -271,6 +277,9 @@ fn test_complete_job_clears_active_compute_node_id(start_server: &ServerProcess)
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
+        None, // resource_requirements_id
     )
     .expect("Failed to list jobs after completion");
     assert_eq!(jobs_after.items.len(), 0);
@@ -368,6 +377,9 @@ fn test_orphaned_job_simulation(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
+        None, // resource_requirements_id
     )
     .expect("Failed to list orphaned jobs");
 
@@ -411,6 +423,9 @@ fn test_orphaned_job_simulation(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
+        None, // resource_requirements_id
     )
     .expect("Failed to list failed jobs");
     assert_eq!(failed_jobs.items.len(), 2);
@@ -432,6 +447,9 @@ fn test_orphaned_job_simulation(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
+        None, // resource_requirements_id
     )
     .expect("Failed to list active jobs");
     assert_eq!(active_jobs.items.len(), 0);
@@ -493,6 +511,7 @@ fn test_cleanup_deactivates_active_node_after_cancel(start_server: &ServerProces
         "fake_squeue.sh not found at {:?}",
         fake_squeue
     );
+    common::fake_slurm_state_dir();
     let _squeue_guard = EnvVarGuard::set("TORC_FAKE_SQUEUE", &fake_squeue.to_string_lossy());
     let _user_guard = if std::env::var("USER").is_err() && std::env::var("USERNAME").is_err() {
         Some(EnvVarGuard::set("USER", "test-user"))
@@ -571,11 +590,9 @@ fn test_cleanup_deactivates_active_node_after_cancel(start_server: &ServerProces
     );
 }
 
-/// Path to the shared fake squeue/scancel jobs file (matches the bash scripts,
-/// which read `${TMPDIR:-/tmp}/fake_slurm_jobs.txt`).
+/// Path to this test process's fake squeue/scancel jobs file (see `fake_slurm_state_dir`).
 fn fake_jobs_file() -> std::path::PathBuf {
-    let tmpdir = std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string());
-    std::path::Path::new(&tmpdir).join("fake_slurm_jobs.txt")
+    common::fake_slurm_state_dir().join("fake_slurm_jobs.txt")
 }
 
 /// Register a fake Slurm job so `fake_squeue.sh` reports it with `state` (e.g.
@@ -845,6 +862,9 @@ fn test_list_jobs_no_active_compute_node(start_server: &ServerProcess) {
         None,        // name
         None,        // command
         None,        // labels
+        None,        // ids
+        None,        // statuses
+        None,        // resource_requirements_id
     )
     .expect("Failed to list jobs");
 
@@ -949,6 +969,9 @@ fn test_multiple_compute_nodes_job_tracking(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
+        None, // resource_requirements_id
     )
     .expect("Failed to list cn1 jobs");
     let cn1_items = cn1_jobs.items;
@@ -974,6 +997,9 @@ fn test_multiple_compute_nodes_job_tracking(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
+        None, // resource_requirements_id
     )
     .expect("Failed to list cn2 jobs");
     let cn2_items = cn2_jobs.items;
@@ -1017,6 +1043,9 @@ fn test_multiple_compute_nodes_job_tracking(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
+        None, // resource_requirements_id
     )
     .expect("Failed to list cn1 jobs after");
     assert_eq!(cn1_after.items.len(), 0);
@@ -1038,6 +1067,9 @@ fn test_multiple_compute_nodes_job_tracking(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
+        None, // resource_requirements_id
     )
     .expect("Failed to list cn2 jobs after");
     assert_eq!(cn2_after.items.len(), 2);
@@ -1111,12 +1143,15 @@ fn test_reset_job_clears_active_compute_node_id(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
+        None, // resource_requirements_id
     )
     .expect("Failed to list before reset");
     assert_eq!(before_reset.items.len(), 1);
 
     // Reset job status
-    apis::workflows_api::reset_job_status(config, workflow_id, None)
+    apis::workflows_api::reset_job_status(config, workflow_id, None, None, None)
         .expect("Failed to reset job status");
 
     // Verify active_compute_node_id is cleared
@@ -1136,6 +1171,9 @@ fn test_reset_job_clears_active_compute_node_id(start_server: &ServerProcess) {
         None, // name
         None, // command
         None, // labels
+        None, // ids
+        None, // statuses
+        None, // resource_requirements_id
     )
     .expect("Failed to list after reset");
     assert_eq!(after_reset.items.len(), 0);

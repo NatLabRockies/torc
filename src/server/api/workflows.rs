@@ -2467,6 +2467,7 @@ where
             "jb.job_id",
             JOB_DEPENDENCY_COLUMNS,
         )
+        .with_tie_breaker("jb.job_id, jb.depends_on_job_id")
         .build();
 
         let dependency_rows = match sqlx::query(sqlx::AssertSqlSafe(&*query))
@@ -2600,6 +2601,7 @@ where
             "f.id",
             JOB_FILE_RELATIONSHIP_COLUMNS,
         )
+        .with_tie_breaker("f.id, jof.job_id, jif.job_id")
         .build();
 
         let relationship_rows = match sqlx::query(sqlx::AssertSqlSafe(&*query))
@@ -2759,6 +2761,7 @@ where
             "ud.id",
             JOB_USER_DATA_RELATIONSHIP_COLUMNS,
         )
+        .with_tie_breaker("ud.id, joud.job_id, jiud.job_id")
         .build();
 
         let relationship_rows = match sqlx::query(sqlx::AssertSqlSafe(&*query))

@@ -80,13 +80,20 @@ Builds the graph at workflow creation time:
 
 ```rust
 WorkflowGraph::from_jobs(jobs, resource_requirements) -> Result<Self, Error>
+WorkflowGraph::from_jobs_and_edges(jobs, resource_requirements, edges) -> Result<Self, Error>
 ```
 
-Builds the graph from fetched database records (used for recovery and visualization):
+Builds the graph from fetched database records (used for recovery and visualization). Nodes come
+from `JobModel` records. Edges always combine explicit dependencies with the dependencies implied by
+files and user data (a consumer depends on its producer), so the graph is complete in mixed and
+uninitialized workflows:
 
-1. Creates nodes from `JobModel` records
-2. Resolves dependencies via `depends_on_job_ids` (if available)
-3. Falls back to computing dependencies from file relationships
+- `from_jobs` reads edges from the jobs' relationship fields (`depends_on_job_ids`, input/output
+  file and user-data IDs), so fetch the jobs with `include_relationships`.
+- `from_jobs_and_edges` takes `(job_id, depends_on_job_id)` pairs.
+  `execution_plan::fetch_dependency_edges` builds them from `/workflows/{id}/job_dependencies`,
+  `/job_file_relationships`, and `/job_user_data_relationships`. The CLI, MCP server, and dashboard
+  execution plans (`ExecutionPlan::from_database_models`) use this path.
 
 ## Key Operations
 
@@ -138,10 +145,11 @@ let plan = generate_scheduler_plan(&graph, &resource_requirements, &profile, ...
 
 ### Execution Plan Visualization
 
-The execution plan display uses `WorkflowGraph::from_jobs()` for runtime visualization:
+The execution plan display uses `WorkflowGraph::from_jobs_and_edges()` for runtime visualization:
 
 ```rust
-let graph = WorkflowGraph::from_jobs(&jobs, &resource_requirements)?;
+let edges = fetch_dependency_edges(config, workflow_id)?;
+let graph = WorkflowGraph::from_jobs_and_edges(&jobs, &resource_requirements, &edges)?;
 let levels = graph.topological_levels()?;
 // Render DAG visualization in TUI
 ```

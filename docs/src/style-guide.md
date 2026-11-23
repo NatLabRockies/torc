@@ -141,13 +141,11 @@ tests/
 
 ```rust
 use rstest::rstest;
-use serial_test::serial;
 
 mod common;
 use common::{start_server, ServerProcess};
 
 #[rstest]
-#[serial]
 fn test_workflow_creation(start_server: &ServerProcess) {
     let config = &start_server.config;
     // Test code using the server fixture
@@ -161,7 +159,6 @@ fn test_workflow_creation(start_server: &ServerProcess) {
 #[case(0, "immediate")]
 #[case(60, "one_minute")]
 #[case(3600, "one_hour")]
-#[serial]
 fn test_timeout_handling(#[case] timeout_secs: u64, #[case] description: &str) {
     // Test runs once for each case
 }
@@ -190,7 +187,11 @@ pub fn start_server() -> ServerProcess {
 
 ### Test Guidelines
 
-1. **Use `#[serial]`** for integration tests that share resources (ports, database)
+1. **Don't serialize tests by default.** nextest runs each test in its own process, and
+   `start_server` gives each test its own server and temp database, so `#[serial]` and env-var
+   changes don't affect other tests. Only tests that share state _across processes_ (fixed file
+   paths, fixed ports) need isolation: prefer a per-process path (see `fake_slurm_state_dir()` in
+   `tests/common.rs`) over a nextest test group.
 2. **Use descriptive `expect()` messages** instead of `.unwrap()`
 3. **Clean up resources** using the Drop trait or explicit cleanup functions
 4. **Test error conditions** not just happy paths

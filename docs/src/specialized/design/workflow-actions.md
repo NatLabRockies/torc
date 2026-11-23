@@ -300,6 +300,54 @@ Refer to this
 5. **Immediate Availability**: Worker lifecycle actions are immediately available after workflow
    initialization
 
+### Action Outcomes
+
+The server records what happened to each action in its `state` and `error` fields (API 1.1.0):
+
+| `state`      | Meaning                                                                   |
+| ------------ | ------------------------------------------------------------------------- |
+| (null)       | Never claimed, or claimed through an older server or client               |
+| `claimed`    | A worker or `torc submit` claimed it and has not reported an outcome yet  |
+| `succeeded`  | The claimer executed it successfully                                      |
+| `failed`     | Execution failed; `error` holds the claimer's message (e.g. sbatch error) |
+| `suppressed` | Disabled without executing (see below)                                    |
+
+`executed` is still the "not available to claim" flag, so `get_pending_actions` and older clients
+work unchanged. The endpoints that move an action between states are:
+
+- `POST /workflows/{id}/actions/{action_id}/claim` sets `claimed`. A non-persistent action is also
+  marked `executed`; a persistent one stays claimable. A 409 body includes the action's `state`, so
+  a caller can tell "another process is running it" from "it was suppressed".
+- `POST /workflows/{id}/actions/{action_id}/result` with `{"success": bool, "error": "..."}` records
+  `succeeded` or `failed`. The claimer calls it after executing the action. For a persistent action
+  it records the latest outcome. It returns 409 if the action has no claim (or was suppressed) and
+  422 if `error` is set with `success: true`.
+- `POST /workflows/{id}/actions/{action_id}/suppress` sets `executed` and `suppressed` without
+  running the action. It is idempotent. A persistent action can be suppressed in any state, since a
+  claim never consumes it; a non-persistent action only while unclaimed (409 otherwise).
+- `POST /workflows/{id}/actions/{action_id}/reset` re-arms a `failed`, `suppressed`, or stuck
+  `claimed` action: it clears `executed`, `executed_at`, `executed_by`, `state`, and `error`. It
+  returns 409 for a `succeeded` action.
+
+Torc does **not** retry a failed action. A `schedule_nodes` action with `num_allocations > 1` can
+partly succeed, so a retry could submit duplicate allocations. Instead, `torc status` lists failed
+actions, and actions claimed more than 30 minutes ago with no outcome, with their errors;
+`torc workflows list-actions` shows `state` and `error`; and `torc recover` lists failed
+`schedule_nodes` actions and, in the interactive wizard on a running workflow, offers to reset them
+and submit their allocations. To retry by hand, fix the cause and run
+`torc workflows reset-action <workflow_id> <action_id>`; the action fires the next time a worker or
+`torc submit` looks for pending actions.
+
+Three places suppress actions instead of running them: disabling an action in the `torc submit`
+re-submission review, `suppress_satisfied_schedule_actions` (used by `torc recover` and
+`torc slurm schedule-nodes --suppress-actions`), and the `apply_scheduler_plan` transaction behind
+`torc slurm regenerate`. All three suppress persistent `schedule_nodes` actions too. Against a
+server older than API 1.1.0 the client falls back to claiming, which cannot stop a persistent
+action, and skips outcome reporting.
+
+A client older than API 1.1.0 claims actions but never reports a result, so its claims stay
+`claimed`, and `torc status` reports them as stuck after 30 minutes.
+
 ### Action Lifecycle
 
 ```
@@ -328,7 +376,7 @@ Refer to this
 
 ### Important Characteristics
 
-1. **No Rollback**: Failed actions don't affect workflow execution
+1. **No Rollback**: Failed actions don't affect workflow execution; they are recorded as `failed`
 2. **Compute Node Execution**: Actions run on compute nodes via job runners
 3. **One-Time Triggers**: Non-persistent actions trigger once when conditions are first met
 4. **No Inter-Action Dependencies**: Actions don't depend on other actions
@@ -427,17 +475,18 @@ _Full re-run_ (the gate itself is re-run):
 With multiple gating jobs, the action is only kept executed when **all** of them remain terminal;
 resetting any one of them re-arms it.
 
-The `recover`/`regenerate` paths keep their own `mark_satisfied_schedule_actions_executed` guard,
-and it is **load-bearing, not just redundant**: those paths take over allocation themselves (they
-submit the user's chosen count, or regenerate recovery actions and submit). After they reset the
-failed jobs and reinitialize, the server _correctly_ re-arms those jobs' `on_jobs_ready` actions
-(right for plain `reinit`, where they should fire), but the reset gate is now `Ready`, so the action
-is satisfied and would fire on the first worker and submit a second allocation. `mark_satisfied`
-marks those satisfied actions executed so recover's own submission is not duplicated. The server
-cannot do this — it can't tell "recover is about to allocate these jobs itself" from "plain reinit,
-the action should fire." For the `on_workflow_start` and already-terminal-gated cases the guard is
-now a no-op (the server already keeps those executed, and `mark_satisfied` skips already-executed
-actions); the reset-`on_jobs_ready` case is the one it still handles.
+The `recover` path keeps its own `suppress_satisfied_schedule_actions` guard (the `regenerate` path
+suppresses the same actions inside the `apply_scheduler_plan` transaction), and it is
+**load-bearing, not just redundant**: those paths take over allocation themselves (they submit the
+user's chosen count, or regenerate recovery actions and submit). After they reset the failed jobs
+and reinitialize, the server _correctly_ re-arms those jobs' `on_jobs_ready` actions (right for
+plain `reinit`, where they should fire), but the reset gate is now `Ready`, so the action is
+satisfied and would fire on the first worker and submit a second allocation. The guard suppresses
+those satisfied actions so recover's own submission is not duplicated. The server cannot do this —
+it can't tell "recover is about to allocate these jobs itself" from "plain reinit, the action should
+fire." For the `on_workflow_start` and already-terminal-gated cases the guard is now a no-op (the
+server already keeps those executed, and the guard skips already-executed actions); the
+reset-`on_jobs_ready` case is the one it still handles.
 
 ### Re-running a Slurm workflow
 
@@ -471,14 +520,15 @@ affected subset, but a single large fan-in action (e.g. one `on_jobs_ready` gati
 `num_allocations: 500`) re-arms as a whole when any subset is reset, and `submit` re-submits its
 full count even if only a handful of jobs need to re-run. For a right-sized partial re-run of such a
 stage, use `torc recover`, which regenerates `schedule_nodes` actions sized to the actually-pending
-jobs (and suppresses the spec's full-size action via `mark_satisfied_schedule_actions_executed`).
+jobs (and suppresses the spec's full-size action via `suppress_satisfied_schedule_actions`).
 
 ## Limitations
 
 1. **No Action Dependencies**: Actions cannot depend on other actions completing
 2. **No Conditional Execution**: Actions cannot have conditional logic (use multiple actions with
    different job selections instead)
-3. **No Action Retries**: Failed actions are not automatically retried
+3. **No Action Retries**: Failed actions are not automatically retried; reset them with
+   `torc workflows reset-action` after fixing the cause
 4. **Single Action Type**: Each action has one action_type (cannot combine run_commands and
    schedule_nodes)
 5. **Job Selectors Are Spec-Time Only**: An action's job names/patterns are fixed when the workflow

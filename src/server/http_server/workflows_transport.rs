@@ -186,6 +186,43 @@ where
             .await
     }
 
+    pub(super) async fn transport_suppress_action(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        context: &C,
+    ) -> Result<SuppressActionResponse, ApiError> {
+        authorize_workflow!(self, workflow_id, context, SuppressActionResponse);
+        self.workflow_actions_api
+            .suppress_action(workflow_id, action_id, context)
+            .await
+    }
+
+    pub(super) async fn transport_report_action_result(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        body: models::WorkflowActionResultRequest,
+        context: &C,
+    ) -> Result<ReportActionResultResponse, ApiError> {
+        authorize_workflow!(self, workflow_id, context, ReportActionResultResponse);
+        self.workflow_actions_api
+            .report_action_result(workflow_id, action_id, body, context)
+            .await
+    }
+
+    pub(super) async fn transport_reset_action(
+        &self,
+        workflow_id: i64,
+        action_id: i64,
+        context: &C,
+    ) -> Result<ResetActionResponse, ApiError> {
+        authorize_workflow!(self, workflow_id, context, ResetActionResponse);
+        self.workflow_actions_api
+            .reset_action(workflow_id, action_id, context)
+            .await
+    }
+
     pub(super) async fn transport_update_workflow_action(
         &self,
         workflow_id: i64,

@@ -3,8 +3,10 @@
  * Module-level so any component can start one (`execution.start(id, mode)`) and
  * <ExecutionPanel/> shows it.
  */
-import { app } from "../../lib/state.svelte";
+import { dashPost } from "../../lib/api/dash";
 import { withToken } from "../../lib/api/token";
+import { errorText } from "../../lib/format";
+import { app } from "../../lib/state.svelte";
 import { toast } from "../../lib/ui/toast.svelte";
 
 export type LineKind = "info" | "stdout" | "stderr" | "error" | "success" | "warning";
@@ -25,6 +27,8 @@ class Execution {
   lines = $state.raw<Line[]>([]);
 
   #source: EventSource | null = null;
+  /** Set when Stop was pressed during a run, so its exit reads as stopped, not failed. */
+  #stopping = false;
   #buffer: Line[] = [];
   #flushScheduled = false;
 
@@ -38,6 +42,7 @@ class Execution {
     this.collapsed = false;
     this.running = true;
     this.result = null;
+    this.#stopping = false;
     const watching = mode !== "run";
     this.#append(`${watching ? "Watching" : "Starting"} workflow ${workflowId}…`, "info");
 
@@ -55,6 +60,10 @@ class Execution {
     on("stderr", (d) => this.#append(d, "stderr"));
     on("status", (d) => this.#append(`[Status] ${d}`, "info"));
     on("end", (status) => {
+      if (this.#stopping) {
+        this.#append("Run stopped.", "warning");
+        return this.#finish("stopped");
+      }
       if (status === "success") {
         this.#append(
           watching ? "✓ Watch finished: workflow complete" : "✓ Workflow completed successfully",
@@ -78,16 +87,34 @@ class Execution {
     });
   }
 
-  /** Stop following the stream. A `torc watch` stops with it; a `torc run` keeps running. */
-  stop() {
+  /**
+   * Stop. A `torc run` is sent SIGTERM (its jobs are terminated) and the output keeps streaming
+   * until it exits. A `torc watch` ends when the stream closes; the workflow is not affected.
+   */
+  async stop() {
     if (!this.running) return;
-    this.#append(
-      this.mode === "run"
-        ? "⚠ Stopped following output. The run may continue on the server; use Cancel workflow to stop it."
-        : "Stopped watching. The workflow itself is not affected.",
-      "warning",
-    );
-    this.#finish("stopped");
+    if (this.mode !== "run") {
+      this.#append("Stopped watching. The workflow itself is not affected.", "warning");
+      return this.#finish("stopped");
+    }
+    this.#stopping = true;
+    this.#append("Stopping the run and terminating its jobs…", "warning");
+    // Ignore the reply if another execution started meanwhile.
+    const es = this.#source;
+    try {
+      const res = await dashPost<{ stopped: boolean }>("/api/cli/stop-run", {
+        workflow_id: String(this.workflowId),
+      });
+      if (this.#source !== es) return;
+      if (!res.stopped) {
+        this.#append("The run is no longer active.", "warning");
+        this.#finish("stopped");
+      }
+    } catch (e) {
+      if (this.#source !== es) return;
+      this.#stopping = false;
+      this.#append(`Stop failed: ${errorText(e)}`, "error");
+    }
   }
 
   close() {

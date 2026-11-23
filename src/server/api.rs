@@ -203,6 +203,55 @@ pub fn resource_not_found_response(
     message_error_response(format!("{} not found with ID: {}", resource, id))
 }
 
+/// Build the 422 body for an update whose `workflow_id` differs from the stored one.
+pub fn workflow_id_immutable_response() -> models::ErrorResponse {
+    message_error_response("workflow_id cannot be changed")
+}
+
+/// Explain an `UPDATE ... WHERE id = ? AND workflow_id = ?` that matched no row:
+/// `Ok(true)` if the record exists, so the body's `workflow_id` differs from the
+/// stored one (422); `Ok(false)` if the record is gone (404).
+pub async fn workflow_id_mismatch(
+    pool: &SqlitePool,
+    table: &'static str,
+    id: i64,
+) -> Result<bool, ApiError> {
+    // `table` is a compile-time literal at every call site, never caller input.
+    let sql = format!("SELECT 1 FROM {table} WHERE id = ?");
+    sqlx::query(sqlx::AssertSqlSafe(&*sql))
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+        .map(|row| row.is_some())
+        .map_err(|e| database_error_with_msg(e, format!("Failed to look up {table}")))
+}
+
+/// Return the 422 body if record `id` in `table` is not in `workflow_id` (missing or in another
+/// workflow). Race-free as a pre-check because no endpoint moves a record between workflows; a
+/// concurrent delete is caught by the foreign key.
+pub async fn ref_outside_workflow(
+    pool: &SqlitePool,
+    table: &'static str,
+    field: &str,
+    id: i64,
+    workflow_id: i64,
+) -> Result<Option<models::ErrorResponse>, ApiError> {
+    // `table` is a compile-time literal at every call site, never caller input.
+    let sql = format!("SELECT 1 FROM {table} WHERE id = ? AND workflow_id = ?");
+    let found = sqlx::query(sqlx::AssertSqlSafe(&*sql))
+        .bind(id)
+        .bind(workflow_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| database_error_with_msg(e, format!("Failed to look up {table}")))?
+        .is_some();
+    Ok((!found).then(|| {
+        message_error_response(format!(
+            "{field}={id} does not exist in workflow_id={workflow_id}"
+        ))
+    }))
+}
+
 /// Escape SQL LIKE wildcard characters in user input.
 /// Escapes `%`, `_`, and `\` with a backslash prefix.
 pub fn escape_like_pattern(input: &str) -> String {
@@ -436,7 +485,7 @@ pub use results::{ResultsApi, ResultsApiImpl};
 pub use ro_crate::{RoCrateApi, RoCrateApiImpl};
 pub use schedulers::{SchedulersApi, SchedulersApiImpl};
 pub use slurm_stats::{SlurmStatsApi, SlurmStatsApiImpl};
-pub use sql_query_builder::SqlQueryBuilder;
+pub use sql_query_builder::{SqlQueryBuilder, int_in_clause};
 pub use user_data::{UserDataApi, UserDataApiImpl};
 pub use workflow_actions::{WorkflowActionsApi, WorkflowActionsApiImpl};
 pub use workflows::{WorkflowsApi, WorkflowsApiImpl};

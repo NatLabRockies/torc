@@ -4,7 +4,7 @@
 # Simulates Slurm's sbatch command
 
 # Read job counter from temp file or initialize to 1000
-JOB_COUNTER_FILE="${TMPDIR:-/tmp}/fake_sbatch_counter.txt"
+JOB_COUNTER_FILE="${TORC_FAKE_SLURM_STATE_DIR:-${TMPDIR:-/tmp}}/fake_sbatch_counter.txt"
 if [ -f "$JOB_COUNTER_FILE" ]; then
     JOB_ID=$(cat "$JOB_COUNTER_FILE")
 else
@@ -24,7 +24,7 @@ fi
 echo "Submitted batch job $JOB_ID"
 
 # Store job info for squeue/sacct to use
-JOBS_FILE="${TMPDIR:-/tmp}/fake_slurm_jobs.txt"
+JOBS_FILE="${TORC_FAKE_SLURM_STATE_DIR:-${TMPDIR:-/tmp}}/fake_slurm_jobs.txt"
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S")
 # Format: job_id|name|state|start_time|end_time|account|partition|qos
 echo "${JOB_ID}|test_job|PENDING|${TIMESTAMP}|Unknown|test_account|debug|normal" >> "$JOBS_FILE"

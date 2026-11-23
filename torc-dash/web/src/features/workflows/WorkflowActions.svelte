@@ -9,25 +9,44 @@
   import { app } from "../../lib/state.svelte";
   import Icon, { type IconName } from "../../lib/ui/Icon.svelte";
   import {
+    archiveWorkflows,
     cancelWorkflow,
     deleteWorkflows,
+    downloadLogs,
     initializeWorkflow,
     reinitializeWorkflow,
     resetWorkflow,
+    stopLocalRun,
     submitWorkflow,
   } from "./actions";
+  import EditWorkflowModal from "./EditWorkflowModal.svelte";
   import { execution } from "./execution.svelte";
   import ExecutionPlanModal from "./ExecutionPlanModal.svelte";
   import ExportModal from "./ExportModal.svelte";
   import RecoverModal from "./RecoverModal.svelte";
+  import ScheduleNodesModal from "./ScheduleNodesModal.svelte";
   import SyncStatusModal from "./SyncStatusModal.svelte";
 
-  let { workflowId, compact = false }: { workflowId: number; compact?: boolean } = $props();
+  let {
+    workflowId,
+    compact = false,
+    archived = false,
+  }: { workflowId: number; compact?: boolean; archived?: boolean } = $props();
 
-  type Dialog = "plan" | "recover" | "sync" | "export";
+  type Dialog = "plan" | "recover" | "sync" | "export" | "schedule" | "edit";
   type Action = { id: string; label: string; icon?: IconName; danger?: boolean; run: () => void };
 
   let dialog = $state<Dialog | null>(null);
+  // Set when the sync dialog was opened because (re)initialize was blocked by orphaned jobs.
+  let retryInit = $state<{ label: string; run: () => unknown } | null>(null);
+
+  /** Run init/reinit; if blocked by jobs that look active, open the sync dialog with a retry. */
+  async function initOrSync(label: string, run: (id: number) => Promise<"needs-sync" | void>) {
+    if ((await run(workflowId)) === "needs-sync") {
+      retryInit = { label, run: () => initOrSync(label, run) };
+      dialog = "sync";
+    }
+  }
   let running = $derived(
     execution.running && execution.mode === "run" && execution.workflowId === workflowId,
   );
@@ -51,14 +70,26 @@
       label: "Watch with auto-recovery",
       run: () => execution.start(id(), "watch-recover"),
     },
-    init: { id: "init", label: "Initialize", run: () => initializeWorkflow(id()) },
-    reinit: { id: "reinit", label: "Reinitialize", run: () => reinitializeWorkflow(id()) },
+    init: { id: "init", label: "Initialize", run: () => initOrSync("Initialize", initializeWorkflow) },
+    reinit: { id: "reinit", label: "Reinitialize", run: () => initOrSync("Reinitialize", reinitializeWorkflow) },
     reset: { id: "reset", label: "Reset status", run: () => resetWorkflow(id()) },
     plan: { id: "plan", label: "Execution plan", run: () => (dialog = "plan") },
     graph: { id: "graph", label: "View graph", icon: "graph", run: () => app.go("dag", id()) },
     recover: { id: "recover", label: "Recover failed jobs…", run: () => (dialog = "recover") },
     sync: { id: "sync", label: "Sync Slurm status…", run: () => (dialog = "sync") },
     export: { id: "export", label: "Export…", icon: "download", run: () => (dialog = "export") },
+    logs: { id: "logs", label: "Download logs", icon: "download", run: () => downloadLogs(id()) },
+    schedule: { id: "schedule", label: "Schedule Slurm nodes…", run: () => (dialog = "schedule") },
+    edit: { id: "edit", label: "Edit & share…", run: () => (dialog = "edit") },
+    archive: {
+      id: "archive",
+      // A getter so the label follows the prop.
+      get label() {
+        return archived ? "Unarchive" : "Archive";
+      },
+      run: () => archiveWorkflows([id()], !archived),
+    },
+    stopRun: { id: "stop-run", label: "Stop local run", icon: "stop", run: () => stopLocalRun(id()) },
     cancel: {
       id: "cancel",
       label: "Cancel workflow",
@@ -75,20 +106,24 @@
     },
   };
 
+  // Stop can't end a run cleanly on a Windows host, so it isn't offered there.
+  let stopRun = $derived(app.canStopRuns ? [ACTIONS.stopRun] : []);
   // Groups separated by dividers in the menu.
   let menuGroups = $derived(
     compact
       ? [
           [ACTIONS.init, ACTIONS.reinit, ACTIONS.reset],
-          [ACTIONS.watch, ACTIONS.watchRecover],
+          [ACTIONS.watch, ACTIONS.watchRecover, ...stopRun],
           [ACTIONS.graph, ACTIONS.plan],
-          [ACTIONS.recover, ACTIONS.sync, ACTIONS.export],
+          [ACTIONS.schedule, ACTIONS.recover, ACTIONS.sync],
+          [ACTIONS.edit, ACTIONS.export, ACTIONS.logs, ACTIONS.archive],
           [ACTIONS.cancel, ACTIONS.delete],
         ]
       : [
-          [ACTIONS.watch, ACTIONS.watchRecover],
+          [ACTIONS.watch, ACTIONS.watchRecover, ...stopRun],
           [ACTIONS.reset],
-          [ACTIONS.recover, ACTIONS.sync, ACTIONS.export],
+          [ACTIONS.schedule, ACTIONS.recover, ACTIONS.sync],
+          [ACTIONS.edit, ACTIONS.export, ACTIONS.logs, ACTIONS.archive],
           [ACTIONS.cancel, ACTIONS.delete],
         ],
   );
@@ -169,9 +204,17 @@
   {:else if dialog === "recover"}
     <RecoverModal {workflowId} onclose={() => (dialog = null)} />
   {:else if dialog === "sync"}
-    <SyncStatusModal {workflowId} onclose={() => (dialog = null)} />
+    <SyncStatusModal
+      {workflowId}
+      retry={retryInit ?? undefined}
+      onclose={() => ((dialog = null), (retryInit = null))}
+    />
   {:else if dialog === "export"}
     <ExportModal {workflowId} onclose={() => (dialog = null)} />
+  {:else if dialog === "schedule"}
+    <ScheduleNodesModal {workflowId} onclose={() => (dialog = null)} />
+  {:else if dialog === "edit"}
+    <EditWorkflowModal {workflowId} onclose={() => (dialog = null)} />
   {/if}
 </div>
 

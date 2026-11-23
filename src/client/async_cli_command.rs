@@ -29,7 +29,9 @@ use crate::client::resource_monitor::ResourceMonitor;
 use crate::client::slurm_utils::{parse_slurm_cpu_time, parse_slurm_memory};
 use crate::client::workflow_spec::{ExecutionMode, StdioMode};
 use crate::memory_utils::{memory_string_to_bytes, memory_string_to_mb};
-use crate::models::{JobModel, JobStatus, ResourceRequirementsModel, ResultModel, SlurmStatsModel};
+use crate::models::{
+    JobModel, JobStatus, OutputFileStat, ResourceRequirementsModel, ResultModel, SlurmStatsModel,
+};
 use chrono::{DateTime, Utc};
 use log::{self, debug, error, info, warn};
 use std::collections::HashMap;
@@ -169,6 +171,8 @@ pub struct AsyncCliCommand {
     step_name: Option<String>,
     /// Slurm accounting stats collected via sacct after step completion.
     slurm_stats: Option<SlurmStatsModel>,
+    /// Output-file mtimes observed at completion; sent with the completion entry.
+    pub output_files: Option<Vec<OutputFileStat>>,
     handle: Option<Child>,
     pid: Option<u32>,
     pub is_running: bool,
@@ -196,6 +200,7 @@ impl AsyncCliCommand {
             attempt_id: None,
             step_name: None,
             slurm_stats: None,
+            output_files: None,
             handle: None,
             pid: None,
             is_running: false,

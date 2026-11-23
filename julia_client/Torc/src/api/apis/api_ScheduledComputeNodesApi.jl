@@ -178,6 +178,7 @@ const _returntypes_update_scheduled_compute_node_ScheduledComputeNodesApi = Dict
     Regex("^" * replace("200", "x"=>".") * "\$") => ScheduledComputeNodesModel,
     Regex("^" * replace("403", "x"=>".") * "\$") => ErrorResponse,
     Regex("^" * replace("404", "x"=>".") * "\$") => ErrorResponse,
+    Regex("^" * replace("422", "x"=>".") * "\$") => ErrorResponse,
     Regex("^" * replace("500", "x"=>".") * "\$") => ErrorResponse,
 )
 
