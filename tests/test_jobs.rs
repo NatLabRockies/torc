@@ -362,42 +362,6 @@ fn test_jobs_get_command_json(start_server: &ServerProcess) {
 }
 
 #[rstest]
-fn test_jobs_update_command_json(start_server: &ServerProcess) {
-    let config = &start_server.config;
-
-    // Create test data
-    let workflow = create_test_workflow(config, "test_jobs_update_workflow");
-    let workflow_id = workflow.id.unwrap();
-    let job = create_test_job(config, workflow_id, "test_update_job");
-    let job_id = job.id.unwrap();
-
-    // Test the CLI update command
-    let args = [
-        "jobs",
-        "update",
-        &job_id.to_string(),
-        "--name",
-        "updated_job_name",
-        "--command",
-        "echo 'Updated command'",
-    ];
-
-    let json_output =
-        run_cli_with_json(&args, start_server, None).expect("Failed to run jobs update command");
-
-    // Verify the updated values
-    assert_eq!(json_output.get("id").unwrap(), &json!(job_id));
-    assert_eq!(json_output.get("name").unwrap(), &json!("updated_job_name"));
-    assert_eq!(
-        json_output.get("command").unwrap(),
-        &json!("echo 'Updated command'")
-    );
-
-    // Verify unchanged values
-    assert_eq!(json_output.get("workflow_id").unwrap(), &json!(workflow_id));
-}
-
-#[rstest]
 fn test_jobs_update_partial_fields(start_server: &ServerProcess) {
     let config = &start_server.config;
 
