@@ -133,6 +133,10 @@ fn wait_for_server_ready(child: &mut Child, port: u16, timeout_secs: u64) -> Res
 }
 
 fn build_test_binaries() {
+    // The nextest setup script (.config/nextest.toml) builds once per run and sets this.
+    if std::env::var_os("TORC_TEST_BINARIES_BUILT").is_some() {
+        return;
+    }
     let status = Command::new("cargo")
         .arg("build")
         .arg("--workspace")
@@ -241,19 +245,6 @@ fn start_process_with_env(
     db_file: NamedTempFile,
     extra_env: &[(&str, &str)],
 ) -> ServerProcess {
-    println!("Setting up database with url: {}", db_url);
-    let status = Command::new("sqlx")
-        .arg("--no-dotenv")
-        .arg("database")
-        .arg("setup")
-        .arg("--source")
-        .arg("torc-server/migrations")
-        .env("DATABASE_URL", db_url)
-        .status()
-        .expect("failed to execute sqlx");
-    if !status.success() {
-        panic!("sqlx database setup failed with status: {}", status);
-    }
     build_test_binaries();
 
     // Ensure torc-slurm-job-runner binary is in the PATH for tests
@@ -1660,19 +1651,6 @@ fn start_process_with_access_control_impl(
     require_auth: bool,
     extra_args: &[&str],
 ) -> AccessControlServerProcess {
-    println!("Setting up database with url: {}", db_url);
-    let status = Command::new("sqlx")
-        .arg("--no-dotenv")
-        .arg("database")
-        .arg("setup")
-        .arg("--source")
-        .arg("torc-server/migrations")
-        .env("DATABASE_URL", db_url)
-        .status()
-        .expect("failed to execute sqlx");
-    if !status.success() {
-        panic!("sqlx database setup failed with status: {}", status);
-    }
     build_test_binaries();
 
     let htpasswd_path = htpasswd_file.path().to_string_lossy().to_string();

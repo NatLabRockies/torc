@@ -9,7 +9,7 @@
 
 mod common;
 
-use common::{ServerProcess, start_server};
+use common::{ServerProcess, ensure_test_binaries_built, start_server, torc_binary_path};
 use rstest::rstest;
 use torc::client::{Configuration, apis};
 use torc::models;
@@ -56,22 +56,13 @@ fn create_workflow_with_ready_jobs(
 }
 
 /// Test that auto-schedule CLI arguments are parsed correctly
-#[rstest]
-fn test_auto_schedule_cli_help(_start_server: &ServerProcess) {
-    use std::process::Command;
+#[test]
+fn test_auto_schedule_cli_help() {
+    ensure_test_binaries_built();
 
     // Run torc watch --help and verify auto-schedule options are present
-    let output = Command::new("cargo")
-        .args([
-            "run",
-            "--bin",
-            "torc",
-            "--features",
-            "client,tui,plot_resources",
-            "--",
-            "watch",
-            "--help",
-        ])
+    let output = std::process::Command::new(torc_binary_path())
+        .args(["watch", "--help"])
         .output()
         .expect("Failed to run command");
 

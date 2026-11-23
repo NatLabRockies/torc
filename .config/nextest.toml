@@ -2,6 +2,20 @@
 # Tests with #[serial] attributes need to be grouped here since
 # nextest runs tests in separate processes.
 
+experimental = ["setup-scripts"]
+
+# Build the torc/torc-server/etc. binaries once before any test runs, instead of every test
+# process invoking `cargo build` and contending on the cargo lock. Unix only (shell script);
+# on Windows tests fall back to building themselves.
+[scripts.setup.build-binaries]
+command = 'tests/scripts/nextest_build_binaries.sh'
+slow-timeout = { period = "300s" }
+
+[[profile.default.scripts]]
+platform = { host = 'cfg(unix)' }
+filter = 'all()'
+setup = 'build-binaries'
+
 [profile.default]
 # Allow extra time for the first test in each file, which may trigger a cargo
 # build of server/runner binaries via build_test_binaries() in the #[once]
