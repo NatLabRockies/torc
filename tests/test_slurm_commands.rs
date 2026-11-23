@@ -2,7 +2,7 @@ mod common;
 
 use common::{
     ServerProcess, create_minimal_resources_workflow, create_test_workflow, run_cli_with_json,
-    start_server,
+    start_server, torc_binary_path,
 };
 use rstest::rstest;
 use serde_json::json;
@@ -2102,12 +2102,8 @@ fn test_cancel_workflow_with_slurm_scheduler(start_server: &ServerProcess) {
 
     setup_fake_slurm_commands();
     // Schedule nodes using CLI command
-    let output = Command::new("cargo")
+    let output = Command::new(torc_binary_path())
         .args([
-            "run",
-            "-p",
-            "torc",
-            "--",
             "--url",
             base_url,
             "slurm",
@@ -2183,12 +2179,8 @@ fn test_cancel_workflow_with_slurm_scheduler(start_server: &ServerProcess) {
 
     setup_fake_slurm_commands();
     // Cancel the workflow using CLI command
-    let output = Command::new("cargo")
+    let output = Command::new(torc_binary_path())
         .args([
-            "run",
-            "--bin",
-            "torc",
-            "--",
             "--url",
             base_url,
             "workflows",

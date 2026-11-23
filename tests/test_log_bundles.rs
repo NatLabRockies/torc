@@ -3,6 +3,9 @@
 //! These tests create temporary directories with fake log files to verify
 //! the bundling and analysis functionality works correctly.
 
+mod common;
+
+use common::ensure_test_binaries_built;
 use flate2::read::GzDecoder;
 use rstest::rstest;
 use std::fs::{self, File};
@@ -34,18 +37,9 @@ fn run_torc(args: &[&str]) -> (bool, String, String) {
     (output.status.success(), stdout, stderr)
 }
 
-/// Build the torc binary before running tests
-fn ensure_binary_built() {
-    let status = Command::new("cargo")
-        .args(["build", "--bin", "torc"])
-        .status()
-        .expect("Failed to build torc");
-    assert!(status.success(), "Failed to build torc binary");
-}
-
 #[rstest]
 fn test_bundle_creates_tarball() {
-    ensure_binary_built();
+    ensure_test_binaries_built();
 
     let temp_dir = TempDir::new().unwrap();
     let output_dir = temp_dir.path().join("torc_output");
@@ -189,7 +183,7 @@ fn collect_files_to_tar<W: std::io::Write>(
 
 #[rstest]
 fn test_analyze_bundle_detects_oom() {
-    ensure_binary_built();
+    ensure_test_binaries_built();
 
     let temp_dir = TempDir::new().unwrap();
     let output_dir = temp_dir.path().join("torc_output");
@@ -222,7 +216,7 @@ fn test_analyze_bundle_detects_oom() {
 
 #[rstest]
 fn test_analyze_bundle_detects_timeout() {
-    ensure_binary_built();
+    ensure_test_binaries_built();
 
     let temp_dir = TempDir::new().unwrap();
     let output_dir = temp_dir.path().join("torc_output");
@@ -250,7 +244,7 @@ fn test_analyze_bundle_detects_timeout() {
 
 #[rstest]
 fn test_analyze_bundle_detects_segfault() {
-    ensure_binary_built();
+    ensure_test_binaries_built();
 
     let temp_dir = TempDir::new().unwrap();
     let output_dir = temp_dir.path().join("torc_output");
@@ -278,7 +272,7 @@ fn test_analyze_bundle_detects_segfault() {
 
 #[rstest]
 fn test_analyze_bundle_detects_python_exception() {
-    ensure_binary_built();
+    ensure_test_binaries_built();
 
     let temp_dir = TempDir::new().unwrap();
     let output_dir = temp_dir.path().join("torc_output");
@@ -313,7 +307,7 @@ ValueError: Invalid input
 
 #[rstest]
 fn test_analyze_bundle_detects_missing_output_files() {
-    ensure_binary_built();
+    ensure_test_binaries_built();
 
     let temp_dir = TempDir::new().unwrap();
     let output_dir = temp_dir.path().join("torc_output");
@@ -345,7 +339,7 @@ INFO: Job ID 123 completed return_code=1 status=Failed
 
 #[rstest]
 fn test_analyze_bundle_no_errors() {
-    ensure_binary_built();
+    ensure_test_binaries_built();
 
     let temp_dir = TempDir::new().unwrap();
     let output_dir = temp_dir.path().join("torc_output");
@@ -378,7 +372,7 @@ fn test_analyze_bundle_no_errors() {
 
 #[rstest]
 fn test_analyze_directory_single_workflow() {
-    ensure_binary_built();
+    ensure_test_binaries_built();
 
     let temp_dir = TempDir::new().unwrap();
     let output_dir = temp_dir.path().join("torc_output");
@@ -408,7 +402,7 @@ fn test_analyze_directory_single_workflow() {
 
 #[rstest]
 fn test_analyze_directory_multiple_workflows_requires_id() {
-    ensure_binary_built();
+    ensure_test_binaries_built();
 
     let temp_dir = TempDir::new().unwrap();
     let output_dir = temp_dir.path().join("torc_output");
@@ -438,7 +432,7 @@ fn test_analyze_directory_multiple_workflows_requires_id() {
 
 #[rstest]
 fn test_analyze_directory_with_workflow_id() {
-    ensure_binary_built();
+    ensure_test_binaries_built();
 
     let temp_dir = TempDir::new().unwrap();
     let output_dir = temp_dir.path().join("torc_output");
@@ -483,7 +477,7 @@ fn test_analyze_directory_with_workflow_id() {
 
 #[rstest]
 fn test_analyze_skips_slurm_env_files() {
-    ensure_binary_built();
+    ensure_test_binaries_built();
 
     let temp_dir = TempDir::new().unwrap();
     let output_dir = temp_dir.path().join("torc_output");
@@ -521,7 +515,7 @@ fn test_analyze_skips_slurm_env_files() {
 
 #[rstest]
 fn test_analyze_nonexistent_path() {
-    ensure_binary_built();
+    ensure_test_binaries_built();
 
     let (success, _stdout, stderr) =
         run_torc(&["logs", "analyze", "/nonexistent/path/bundle.tar.gz"]);
@@ -536,7 +530,7 @@ fn test_analyze_nonexistent_path() {
 
 #[rstest]
 fn test_analyze_empty_directory() {
-    ensure_binary_built();
+    ensure_test_binaries_built();
 
     let temp_dir = TempDir::new().unwrap();
     let output_dir = temp_dir.path().join("torc_output");
@@ -554,7 +548,7 @@ fn test_analyze_empty_directory() {
 
 #[rstest]
 fn test_analyze_shows_metadata() {
-    ensure_binary_built();
+    ensure_test_binaries_built();
 
     let temp_dir = TempDir::new().unwrap();
     let output_dir = temp_dir.path().join("torc_output");
@@ -591,7 +585,7 @@ fn test_analyze_shows_metadata() {
 
 #[rstest]
 fn test_analyze_reports_file_count() {
-    ensure_binary_built();
+    ensure_test_binaries_built();
 
     let temp_dir = TempDir::new().unwrap();
     let output_dir = temp_dir.path().join("torc_output");
