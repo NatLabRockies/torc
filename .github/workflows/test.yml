@@ -128,8 +128,11 @@ jobs:
           # Sanity check that non-interactive (key-based) login works
           ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new localhost "powershell -NoProfile -Command Write-Output ok"
 
+      # Same command and features as tests/scripts/nextest_build_binaries.sh (and
+      # build_test_binaries() in tests/common.rs, used on Windows), so the build inside the
+      # test run is a no-op instead of recompiling torc with a different feature set.
       - name: Build test binaries (only necessary packages)
-        run: cargo build --all-features -p torc
+        run: cargo build --workspace --bins --features server-bin,slurm-runner
         env:
           RUST_BACKTRACE: 1
           CARGO_INCREMENTAL: 0
