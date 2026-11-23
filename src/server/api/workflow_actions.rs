@@ -529,6 +529,8 @@ where
         // For persistent actions, don't mark as executed so other workers can claim it
         // For non-persistent actions, mark as executed
         // Both statements require executed = 0, so a concurrent suppress wins or loses atomically.
+        // They also re-check that the action is still triggered: a client may hold a stale
+        // pending list while a retry has since taken a count back.
         let result = if is_persistent {
             // For persistent actions, record the claim but keep executed=0 so other workers can
             // claim it. state/error hold the latest claim's outcome.
@@ -537,7 +539,8 @@ where
             sqlx::query(
                 "UPDATE workflow_action
                  SET executed_at = ?, state = 'claimed', error = NULL
-                 WHERE id = ? AND executed = 0",
+                 WHERE id = ? AND executed = 0
+                   AND trigger_count >= required_triggers",
             )
             .bind(&now)
             .bind(action_id)
@@ -548,7 +551,8 @@ where
                 "UPDATE workflow_action
                  SET executed = 1, executed_at = ?, executed_by = ?, state = 'claimed',
                      error = NULL
-                 WHERE id = ? AND executed = 0",
+                 WHERE id = ? AND executed = 0
+                   AND trigger_count >= required_triggers",
             )
             .bind(&now)
             .bind(compute_node_id)

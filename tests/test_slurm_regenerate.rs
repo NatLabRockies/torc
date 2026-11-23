@@ -1109,6 +1109,29 @@ fn test_apply_plan_arms_ready_and_deferred(start_server: &ServerProcess) {
     assert_eq!(action(config, workflow_id, deferred.id).trigger_count, 2);
 }
 
+/// A merged scheduler gated only on its root job keeps its action when the root was claimed or
+/// finished after planning: its pending dependents still need the allocation, and the finished
+/// gate counts as ready.
+#[rstest]
+fn test_apply_plan_keeps_merged_gate_when_root_skipped(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, jobs, _, cn) = create_plan_workflow(config, "apply_plan_merged_gate");
+    complete(config, workflow_id, jobs[0], cn);
+    let mut request = plan(workflow_id, &[&jobs[..]]);
+    request.recovery_actions[0].job_ids = vec![jobs[0]];
+    let response =
+        apis::slurm_schedulers_api::apply_scheduler_plan(config, workflow_id, request, None)
+            .expect("apply_scheduler_plan failed");
+    assert_eq!(response.skipped_job_ids, vec![jobs[0]]);
+    let [only] = &response.actions[..] else {
+        panic!("expected one action: {:?}", response.actions);
+    };
+    assert!(only.pending, "a finished gate job satisfies on_jobs_ready");
+    let stored = action(config, workflow_id, only.id);
+    assert_eq!((stored.trigger_count, stored.required_triggers), (1, 1));
+    assert_eq!(stored.job_ids, Some(vec![jobs[0]]));
+}
+
 /// If the gate job completes after the client planned (b1, b2 deferred) but before the plan is
 /// applied, the action is armed from the jobs' statuses at apply time, so it is Pending instead
 /// of waiting for a ready transition that already happened.
@@ -1172,6 +1195,9 @@ fn test_apply_plan_suppresses_persistent_actions(start_server: &ServerProcess) {
             config_json.clone(),
         );
         body.persistent = persistent;
+        // Created after initialize, so mark it triggered as a worker start would: a claim
+        // requires trigger_count >= required_triggers.
+        body.trigger_count = 1;
         apis::workflow_actions_api::create_workflow_action(config, workflow_id, body)
             .unwrap()
             .id

@@ -1651,19 +1651,28 @@ where
             response.scheduler_ids.push(id);
         }
 
-        // Recovery actions, armed from the jobs' statuses as of this transaction. Of the pending
-        // statuses only ready satisfies on_jobs_ready; later transitions to ready increment
-        // trigger_count through check_and_trigger_actions.
-        let ready = models::JobStatus::Ready.to_int() as i64;
+        // Recovery actions, armed from the jobs' statuses as of this transaction. A gate job that
+        // is ready or past it (claimed or finished since planning) satisfies on_jobs_ready; later
+        // transitions to ready increment trigger_count through check_and_trigger_actions. The gate
+        // is kept whole even if some gate jobs were skipped: a merged scheduler gates only on its
+        // root jobs, so its pending dependents still need the action. It is dropped only when its
+        // scheduler has no pending jobs left, since its allocation would have nothing to run.
+        let not_yet_ready = [
+            models::JobStatus::Uninitialized.to_int() as i64,
+            models::JobStatus::Blocked.to_int() as i64,
+        ];
         for action in &body.recovery_actions {
-            // Gate only on jobs still pending. If none are, the action has nothing to run.
-            let job_ids: Vec<i64> = action.job_ids.iter().copied().filter(is_pending).collect();
-            if job_ids.is_empty() {
+            let idx = action.scheduler_index as usize;
+            if !body.schedulers[idx].job_ids.iter().any(is_pending) {
                 continue;
             }
-            let scheduler_id = response.scheduler_ids[action.scheduler_index as usize];
+            let job_ids = &action.job_ids;
+            let scheduler_id = response.scheduler_ids[idx];
             let required = job_ids.len() as i64;
-            let trigger_count = job_ids.iter().filter(|id| statuses[id] == ready).count() as i64;
+            let trigger_count = job_ids
+                .iter()
+                .filter(|id| !not_yet_ready.contains(&statuses[id]))
+                .count() as i64;
             let config = serde_json::json!({
                 "scheduler_type": "slurm",
                 "scheduler_id": scheduler_id,
@@ -1677,7 +1686,7 @@ where
             )
             .bind(workflow_id)
             .bind(config.to_string())
-            .bind(to_json(&job_ids))
+            .bind(to_json(job_ids))
             .bind(trigger_count)
             .bind(required)
             .fetch_one(&mut *tx)
