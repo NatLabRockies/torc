@@ -87,6 +87,70 @@ fn test_auto_schedule_cli_help() {
     );
 }
 
+/// Test that slurm schedulers can be created for a workflow
+#[rstest]
+fn test_create_slurm_scheduler(start_server: &ServerProcess) {
+    let config = &start_server.config;
+
+    let (workflow_id, _job_ids) =
+        create_workflow_with_ready_jobs(config, "test_create_scheduler", 3);
+
+    // Create a slurm scheduler
+    let scheduler = models::SlurmSchedulerModel {
+        id: None,
+        workflow_id,
+        name: Some("test_scheduler".to_string()),
+        account: "test_account".to_string(),
+        partition: Some("standard".to_string()),
+        mem: Some("8g".to_string()),
+        walltime: "01:00:00".to_string(),
+        nodes: 1,
+        gres: None,
+        ntasks_per_node: None,
+        qos: None,
+        tmp: None,
+        extra: None,
+        serialize_allocations: None,
+    };
+
+    let created = apis::slurm_schedulers_api::create_slurm_scheduler(config, scheduler)
+        .expect("Failed to create scheduler");
+
+    assert!(created.id.is_some(), "Scheduler should have an ID");
+    assert_eq!(created.account, "test_account");
+    // The create response must report the stored value: the column is NOT NULL, so
+    // an omitted serialize_allocations comes back as an explicit false, matching
+    // what get/list return.
+    assert_eq!(created.serialize_allocations, Some(false));
+
+    // Updates: a null optional field keeps its value, an empty one clears it.
+    let id = created.id.unwrap();
+    let update = models::SlurmSchedulerModel {
+        partition: None,
+        mem: Some(String::new()),
+        ..created.clone()
+    };
+    apis::slurm_schedulers_api::update_slurm_scheduler(config, id, update)
+        .expect("Failed to update scheduler");
+    let updated = apis::slurm_schedulers_api::get_slurm_scheduler(config, id).unwrap();
+    assert_eq!(updated.partition.as_deref(), Some("standard"));
+    assert_eq!(updated.mem, None);
+
+    // Verify we can list the scheduler
+    let response = apis::slurm_schedulers_api::list_slurm_schedulers(
+        config,
+        workflow_id,
+        Some(0),
+        Some(100),
+        None,
+        None,
+    )
+    .expect("Failed to list schedulers");
+
+    let schedulers = response.items;
+    assert_eq!(schedulers.len(), 1, "Should have 1 scheduler");
+}
+
 /// Test the regenerate command with dry-run (the command auto-schedule calls)
 #[rstest]
 fn test_regenerate_command_dry_run(start_server: &ServerProcess) {

@@ -164,6 +164,16 @@ pub fn fake_slurm_state_dir() -> std::path::PathBuf {
             .expect("Failed to create fake Slurm state dir");
         // SAFETY: set once, before the fake scripts are spawned.
         unsafe { std::env::set_var("TORC_FAKE_SLURM_STATE_DIR", dir.path()) };
+        // A TempDir in a static is never dropped, so remove it at process exit.
+        #[cfg(unix)]
+        {
+            extern "C" fn remove_fake_slurm_state_dir() {
+                if let Some(dir) = DIR.get() {
+                    let _ = std::fs::remove_dir_all(dir.path());
+                }
+            }
+            unsafe { libc::atexit(remove_fake_slurm_state_dir) };
+        }
         dir
     })
     .path()
