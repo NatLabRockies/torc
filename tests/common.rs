@@ -133,6 +133,10 @@ fn wait_for_server_ready(child: &mut Child, port: u16, timeout_secs: u64) -> Res
 }
 
 fn build_test_binaries() {
+    // The nextest setup script (.config/nextest.toml) builds once per run and sets this.
+    if std::env::var_os("TORC_TEST_BINARIES_BUILT").is_some() {
+        return;
+    }
     let status = Command::new("cargo")
         .arg("build")
         .arg("--workspace")
@@ -144,6 +148,36 @@ fn build_test_binaries() {
     if !status.success() {
         panic!("cargo build failed with status: {}", status);
     }
+}
+
+/// Per-process directory for the fake Slurm scripts' state (job counter and jobs file).
+///
+/// nextest runs each test in its own process, so a per-process directory isolates tests that
+/// use `tests/scripts/fake_*.sh` from each other without serializing them. Sets
+/// `TORC_FAKE_SLURM_STATE_DIR`, which the scripts read; call it before invoking them.
+pub fn fake_slurm_state_dir() -> std::path::PathBuf {
+    static DIR: std::sync::OnceLock<tempfile::TempDir> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        let dir = tempfile::Builder::new()
+            .prefix("torc-fake-slurm-")
+            .tempdir()
+            .expect("Failed to create fake Slurm state dir");
+        // SAFETY: set once, before the fake scripts are spawned.
+        unsafe { std::env::set_var("TORC_FAKE_SLURM_STATE_DIR", dir.path()) };
+        // A TempDir in a static is never dropped, so remove it at process exit.
+        #[cfg(unix)]
+        {
+            extern "C" fn remove_fake_slurm_state_dir() {
+                if let Some(dir) = DIR.get() {
+                    let _ = std::fs::remove_dir_all(dir.path());
+                }
+            }
+            unsafe { libc::atexit(remove_fake_slurm_state_dir) };
+        }
+        dir
+    })
+    .path()
+    .to_path_buf()
 }
 
 static BINARIES_BUILT: std::sync::Once = std::sync::Once::new();
@@ -241,19 +275,6 @@ fn start_process_with_env(
     db_file: NamedTempFile,
     extra_env: &[(&str, &str)],
 ) -> ServerProcess {
-    println!("Setting up database with url: {}", db_url);
-    let status = Command::new("sqlx")
-        .arg("--no-dotenv")
-        .arg("database")
-        .arg("setup")
-        .arg("--source")
-        .arg("torc-server/migrations")
-        .env("DATABASE_URL", db_url)
-        .status()
-        .expect("failed to execute sqlx");
-    if !status.success() {
-        panic!("sqlx database setup failed with status: {}", status);
-    }
     build_test_binaries();
 
     // Ensure torc-slurm-job-runner binary is in the PATH for tests
@@ -1660,19 +1681,6 @@ fn start_process_with_access_control_impl(
     require_auth: bool,
     extra_args: &[&str],
 ) -> AccessControlServerProcess {
-    println!("Setting up database with url: {}", db_url);
-    let status = Command::new("sqlx")
-        .arg("--no-dotenv")
-        .arg("database")
-        .arg("setup")
-        .arg("--source")
-        .arg("torc-server/migrations")
-        .env("DATABASE_URL", db_url)
-        .status()
-        .expect("failed to execute sqlx");
-    if !status.success() {
-        panic!("sqlx database setup failed with status: {}", status);
-    }
     build_test_binaries();
 
     let htpasswd_path = htpasswd_file.path().to_string_lossy().to_string();

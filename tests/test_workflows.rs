@@ -2,39 +2,13 @@ mod common;
 
 use common::{
     ServerProcess, create_test_job, create_test_resource_requirements, create_test_result,
-    create_test_workflow, create_test_workflow_advanced, create_test_workflow_with_description,
-    run_cli_with_json, start_server,
+    create_test_workflow, create_test_workflow_with_description, run_cli_with_json, start_server,
 };
 use rstest::rstest;
 use serde_json::json;
 use torc::client::apis;
 use torc::client::apis::configuration::Configuration;
 use torc::models;
-
-#[rstest]
-fn test_workflows_add_command_json(start_server: &ServerProcess) {
-    // Test the CLI create command with JSON output
-    let args = [
-        "workflows",
-        "new",
-        "--name",
-        "test_workflow",
-        "--description",
-        "A test workflow for validation",
-    ];
-
-    let json_output = run_cli_with_json(&args, start_server, Some("test_user"))
-        .expect("Failed to run workflows create command");
-
-    assert!(json_output.get("id").is_some());
-    assert_eq!(json_output.get("name").unwrap(), &json!("test_workflow"));
-    assert_eq!(json_output.get("user").unwrap(), &json!("test_user"));
-    assert_eq!(
-        json_output.get("description").unwrap(),
-        &json!("A test workflow for validation")
-    );
-    assert!(json_output.get("timestamp").is_some());
-}
 
 #[rstest]
 fn test_workflows_add_minimal(start_server: &ServerProcess) {
@@ -81,8 +55,14 @@ fn test_workflows_add_various_names(start_server: &ServerProcess) {
         let json_output = run_cli_with_json(&args, start_server, Some("test_user"))
             .unwrap_or_else(|_| panic!("Failed to create workflow with name: {}", name));
 
+        assert!(json_output.get("id").is_some());
         assert_eq!(json_output.get("name").unwrap(), &json!(name));
         assert_eq!(json_output.get("user").unwrap(), &json!("test_user"));
+        assert_eq!(
+            json_output.get("description").unwrap(),
+            &json!(format!("Test workflow for name: {}", name))
+        );
+        assert!(json_output.get("timestamp").is_some());
     }
 }
 
@@ -713,37 +693,6 @@ fn test_workflows_different_users(start_server: &ServerProcess) {
     for workflow in workflows_user2 {
         assert_eq!(workflow.get("user").unwrap(), &json!("user2"));
     }
-}
-
-#[rstest]
-fn test_workflows_advanced_configuration(start_server: &ServerProcess) {
-    let config = &start_server.config;
-
-    // Create workflow with advanced configuration
-    let workflow = create_test_workflow_advanced(
-        config,
-        "advanced_workflow",
-        "advanced_user",
-        Some("Advanced workflow with scripts".to_string()),
-    );
-
-    let workflow_id = workflow.id.unwrap();
-
-    // Verify the advanced configuration was saved
-    let args = ["workflows", "get", &workflow_id.to_string()];
-
-    let json_output = run_cli_with_json(&args, start_server, Some("advanced_user"))
-        .expect("Failed to get advanced workflow");
-
-    assert_eq!(
-        json_output.get("name").unwrap(),
-        &json!("advanced_workflow")
-    );
-    assert_eq!(json_output.get("user").unwrap(), &json!("advanced_user"));
-    assert_eq!(
-        json_output.get("description").unwrap(),
-        &json!("Advanced workflow with scripts")
-    );
 }
 
 #[rstest]

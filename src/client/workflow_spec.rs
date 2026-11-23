@@ -6964,6 +6964,27 @@ mod tests {
     }
 
     #[test]
+    fn test_from_spec_file_unknown_extension_falls_back_to_content() {
+        let dir = tempfile::tempdir().unwrap();
+        for (file, content) in [
+            (
+                "wf.spec",
+                r#"{"name": "wf", "jobs": [{"name": "a", "command": "echo"}]}"#,
+            ),
+            (
+                "wf2.spec",
+                "name: wf\njobs:\n  - name: a\n    command: echo\n",
+            ),
+        ] {
+            let path = dir.path().join(file);
+            fs::write(&path, content).unwrap();
+            let spec = WorkflowSpec::from_spec_file(&path).unwrap();
+            assert_eq!(spec.name, "wf");
+            assert_eq!(spec.jobs[0].name, "a");
+        }
+    }
+
+    #[test]
     fn test_legacy_resource_monitor_yaml_controls_jobs() {
         let yaml_content = r#"
 name: legacy_resource_monitor_yaml

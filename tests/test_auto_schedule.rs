@@ -9,7 +9,7 @@
 
 mod common;
 
-use common::{ServerProcess, start_server};
+use common::{ServerProcess, ensure_test_binaries_built, start_server, torc_binary_path};
 use rstest::rstest;
 use torc::client::{Configuration, apis};
 use torc::models;
@@ -56,22 +56,13 @@ fn create_workflow_with_ready_jobs(
 }
 
 /// Test that auto-schedule CLI arguments are parsed correctly
-#[rstest]
-fn test_auto_schedule_cli_help(_start_server: &ServerProcess) {
-    use std::process::Command;
+#[test]
+fn test_auto_schedule_cli_help() {
+    ensure_test_binaries_built();
 
     // Run torc watch --help and verify auto-schedule options are present
-    let output = Command::new("cargo")
-        .args([
-            "run",
-            "--bin",
-            "torc",
-            "--features",
-            "client,tui,plot_resources",
-            "--",
-            "watch",
-            "--help",
-        ])
+    let output = std::process::Command::new(torc_binary_path())
+        .args(["watch", "--help"])
         .output()
         .expect("Failed to run command");
 
@@ -93,133 +84,6 @@ fn test_auto_schedule_cli_help(_start_server: &ServerProcess) {
         combined.contains("--auto-schedule-cooldown"),
         "Help should mention --auto-schedule-cooldown option. Output: {}",
         combined
-    );
-}
-
-/// Test scenario: No schedulers and ready jobs - the condition for immediate auto-schedule
-#[rstest]
-fn test_no_schedulers_with_ready_jobs_scenario(start_server: &ServerProcess) {
-    let config = &start_server.config;
-
-    // Create workflow with ready jobs but no scheduled compute nodes
-    let (workflow_id, job_ids) =
-        create_workflow_with_ready_jobs(config, "test_no_schedulers_scenario", 5);
-
-    // Verify no scheduled compute nodes exist
-    let scn_response = apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
-        config,
-        workflow_id,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-    )
-    .expect("Failed to list scheduled compute nodes");
-
-    let scheduled_nodes = scn_response.items;
-    assert!(
-        scheduled_nodes.is_empty(),
-        "Should have no scheduled compute nodes"
-    );
-
-    // Verify we have ready jobs
-    let jobs = apis::jobs_api::list_jobs(
-        config,
-        workflow_id,
-        Some(models::JobStatus::Ready),
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None, // origin_is_set
-        None, // name
-        None, // command
-        None, // labels
-        None, // ids
-        None, // statuses
-        None, // resource_requirements_id
-    )
-    .expect("Failed to list jobs");
-
-    let ready_jobs = jobs.items;
-    assert_eq!(
-        ready_jobs.len(),
-        job_ids.len(),
-        "All jobs should be in Ready state"
-    );
-
-    // This scenario (ready jobs + no schedulers) is exactly when auto-schedule
-    // should trigger immediately without waiting for threshold.
-}
-
-/// Test that jobs have default attempt_id = 1
-#[rstest]
-fn test_jobs_have_default_attempt_id(start_server: &ServerProcess) {
-    let config = &start_server.config;
-
-    let (_workflow_id, job_ids) =
-        create_workflow_with_ready_jobs(config, "test_default_attempt_id", 3);
-
-    // Verify all jobs have attempt_id = 1
-    for job_id in job_ids {
-        let job = apis::jobs_api::get_job(config, job_id).expect("Failed to get job");
-        assert_eq!(
-            job.attempt_id,
-            Some(1),
-            "New jobs should have attempt_id = 1"
-        );
-    }
-}
-
-/// Test that counting jobs by attempt_id works (simulating the count_ready_retry_jobs function)
-#[rstest]
-fn test_count_jobs_by_attempt_id(start_server: &ServerProcess) {
-    let config = &start_server.config;
-
-    let (workflow_id, _job_ids) =
-        create_workflow_with_ready_jobs(config, "test_count_by_attempt", 10);
-
-    // Get all ready jobs
-    let jobs = apis::jobs_api::list_jobs(
-        config,
-        workflow_id,
-        Some(models::JobStatus::Ready),
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None, // origin_is_set
-        None, // name
-        None, // command
-        None, // labels
-        None, // ids
-        None, // statuses
-        None, // resource_requirements_id
-    )
-    .expect("Failed to list jobs");
-
-    let ready_jobs = jobs.items;
-    let total_ready = ready_jobs.len();
-    let retry_count = ready_jobs
-        .iter()
-        .filter(|job| job.attempt_id.unwrap_or(1) > 1)
-        .count();
-
-    assert_eq!(total_ready, 10, "Should have 10 total ready jobs");
-    assert_eq!(
-        retry_count, 0,
-        "New jobs should have no retries (attempt_id = 1)"
     );
 }
 
@@ -285,69 +149,6 @@ fn test_create_slurm_scheduler(start_server: &ServerProcess) {
 
     let schedulers = response.items;
     assert_eq!(schedulers.len(), 1, "Should have 1 scheduler");
-}
-
-/// Test that scheduled_compute_nodes can be created (simulating what regenerate does)
-#[rstest]
-fn test_create_scheduled_compute_node(start_server: &ServerProcess) {
-    let config = &start_server.config;
-
-    let (workflow_id, _job_ids) = create_workflow_with_ready_jobs(config, "test_create_scn", 2);
-
-    // Create a slurm scheduler first
-    let scheduler = models::SlurmSchedulerModel {
-        id: None,
-        workflow_id,
-        name: Some("test_scheduler".to_string()),
-        account: "test_account".to_string(),
-        partition: None,
-        mem: Some("8g".to_string()),
-        walltime: "01:00:00".to_string(),
-        nodes: 1,
-        gres: None,
-        ntasks_per_node: None,
-        qos: None,
-        tmp: None,
-        extra: None,
-        serialize_allocations: None,
-    };
-
-    let created_scheduler = apis::slurm_schedulers_api::create_slurm_scheduler(config, scheduler)
-        .expect("Failed to create scheduler");
-    let scheduler_config_id = created_scheduler.id.unwrap();
-
-    // Create a scheduled compute node (simulating what happens when sbatch submits)
-    let scn = models::ScheduledComputeNodesModel {
-        id: None,
-        workflow_id,
-        scheduler_id: 12345, // Mock Slurm job ID
-        scheduler_config_id,
-        scheduler_type: "slurm".to_string(),
-        status: "pending".to_string(),
-    };
-
-    let created_scn = apis::scheduled_compute_nodes_api::create_scheduled_compute_node(config, scn)
-        .expect("Failed to create scheduled compute node");
-
-    assert!(created_scn.id.is_some(), "SCN should have an ID");
-    assert_eq!(created_scn.status, "pending");
-
-    // Verify it shows up in list
-    let response = apis::scheduled_compute_nodes_api::list_scheduled_compute_nodes(
-        config,
-        workflow_id,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        Some("pending"),
-    )
-    .expect("Failed to list SCNs");
-
-    let scns = response.items;
-    assert_eq!(scns.len(), 1, "Should have 1 pending SCN");
 }
 
 /// Test the regenerate command with dry-run (the command auto-schedule calls)

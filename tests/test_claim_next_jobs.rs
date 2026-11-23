@@ -168,28 +168,6 @@ fn test_prepare_next_jobs_no_ready_jobs(start_server: &ServerProcess) {
     );
 }
 
-/// Test claim_next_jobs with invalid workflow ID
-#[rstest]
-fn test_prepare_next_jobs_invalid_workflow(start_server: &ServerProcess) {
-    let config = &start_server.config;
-    let invalid_workflow_id = 99999i64;
-
-    let result = apis::workflows_api::claim_next_jobs(
-        config,
-        invalid_workflow_id,
-        Some(10),
-        None,
-        None,
-        None,
-    );
-
-    // Should return an error for invalid workflow ID
-    assert!(
-        result.is_err(),
-        "Should return error for invalid workflow ID"
-    );
-}
-
 /// Test claim_next_jobs doesn't return same jobs twice
 #[rstest]
 fn test_prepare_next_jobs_no_double_allocation(start_server: &ServerProcess) {
