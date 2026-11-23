@@ -291,13 +291,11 @@ document should cover:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use rstest::rstest;
-use serial_test::serial;
 
 mod common;
 use common::{start_server, ServerProcess};
 
 #[rstest]
-#[serial]
 fn test_workflow_creation(start_server: &amp;ServerProcess) {
     let config = &amp;start_server.config;
     // Test code using the server fixture
@@ -310,7 +308,6 @@ fn test_workflow_creation(start_server: &amp;ServerProcess) {
 #[case(0, "immediate")]
 #[case(60, "one_minute")]
 #[case(3600, "one_hour")]
-#[serial]
 fn test_timeout_handling(#[case] timeout_secs: u64, #[case] description: &amp;str) {
     // Test runs once for each case
 }
@@ -337,7 +334,11 @@ pub fn start_server() -&gt; ServerProcess {
 <span class="boring">}</span></code></pre></pre>
 <h3 id="test-guidelines"><a class="header" href="#test-guidelines">Test Guidelines</a></h3>
 <ol>
-<li><strong>Use <code>#[serial]</code></strong> for integration tests that share resources (ports, database)</li>
+<li><strong>Don't serialize tests by default.</strong> nextest runs each test in its own process, and
+<code>start_server</code> gives each test its own server and temp database, so <code>#[serial]</code> and env-var
+changes don't affect other tests. Only tests that share state <em>across processes</em> (fixed file
+paths, fixed ports) need isolation: prefer a per-process path (see <code>fake_slurm_state_dir()</code> in
+<code>tests/common.rs</code>) over a nextest test group.</li>
 <li><strong>Use descriptive <code>expect()</code> messages</strong> instead of <code>.unwrap()</code></li>
 <li><strong>Clean up resources</strong> using the Drop trait or explicit cleanup functions</li>
 <li><strong>Test error conditions</strong> not just happy paths</li>
