@@ -633,10 +633,14 @@ where
                         app.request_workflow_action(WorkflowAction::Delete);
                     }
                     KeyCode::Char('C') => {
-                        // On the Jobs detail tab, cancel the selected job;
-                        // anywhere else, cancel the selected workflow.
+                        // Per-job cancel is unsupported (runners only watch workflow-level
+                        // cancellation). Don't fall through to canceling the whole workflow
+                        // while a job is selected.
                         if app.focus == Focus::Details && app.detail_view == DetailViewType::Jobs {
-                            app.request_job_action(JobAction::Cancel);
+                            app.set_status(StatusMessage::warning(
+                                "Individual jobs can't be canceled; focus the workflow list and \
+                                 press C to cancel the workflow",
+                            ));
                         } else {
                             app.request_workflow_action(WorkflowAction::Cancel);
                         }
@@ -673,12 +677,6 @@ where
                         }
                         _ => {}
                     },
-                    KeyCode::Char('t')
-                        if app.focus == Focus::Details
-                            && app.detail_view == DetailViewType::Jobs =>
-                    {
-                        app.request_job_action(JobAction::Terminate);
-                    }
                     KeyCode::Char('y')
                         if app.focus == Focus::Details
                             && app.detail_view == DetailViewType::Jobs =>

@@ -147,8 +147,6 @@ impl WorkflowAction {
 /// Actions that can be performed on jobs
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum JobAction {
-    Cancel,
-    Terminate,
     Retry,
     ResetStatus,
 }
@@ -156,8 +154,6 @@ pub enum JobAction {
 impl JobAction {
     pub fn confirmation_message(&self, job_name: &str) -> String {
         match self {
-            Self::Cancel => format!("Cancel job '{}'?", job_name),
-            Self::Terminate => format!("Terminate job '{}'?", job_name),
             Self::Retry => format!("Retry job '{}'?", job_name),
             Self::ResetStatus => format!(
                 "Reset job '{}' to uninitialized for rerun?\n\
@@ -4299,8 +4295,6 @@ impl App {
                 }
                 let dialog = ConfirmationDialog::new(
                     match action {
-                        JobAction::Cancel => "Cancel Job",
-                        JobAction::Terminate => "Terminate Job",
                         JobAction::Retry => "Retry Job",
                         JobAction::ResetStatus => "Reset Job Status",
                     },
@@ -4325,8 +4319,6 @@ impl App {
         }
 
         let result = match action {
-            JobAction::Cancel => self.client.cancel_job(job_id),
-            JobAction::Terminate => self.client.terminate_job(job_id),
             JobAction::Retry => self.client.retry_job(job_id),
             JobAction::ResetStatus => unreachable!("handled above"),
         };
@@ -4334,8 +4326,6 @@ impl App {
         match result {
             Ok(_) => {
                 let msg = match action {
-                    JobAction::Cancel => format!("Job '{}' canceled", job_name),
-                    JobAction::Terminate => format!("Job '{}' terminated", job_name),
                     JobAction::Retry => format!("Job '{}' queued for retry", job_name),
                     JobAction::ResetStatus => unreachable!("handled above"),
                 };

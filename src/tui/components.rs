@@ -568,8 +568,6 @@ impl HelpPopup {
                 ));
                 lines.push(Self::key_line("Enter", "View job details"));
                 lines.push(Self::key_line("l", "View logs"));
-                lines.push(Self::key_line("C", "Cancel job"));
-                lines.push(Self::key_line("t", "Terminate job"));
                 lines.push(Self::key_line("y", "Retry failed job"));
                 lines.push(Self::key_line(
                     "Space",
