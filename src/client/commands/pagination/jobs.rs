@@ -203,7 +203,15 @@ pub fn paginate_jobs(
     workflow_id: i64,
     params: JobListParams,
 ) -> Result<Vec<JobModel>, apis::Error<apis::jobs_api::ListJobsError>> {
-    iter_jobs(config, workflow_id, params).collect()
+    let statuses = params.statuses.clone();
+    let mut jobs: Vec<JobModel> =
+        iter_jobs(config, workflow_id, params).collect::<Result<_, _>>()?;
+    // Servers older than API 1.1.0 ignore `statuses` and return every job. Filter here so a
+    // caller that resets or schedules the result never acts on jobs it did not ask for.
+    if let Some(statuses) = statuses {
+        jobs.retain(|j| j.status.is_some_and(|s| statuses.contains(&s)));
+    }
+    Ok(jobs)
 }
 
 /// IDs per request in [`paginate_jobs_by_ids`]: keeps the query string well under

@@ -1017,13 +1017,32 @@ fn test_apply_plan_rejects_job_from_other_workflow(start_server: &ServerProcess)
     assert_unchanged(config, workflow_id, &jobs, existing);
 }
 
+/// A job that left the pending statuses after planning (here: completed) is skipped and
+/// reported; the rest of the plan applies, and an action gated only on skipped jobs is dropped.
 #[rstest]
-fn test_apply_plan_rejects_non_pending_job(start_server: &ServerProcess) {
+fn test_apply_plan_skips_non_pending_job(start_server: &ServerProcess) {
     let config = &start_server.config;
-    let (workflow_id, jobs, existing, cn) = create_plan_workflow(config, "apply_plan_completed");
+    let (workflow_id, jobs, _, cn) = create_plan_workflow(config, "apply_plan_completed");
     complete(config, workflow_id, jobs[0], cn);
-    assert_rejected(config, workflow_id, plan(workflow_id, &[&jobs[..]]));
-    assert_unchanged(config, workflow_id, &jobs, existing);
+    let response = apis::slurm_schedulers_api::apply_scheduler_plan(
+        config,
+        workflow_id,
+        plan(workflow_id, &[&[jobs[0]], &[jobs[1], jobs[2]]]),
+        None,
+    )
+    .expect("apply_scheduler_plan failed");
+    assert_eq!(response.skipped_job_ids, vec![jobs[0]]);
+    assert_eq!(response.scheduler_ids.len(), 2);
+    let [only] = &response.actions[..] else {
+        panic!("expected one action: {:?}", response.actions);
+    };
+    assert_eq!(only.scheduler_id, response.scheduler_ids[1]);
+    let done = apis::jobs_api::get_job(config, jobs[0]).unwrap();
+    assert!(matches!(done.scheduler_id, None | Some(0)));
+    for id in &jobs[1..] {
+        let job = apis::jobs_api::get_job(config, *id).unwrap();
+        assert_eq!(job.scheduler_id, Some(response.scheduler_ids[1]));
+    }
 }
 
 #[rstest]

@@ -1074,7 +1074,11 @@ impl WorkflowActionsApiImpl {
             if trigger_increment > 0 {
                 // Increment trigger_count by the calculated amount
                 match sqlx::query(
-                    "UPDATE workflow_action SET trigger_count = trigger_count + ? WHERE id = ?",
+                    // Capped: two concurrent callers (e.g. the background task and a
+                    // completion both seeing the workflow done) can both reach here.
+                    "UPDATE workflow_action \
+                     SET trigger_count = MIN(trigger_count + ?, required_triggers) \
+                     WHERE id = ? AND trigger_count < required_triggers",
                 )
                 .bind(trigger_increment)
                 .bind(action_id)

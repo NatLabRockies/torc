@@ -533,7 +533,7 @@ pub struct FailureHandlerRuleSpec {
     /// Optional recovery script to run before retrying
     #[serde(skip_serializing_if = "Option::is_none")]
     pub recovery_script: Option<String>,
-    /// Maximum number of retry attempts (defaults to 3)
+    /// Maximum number of attempts, including the first run (defaults to 3, i.e. 2 retries)
     #[serde(default = "FailureHandlerRuleSpec::default_max_retries")]
     pub max_retries: i32,
 }

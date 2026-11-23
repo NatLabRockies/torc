@@ -165,6 +165,15 @@ impl VersionCheckResult {
             .is_some_and(|v| v >= (1, 1, 0))
     }
 
+    /// True if `reset_job_status` reads its JSON body (job ids, statuses, dry run) (API 1.1.0).
+    /// Older servers ignore the body and reset every job in the workflow.
+    pub fn server_supports_selective_reset(&self) -> bool {
+        self.server_api_version
+            .as_deref()
+            .and_then(parse_version)
+            .is_some_and(|v| v >= (1, 1, 0))
+    }
+
     /// True if the server records action outcomes and has the `suppress`, `result`, and `reset`
     /// action endpoints (API 1.1.0).
     pub fn server_supports_action_outcomes(&self) -> bool {

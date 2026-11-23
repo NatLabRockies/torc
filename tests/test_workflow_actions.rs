@@ -4538,3 +4538,117 @@ fn test_older_client_without_result_reporting(start_server: &ServerProcess) {
     let (_, stuck) = problem_actions(std::slice::from_ref(&action), later);
     assert_eq!(stuck.len(), 1);
 }
+
+/// Retrying a job whose failed completion was already counted toward an on_jobs_complete action
+/// takes that count back, so the action fires only once every gating job's final attempt is done.
+#[rstest]
+fn test_retry_uncounts_on_jobs_complete(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "retry_uncounts_on_jobs_complete");
+    let workflow_id = workflow.id.unwrap();
+    let a = create_test_job(config, workflow_id, "a")
+        .unwrap()
+        .id
+        .unwrap();
+    let b = create_test_job(config, workflow_id, "b")
+        .unwrap()
+        .id
+        .unwrap();
+    let cn = create_test_compute_node(config, workflow_id).unwrap();
+    let action = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_jobs_complete",
+            "run_commands",
+            json!({"commands": ["true"]}),
+            Some(vec![a, b]),
+        ),
+    )
+    .unwrap();
+    let action_id = action.id.unwrap();
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None).unwrap();
+    let run_id = apis::workflows_api::get_workflow(config, workflow_id)
+        .unwrap()
+        .run_id
+        .unwrap_or(1);
+    let attempt = |job_id: i64| {
+        apis::jobs_api::get_job(config, job_id)
+            .unwrap()
+            .attempt_id
+            .unwrap_or(1)
+    };
+    let complete = |job_id: i64, status: JobStatus| {
+        let result = ResultModel::new(
+            job_id,
+            workflow_id,
+            run_id,
+            attempt(job_id),
+            cn,
+            if status == JobStatus::Completed { 0 } else { 1 },
+            0.1,
+            chrono::Utc::now().to_rfc3339(),
+            status,
+        );
+        apis::jobs_api::complete_job(config, job_id, status, run_id, result).unwrap();
+    };
+    let count = || {
+        apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
+            .unwrap()
+            .into_iter()
+            .find(|x| x.id == Some(action_id))
+            .unwrap()
+            .trigger_count
+    };
+
+    complete(a, JobStatus::Failed);
+    assert_eq!(count(), 1);
+    apis::jobs_api::retry_job(config, a, run_id, None).unwrap();
+    assert_eq!(
+        count(),
+        0,
+        "retry should take back the failed attempt's count"
+    );
+    complete(b, JobStatus::Completed);
+    assert_eq!(
+        count(),
+        1,
+        "action must not be satisfied while a is still retrying"
+    );
+    complete(a, JobStatus::Completed);
+    assert_eq!(count(), 2);
+}
+
+/// The CLI refuses to reset a freshly claimed action (its claimer may still be running it)
+/// unless --force is given.
+#[rstest]
+fn test_reset_action_cli_refuses_recent_claim(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow_id = create_test_workflow(config, "reset_action_cli_claimed")
+        .id
+        .unwrap();
+    let action_id = create_pending_action(config, workflow_id, false);
+    assert!(claim(config, workflow_id, action_id));
+    let (wf, id) = (workflow_id.to_string(), action_id.to_string());
+
+    let refused = run_cli_command(&["workflows", "reset-action", &wf, &id], start_server, None);
+    assert!(
+        refused.is_err(),
+        "reset of a recent claim must need --force"
+    );
+    assert_eq!(
+        fetch_action(config, workflow_id, action_id)
+            .state
+            .as_deref(),
+        Some("claimed")
+    );
+
+    run_cli_command(
+        &["workflows", "reset-action", &wf, &id, "--force"],
+        start_server,
+        None,
+    )
+    .expect("reset with --force failed");
+    assert!(action_is_pending(config, workflow_id, action_id));
+}

@@ -1349,11 +1349,15 @@ where
         log_call!(
             info,
             context,
-            "reset_job_status(workflow_id={}, failed_only={:?}, force={:?}, body={:?})",
+            // Only the job id count: a selective reset can carry ~100k ids.
+            "reset_job_status(workflow_id={}, failed_only={:?}, force={:?}, job_ids={:?}, \
+             statuses={:?}, dry_run={:?})",
             id,
             failed_only,
             force,
-            body,
+            body.as_ref().and_then(|b| b.job_ids.as_ref()).map(Vec::len),
+            body.as_ref().and_then(|b| b.statuses.as_ref()),
+            body.as_ref().and_then(|b| b.dry_run),
         );
 
         authorize_workflow!(self, id, context, ResetJobStatusResponse);
@@ -1754,8 +1758,11 @@ where
             )));
         }
 
+        // A pending_failed job awaits AI classification and is resolved only through
+        // manage_status_change or retry_job; a completion here would bypass that (and the
+        // batch path already rejects it).
         if let Some(current_status) = &job.status
-            && current_status.is_complete()
+            && (current_status.is_complete() || *current_status == models::JobStatus::PendingFailed)
         {
             error!(
                 "job_id={} is already complete with status={}",

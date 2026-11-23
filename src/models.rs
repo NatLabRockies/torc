@@ -2886,9 +2886,14 @@ pub struct AppliedSchedulerAction {
 pub struct ApplySchedulerPlanResponse {
     /// Created scheduler IDs, in the order of the request's `schedulers`.
     pub scheduler_ids: Vec<i64>,
-    /// Created recovery actions, in the order of the request's `recovery_actions`.
+    /// Created recovery actions, in the order of the request's `recovery_actions`. A recovery
+    /// action whose gating jobs were all skipped is not created.
     pub actions: Vec<AppliedSchedulerAction>,
     pub suppressed_action_ids: Vec<i64>,
+    /// Planned jobs left out because they were no longer uninitialized, blocked, or ready when
+    /// the plan was applied (e.g. a running allocation claimed them after planning).
+    #[serde(default)]
+    pub skipped_job_ids: Vec<i64>,
 }
 
 #[cfg(test)]

@@ -260,12 +260,12 @@ Defines error recovery strategies for jobs.
 
 A single rule within a failure handler for handling specific exit codes.
 
-| Name                   | Type      | Default | Description                             |
-| ---------------------- | --------- | ------- | --------------------------------------- |
-| `exit_codes`           | [integer] | `[]`    | Exit codes that trigger this rule       |
-| `match_all_exit_codes` | boolean   | `false` | If true, matches any non-zero exit code |
-| `recovery_script`      | string    | none    | Optional script to run before retrying  |
-| `max_retries`          | integer   | `3`     | Maximum number of retry attempts        |
+| Name                   | Type      | Default | Description                                           |
+| ---------------------- | --------- | ------- | ----------------------------------------------------- |
+| `exit_codes`           | [integer] | `[]`    | Exit codes that trigger this rule                     |
+| `match_all_exit_codes` | boolean   | `false` | If true, matches any non-zero exit code               |
+| `recovery_script`      | string    | none    | Optional script to run before retrying                |
+| `max_retries`          | integer   | `3`     | Total attempts, including the first (`3` = 2 retries) |
 
 ## SlurmSchedulerSpec
 

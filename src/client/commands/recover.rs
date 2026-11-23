@@ -333,8 +333,8 @@ pub fn recover_workflow(
         }
     }
 
-    // A failed schedule_nodes action stalls the workflow: its allocations never arrive.
-    if handle_failed_schedule_actions(config, args)? {
+    // A failed or stuck schedule_nodes action stalls the workflow: its allocations never arrive.
+    if handle_problem_schedule_actions(config, args)? {
         return Ok(RecoveryResult {
             oom_fixed: 0,
             timeout_fixed: 0,
@@ -660,11 +660,13 @@ pub fn recover_workflow(
 }
 
 /// Report `schedule_nodes` actions whose execution failed (e.g. `sbatch` rejected the account or
-/// partition). Torc does not retry them, so a workflow waiting on their allocations stalls. In the
-/// interactive wizard, on a workflow that is not complete, offer to reset them and submit their
-/// allocations now. Returns true if it did; recovery then stops because the workflow is running
-/// again.
-fn handle_failed_schedule_actions(
+/// partition) or that are stuck: claimed over `STUCK_ACTION_CLAIM_MINUTES` ago with no reported
+/// outcome (the claimer died, or its report was lost). A `schedule_nodes` claim normally resolves
+/// in seconds, so a stuck one is not still running. Torc does not retry either, so a workflow
+/// waiting on their allocations stalls. In the interactive wizard, on a workflow that is not
+/// complete, offer to reset them and submit their allocations now. Returns true if it did;
+/// recovery then stops because the workflow is running again.
+fn handle_problem_schedule_actions(
     config: &Configuration,
     args: &RecoverArgs,
 ) -> Result<bool, String> {
@@ -679,27 +681,40 @@ fn handle_failed_schedule_actions(
             return Ok(false);
         }
     };
-    let failed: Vec<_> = actions
+    // Persistent actions stay claimable after a claim, so they are never stuck.
+    let actions: Vec<_> = actions
         .into_iter()
-        .filter(|a| a.action_type == "schedule_nodes" && a.state.as_deref() == Some("failed"))
+        .filter(|a| a.action_type == "schedule_nodes" && !a.persistent)
         .collect();
-    if failed.is_empty() {
+    let (failed, stuck) =
+        crate::client::commands::reports::problem_actions(&actions, chrono::Utc::now());
+    if failed.is_empty() && stuck.is_empty() {
         return Ok(false);
     }
 
     eprintln!(
-        "{} schedule_nodes action(s) failed; some of their allocations may have been submitted \
-         before the failure (check 'squeue --me' before resetting):",
-        failed.len()
+        "{} schedule_nodes action(s) failed or are stuck; some of their allocations may have \
+         been submitted (check 'squeue --me' before resetting):",
+        failed.len() + stuck.len()
     );
     for a in &failed {
         eprintln!(
-            "  action {} ({}): {}",
+            "  action {} ({}): failed: {}",
             a.id.unwrap_or(-1),
             a.trigger_type,
             a.error.as_deref().unwrap_or("(no error recorded)")
         );
     }
+    for a in &stuck {
+        eprintln!(
+            "  action {} ({}): claimed at {} with no result after {} minutes",
+            a.id.unwrap_or(-1),
+            a.trigger_type,
+            a.executed_at.as_deref().unwrap_or("?"),
+            crate::client::commands::reports::STUCK_ACTION_CLAIM_MINUTES
+        );
+    }
+    let failed: Vec<_> = failed.into_iter().chain(stuck).collect();
 
     let status = apis::workflows_api::is_workflow_complete(config, args.workflow_id)
         .map_err(|e| format!("Failed to check workflow completion status: {}", e))?;
@@ -828,6 +843,14 @@ fn post_reset(
     dry_run: bool,
     force: bool,
 ) -> Result<crate::models::ResetJobStatusResponse, String> {
+    // An older server ignores the body and resets every job, even on a dry run.
+    if !crate::client::version_check::check_version(config).server_supports_selective_reset() {
+        return Err(
+            "the server is too old for selective job reset (needs HTTP API 1.1.0 or later); \
+             upgrade torc-server"
+                .to_string(),
+        );
+    }
     let body = crate::models::ResetJobStatusRequest {
         job_ids,
         statuses,

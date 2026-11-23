@@ -5501,6 +5501,14 @@ fn handle_regenerate(
             std::process::exit(1);
         }
     };
+    if !applied.skipped_job_ids.is_empty() {
+        eprintln!(
+            "Warning: {} planned job(s) were no longer pending when the plan was applied and \
+             were left out: {:?}",
+            applied.skipped_job_ids.len(),
+            applied.skipped_job_ids
+        );
+    }
     for id in &applied.suppressed_action_ids {
         info!(
             "Suppressed schedule_nodes action workflow_id={} action_id={}",

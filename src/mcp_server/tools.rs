@@ -1713,7 +1713,7 @@ pub fn classify_and_resolve_failures(
         // Retry: reset to ready and bump attempt_id. The server counts this attempt against the
         // job's failure handler limit, if it has one.
         for &job_id in &jobs_to_retry {
-            let outcome = apis::jobs_api::retry_job(config, job_id, run_id, None)
+            let outcome = apis::jobs_api::retry_job(config, job_id, run_id, Some(i32::MAX))
                 .map(|_| ())
                 .map_err(|e| format!("Failed to retry job: {}", e));
             outcomes.push((job_id, outcome));

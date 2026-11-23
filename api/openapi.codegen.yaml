@@ -6452,13 +6452,23 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AppliedSchedulerAction'
-          description: Created recovery actions, in the order of the request's `recovery_actions`.
+          description: |-
+            Created recovery actions, in the order of the request's `recovery_actions`. A recovery
+            action whose gating jobs were all skipped is not created.
         scheduler_ids:
           type: array
           items:
             type: integer
             format: int64
           description: Created scheduler IDs, in the order of the request's `schedulers`.
+        skipped_job_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+          description: |-
+            Planned jobs left out because they were no longer uninitialized, blocked, or ready when
+            the plan was applied (e.g. a running allocation claimed them after planning).
         suppressed_action_ids:
           type: array
           items:

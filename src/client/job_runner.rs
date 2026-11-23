@@ -3016,7 +3016,8 @@ impl JobRunner {
                 &self.config,
                 job_id,
                 self.run_id,
-                None,
+                // Required by servers older than API 1.1.0; newer servers ignore it.
+                Some(rule.max_retries),
             ))
         }) {
             Ok(_) => {
