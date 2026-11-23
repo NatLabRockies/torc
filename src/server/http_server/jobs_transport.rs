@@ -713,8 +713,9 @@ struct CompletedJobRecord {
 /// A completion is rejected when it comes from a runner that no longer owns the job: the
 /// result reports another attempt, the job records another node, or the job is not running and
 /// the reporting node is inactive (for example failed through `POST /compute_nodes/{id}/fail`).
-/// This stops a late completion from a silent runner after its job was failed, reset, retried,
-/// or restarted elsewhere. Status value 4 = running.
+/// This stops a late completion after a retry, after a restart on another node, and after a
+/// reset of a job whose node was failed. It does not stop a late completion after a reset while
+/// the node is still active and `run_id` is unchanged. Status value 4 = running.
 const JOB_OWNERSHIP_CLEAR_SQL: &str = "UPDATE job SET start_time = NULL, compute_node_id = NULL \
      WHERE id = ? AND attempt_id = ? AND (compute_node_id IS NULL OR compute_node_id = ?) \
      AND NOT (status != 4 \
@@ -731,7 +732,7 @@ fn job_ownership_outcome(
             CompleteJobResponse::UnprocessableContentErrorResponse(message_error_response(
                 format!(
                     "job_id={} does not belong to attempt_id={} on compute_node_id={}: it was \
-                     reset, retried, or restarted elsewhere, or the node is inactive",
+                     retried or restarted elsewhere, or the node is inactive",
                     id,
                     result.attempt_id.unwrap_or(1),
                     result.compute_node_id
