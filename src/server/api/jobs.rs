@@ -3654,32 +3654,6 @@ where
             ));
         }
 
-        // A Failed, Terminated, or PendingFailed job already went through complete_job, which
-        // counts it toward its on_jobs_complete actions. The retried attempt will be counted
-        // again when it completes, so take this count back. (A Running job is retried by the
-        // runner before complete_job and was never counted.) Actions that already fired keep
-        // their state. complete_job adds its count after committing the status, so this retry
-        // can run before that increment lands; the count may briefly go negative, and the late
-        // +1 brings it back, so the result does not depend on the order.
-        if current_status != JobStatus::Running
-            && let Err(e) = sqlx::query(
-                "UPDATE workflow_action SET trigger_count = trigger_count - 1 \
-                 WHERE workflow_id = ? AND trigger_type = 'on_jobs_complete' \
-                 AND executed = 0 \
-                 AND EXISTS (SELECT 1 FROM json_each(workflow_action.job_ids) WHERE value = ?)",
-            )
-            .bind(workflow_id)
-            .bind(id)
-            .execute(&mut *conn)
-            .await
-        {
-            let _ = sqlx::query("ROLLBACK").execute(&mut *conn).await;
-            return Err(database_error_with_msg(
-                e,
-                "Failed to update on_jobs_complete trigger counts for retry",
-            ));
-        }
-
         // Create an event for the retry (within the transaction)
         let event_data = serde_json::json!({
             "event_type": "job_retried",

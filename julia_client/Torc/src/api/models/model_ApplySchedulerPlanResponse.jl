@@ -12,7 +12,7 @@ IDs created by &#x60;apply_scheduler_plan&#x60;. In a dry run, the IDs are those
         suppressed_action_ids=nothing,
     )
 
-    - actions::Vector{AppliedSchedulerAction} : Created recovery actions, in the order of the request&#39;s &#x60;recovery_actions&#x60;. A recovery action whose gating jobs were all skipped is not created.
+    - actions::Vector{AppliedSchedulerAction} : Created recovery actions, in the order of the request&#39;s &#x60;recovery_actions&#x60;. A recovery action whose scheduler has no pending jobs left is not created.
     - scheduler_ids::Vector{Int64} : Created scheduler IDs, in the order of the request&#39;s &#x60;schedulers&#x60;.
     - skipped_job_ids::Vector{Int64} : Planned jobs left out because they were no longer uninitialized, blocked, or ready when the plan was applied (e.g. a running allocation claimed them after planning).
     - suppressed_action_ids::Vector{Int64}

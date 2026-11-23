@@ -1492,7 +1492,7 @@ export interface components {
         ApplySchedulerPlanResponse: {
             /**
              * @description Created recovery actions, in the order of the request's `recovery_actions`. A recovery
-             *     action whose gating jobs were all skipped is not created.
+             *     action whose scheduler has no pending jobs left is not created.
              */
             actions: components["schemas"]["AppliedSchedulerAction"][];
             /** @description Created scheduler IDs, in the order of the request's `schedulers`. */

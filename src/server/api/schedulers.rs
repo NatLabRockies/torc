@@ -1588,6 +1588,26 @@ where
             .filter(|id| !is_pending(id))
             .collect();
         skipped_job_ids.sort_unstable();
+        // A recovery action whose scheduler has no pending jobs left is dropped: its allocation
+        // would have nothing to run. One that gates on a skipped job while its scheduler still
+        // has pending jobs (a merged scheduler gates only on its root jobs) cannot be armed
+        // correctly from this plan, so the client must replan.
+        // ponytail: reject-and-replan until workflow action triggering is redesigned.
+        let mut keep_action = Vec::with_capacity(body.recovery_actions.len());
+        for (i, action) in body.recovery_actions.iter().enumerate() {
+            let has_pending = body.schedulers[action.scheduler_index as usize]
+                .job_ids
+                .iter()
+                .any(is_pending);
+            if has_pending && let Some(id) = action.job_ids.iter().find(|id| !is_pending(id)) {
+                return unprocessable(format!(
+                    "recovery_actions[{}]: gate job_id={} is no longer pending but its scheduler \
+                     still has pending jobs; regenerate the plan",
+                    i, id
+                ));
+            }
+            keep_action.push(has_pending);
+        }
         let mut response = models::ApplySchedulerPlanResponse {
             skipped_job_ids,
             ..Default::default()
@@ -1651,28 +1671,19 @@ where
             response.scheduler_ids.push(id);
         }
 
-        // Recovery actions, armed from the jobs' statuses as of this transaction. A gate job that
-        // is ready or past it (claimed or finished since planning) satisfies on_jobs_ready; later
-        // transitions to ready increment trigger_count through check_and_trigger_actions. The gate
-        // is kept whole even if some gate jobs were skipped: a merged scheduler gates only on its
-        // root jobs, so its pending dependents still need the action. It is dropped only when its
-        // scheduler has no pending jobs left, since its allocation would have nothing to run.
-        let not_yet_ready = [
-            models::JobStatus::Uninitialized.to_int() as i64,
-            models::JobStatus::Blocked.to_int() as i64,
-        ];
-        for action in &body.recovery_actions {
-            let idx = action.scheduler_index as usize;
-            if !body.schedulers[idx].job_ids.iter().any(is_pending) {
+        // Recovery actions, armed from the jobs' statuses as of this transaction. Of the pending
+        // statuses only ready satisfies on_jobs_ready; later transitions to ready increment
+        // trigger_count through check_and_trigger_actions. Every gate job of a kept action is
+        // pending (checked above).
+        let ready = models::JobStatus::Ready.to_int() as i64;
+        for (action, keep) in body.recovery_actions.iter().zip(keep_action) {
+            if !keep {
                 continue;
             }
             let job_ids = &action.job_ids;
-            let scheduler_id = response.scheduler_ids[idx];
+            let scheduler_id = response.scheduler_ids[action.scheduler_index as usize];
             let required = job_ids.len() as i64;
-            let trigger_count = job_ids
-                .iter()
-                .filter(|id| !not_yet_ready.contains(&statuses[id]))
-                .count() as i64;
+            let trigger_count = job_ids.iter().filter(|id| statuses[id] == ready).count() as i64;
             let config = serde_json::json!({
                 "scheduler_type": "slurm",
                 "scheduler_id": scheduler_id,

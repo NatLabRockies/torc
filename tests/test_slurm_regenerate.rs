@@ -1109,27 +1109,22 @@ fn test_apply_plan_arms_ready_and_deferred(start_server: &ServerProcess) {
     assert_eq!(action(config, workflow_id, deferred.id).trigger_count, 2);
 }
 
-/// A merged scheduler gated only on its root job keeps its action when the root was claimed or
-/// finished after planning: its pending dependents still need the allocation, and the finished
-/// gate counts as ready.
+/// A merged scheduler gated only on its root job cannot be armed when the root was claimed or
+/// finished after planning while its dependents are still pending: the plan is rejected so the
+/// client replans, and nothing changes.
 #[rstest]
-fn test_apply_plan_keeps_merged_gate_when_root_skipped(start_server: &ServerProcess) {
+fn test_apply_plan_rejects_skipped_gate_with_pending_dependents(start_server: &ServerProcess) {
     let config = &start_server.config;
-    let (workflow_id, jobs, _, cn) = create_plan_workflow(config, "apply_plan_merged_gate");
+    let (workflow_id, jobs, existing, cn) = create_plan_workflow(config, "apply_plan_merged_gate");
     complete(config, workflow_id, jobs[0], cn);
+    wait_until_ready(config, jobs[1]);
     let mut request = plan(workflow_id, &[&jobs[..]]);
     request.recovery_actions[0].job_ids = vec![jobs[0]];
-    let response =
-        apis::slurm_schedulers_api::apply_scheduler_plan(config, workflow_id, request, None)
-            .expect("apply_scheduler_plan failed");
-    assert_eq!(response.skipped_job_ids, vec![jobs[0]]);
-    let [only] = &response.actions[..] else {
-        panic!("expected one action: {:?}", response.actions);
-    };
-    assert!(only.pending, "a finished gate job satisfies on_jobs_ready");
-    let stored = action(config, workflow_id, only.id);
-    assert_eq!((stored.trigger_count, stored.required_triggers), (1, 1));
-    assert_eq!(stored.job_ids, Some(vec![jobs[0]]));
+    assert_rejected(config, workflow_id, request);
+    assert_eq!(get_scheduler_count(config, workflow_id), 1);
+    let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id).unwrap();
+    assert!(actions.iter().all(|a| !a.is_recovery));
+    assert!(!action(config, workflow_id, existing).executed);
 }
 
 /// If the gate job completes after the client planned (b1, b2 deferred) but before the plan is
@@ -1195,9 +1190,6 @@ fn test_apply_plan_suppresses_persistent_actions(start_server: &ServerProcess) {
             config_json.clone(),
         );
         body.persistent = persistent;
-        // Created after initialize, so mark it triggered as a worker start would: a claim
-        // requires trigger_count >= required_triggers.
-        body.trigger_count = 1;
         apis::workflow_actions_api::create_workflow_action(config, workflow_id, body)
             .unwrap()
             .id

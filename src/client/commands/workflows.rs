@@ -676,9 +676,6 @@ EXAMPLES:
 EXAMPLES:
     # Re-arm action 45 of workflow 123 after fixing its Slurm account
     torc workflows reset-action 123 45
-
-    # Re-arm an action stuck in 'claimed' after confirming its claimer is gone
-    torc workflows reset-action 123 45 --force
 "
     )]
     ResetAction {
@@ -688,10 +685,6 @@ EXAMPLES:
         /// ID of the action to reset (see 'workflows list-actions')
         #[arg()]
         action_id: i64,
-        /// Reset an action claimed in the last 30 minutes (it may still be executing and would
-        /// run twice), or one claimed by a server that predates outcome tracking
-        #[arg(long)]
-        force: bool,
     },
     /// Check if a workflow is complete
     #[command(
@@ -1485,49 +1478,7 @@ fn handle_delete_action(
     }
 }
 
-fn handle_reset_action(
-    config: &Configuration,
-    workflow_id: i64,
-    action_id: i64,
-    force: bool,
-    format: &str,
-) {
-    // A claimed action may still be executing; resetting it lets a second claimer run it too
-    // (e.g. duplicate Slurm allocations). Executed with no state means claimed by a server that
-    // predates outcome tracking, so its outcome is unknown.
-    if !force {
-        let action = match apis::workflow_actions_api::get_workflow_actions(config, workflow_id) {
-            Ok(actions) => actions.into_iter().find(|a| a.id == Some(action_id)),
-            Err(e) => {
-                print_error("getting workflow actions", &e);
-                std::process::exit(1);
-            }
-        };
-        let stuck = |a: &models::WorkflowActionModel| {
-            !crate::client::commands::reports::problem_actions(
-                std::slice::from_ref(a),
-                chrono::Utc::now(),
-            )
-            .1
-            .is_empty()
-        };
-        if let Some(a) = action
-            && !a.persistent
-            && ((a.state.as_deref() == Some("claimed") && !stuck(&a))
-                || (a.executed && a.state.is_none()))
-        {
-            eprintln!(
-                "Error: action {} was claimed{} and may still be running; resetting it could \
-                 run it twice. Confirm its claimer is gone (e.g. no allocation was submitted), \
-                 then rerun with --force.",
-                action_id,
-                a.executed_by
-                    .map(|cn| format!(" by compute node {}", cn))
-                    .unwrap_or_default()
-            );
-            std::process::exit(1);
-        }
-    }
+fn handle_reset_action(config: &Configuration, workflow_id: i64, action_id: i64, format: &str) {
     match apis::workflow_actions_api::reset_action(config, workflow_id, action_id) {
         Ok(action) => {
             if format == "json" {
@@ -3712,9 +3663,8 @@ pub fn handle_workflow_commands(config: &Configuration, command: &WorkflowComman
         WorkflowCommands::ResetAction {
             workflow_id,
             action_id,
-            force,
         } => {
-            handle_reset_action(config, *workflow_id, *action_id, *force, format);
+            handle_reset_action(config, *workflow_id, *action_id, format);
         }
         WorkflowCommands::IsComplete { id } => {
             handle_is_complete(config, *id, format);
