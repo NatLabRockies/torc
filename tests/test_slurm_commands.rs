@@ -1,8 +1,8 @@
 mod common;
 
 use common::{
-    ServerProcess, create_minimal_resources_workflow, create_test_workflow, run_cli_with_json,
-    start_server, torc_binary_path,
+    ServerProcess, create_minimal_resources_workflow, create_test_workflow, fake_slurm_state_dir,
+    run_cli_with_json, start_server, torc_binary_path,
 };
 use rstest::rstest;
 use serde_json::json;
@@ -1934,10 +1934,7 @@ fn test_cancel_scheduler_allocations_cancels_slurm_jobs(start_server: &ServerPro
 
     // Seed the fake Slurm jobs file so fake_scancel.sh recognizes the allocation.
     let slurm_job_id: i64 = 4242;
-    let jobs_file = format!(
-        "{}/fake_slurm_jobs.txt",
-        env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string())
-    );
+    let jobs_file = fake_slurm_state_dir().join("fake_slurm_jobs.txt");
     fs::write(
         &jobs_file,
         format!(
@@ -2279,6 +2276,7 @@ fn test_cancel_workflow_with_slurm_scheduler(start_server: &ServerProcess) {
 }
 
 fn setup_fake_slurm_commands() -> (PathBuf, PathBuf, PathBuf, PathBuf, PathBuf) {
+    fake_slurm_state_dir();
     let current_dir = env::current_dir().expect("Failed to get current directory");
 
     let sbatch = current_dir.join("tests/scripts/fake_sbatch.sh");
@@ -2311,9 +2309,9 @@ fn setup_fake_slurm_commands() -> (PathBuf, PathBuf, PathBuf, PathBuf, PathBuf) 
 }
 
 fn cleanup_fake_slurm_state() {
-    let tmpdir = env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string());
-    let counter_file = format!("{}/fake_sbatch_counter.txt", tmpdir);
-    let jobs_file = format!("{}/fake_slurm_jobs.txt", tmpdir);
+    let state_dir = fake_slurm_state_dir();
+    let counter_file = state_dir.join("fake_sbatch_counter.txt");
+    let jobs_file = state_dir.join("fake_slurm_jobs.txt");
 
     let _ = fs::remove_file(&counter_file);
     let _ = fs::remove_file(&jobs_file);

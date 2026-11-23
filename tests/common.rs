@@ -150,6 +150,26 @@ fn build_test_binaries() {
     }
 }
 
+/// Per-process directory for the fake Slurm scripts' state (job counter and jobs file).
+///
+/// nextest runs each test in its own process, so a per-process directory isolates tests that
+/// use `tests/scripts/fake_*.sh` from each other without serializing them. Sets
+/// `TORC_FAKE_SLURM_STATE_DIR`, which the scripts read; call it before invoking them.
+pub fn fake_slurm_state_dir() -> std::path::PathBuf {
+    static DIR: std::sync::OnceLock<tempfile::TempDir> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        let dir = tempfile::Builder::new()
+            .prefix("torc-fake-slurm-")
+            .tempdir()
+            .expect("Failed to create fake Slurm state dir");
+        // SAFETY: set once, before the fake scripts are spawned.
+        unsafe { std::env::set_var("TORC_FAKE_SLURM_STATE_DIR", dir.path()) };
+        dir
+    })
+    .path()
+    .to_path_buf()
+}
+
 static BINARIES_BUILT: std::sync::Once = std::sync::Once::new();
 
 /// Build the `torc` and `torc-server` binaries once per test-binary invocation.

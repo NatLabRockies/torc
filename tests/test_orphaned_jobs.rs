@@ -511,6 +511,7 @@ fn test_cleanup_deactivates_active_node_after_cancel(start_server: &ServerProces
         "fake_squeue.sh not found at {:?}",
         fake_squeue
     );
+    common::fake_slurm_state_dir();
     let _squeue_guard = EnvVarGuard::set("TORC_FAKE_SQUEUE", &fake_squeue.to_string_lossy());
     let _user_guard = if std::env::var("USER").is_err() && std::env::var("USERNAME").is_err() {
         Some(EnvVarGuard::set("USER", "test-user"))
@@ -589,11 +590,9 @@ fn test_cleanup_deactivates_active_node_after_cancel(start_server: &ServerProces
     );
 }
 
-/// Path to the shared fake squeue/scancel jobs file (matches the bash scripts,
-/// which read `${TMPDIR:-/tmp}/fake_slurm_jobs.txt`).
+/// Path to this test process's fake squeue/scancel jobs file (see `fake_slurm_state_dir`).
 fn fake_jobs_file() -> std::path::PathBuf {
-    let tmpdir = std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".to_string());
-    std::path::Path::new(&tmpdir).join("fake_slurm_jobs.txt")
+    common::fake_slurm_state_dir().join("fake_slurm_jobs.txt")
 }
 
 /// Register a fake Slurm job so `fake_squeue.sh` reports it with `state` (e.g.
