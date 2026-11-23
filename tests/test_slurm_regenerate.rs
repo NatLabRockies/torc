@@ -1017,13 +1017,32 @@ fn test_apply_plan_rejects_job_from_other_workflow(start_server: &ServerProcess)
     assert_unchanged(config, workflow_id, &jobs, existing);
 }
 
+/// A job that left the pending statuses after planning (here: completed) is skipped and
+/// reported; the rest of the plan applies, and an action gated only on skipped jobs is dropped.
 #[rstest]
-fn test_apply_plan_rejects_non_pending_job(start_server: &ServerProcess) {
+fn test_apply_plan_skips_non_pending_job(start_server: &ServerProcess) {
     let config = &start_server.config;
-    let (workflow_id, jobs, existing, cn) = create_plan_workflow(config, "apply_plan_completed");
+    let (workflow_id, jobs, _, cn) = create_plan_workflow(config, "apply_plan_completed");
     complete(config, workflow_id, jobs[0], cn);
-    assert_rejected(config, workflow_id, plan(workflow_id, &[&jobs[..]]));
-    assert_unchanged(config, workflow_id, &jobs, existing);
+    let response = apis::slurm_schedulers_api::apply_scheduler_plan(
+        config,
+        workflow_id,
+        plan(workflow_id, &[&[jobs[0]], &[jobs[1], jobs[2]]]),
+        None,
+    )
+    .expect("apply_scheduler_plan failed");
+    assert_eq!(response.skipped_job_ids, vec![jobs[0]]);
+    assert_eq!(response.scheduler_ids.len(), 2);
+    let [only] = &response.actions[..] else {
+        panic!("expected one action: {:?}", response.actions);
+    };
+    assert_eq!(only.scheduler_id, response.scheduler_ids[1]);
+    let done = apis::jobs_api::get_job(config, jobs[0]).unwrap();
+    assert!(matches!(done.scheduler_id, None | Some(0)));
+    for id in &jobs[1..] {
+        let job = apis::jobs_api::get_job(config, *id).unwrap();
+        assert_eq!(job.scheduler_id, Some(response.scheduler_ids[1]));
+    }
 }
 
 #[rstest]
@@ -1088,6 +1107,24 @@ fn test_apply_plan_arms_ready_and_deferred(start_server: &ServerProcess) {
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
     assert_eq!(action(config, workflow_id, deferred.id).trigger_count, 2);
+}
+
+/// A merged scheduler gated only on its root job cannot be armed when the root was claimed or
+/// finished after planning while its dependents are still pending: the plan is rejected so the
+/// client replans, and nothing changes.
+#[rstest]
+fn test_apply_plan_rejects_skipped_gate_with_pending_dependents(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (workflow_id, jobs, existing, cn) = create_plan_workflow(config, "apply_plan_merged_gate");
+    complete(config, workflow_id, jobs[0], cn);
+    wait_until_ready(config, jobs[1]);
+    let mut request = plan(workflow_id, &[&jobs[..]]);
+    request.recovery_actions[0].job_ids = vec![jobs[0]];
+    assert_rejected(config, workflow_id, request);
+    assert_eq!(get_scheduler_count(config, workflow_id), 1);
+    let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id).unwrap();
+    assert!(actions.iter().all(|a| !a.is_recovery));
+    assert!(!action(config, workflow_id, existing).executed);
 }
 
 /// If the gate job completes after the client planned (b1, b2 deferred) but before the plan is

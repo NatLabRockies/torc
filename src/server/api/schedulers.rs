@@ -1548,7 +1548,9 @@ where
             .await
             .map_err(|e| database_lock_aware_error(e, "Failed to begin transaction"))?;
 
-        // Validate: every job belongs to the workflow and is pending.
+        // Validate: every job belongs to the workflow. Jobs that are no longer pending (a worker
+        // claimed one after the client planned) are left out of the plan and reported, so a
+        // race with a running allocation does not void the whole plan.
         let statuses: std::collections::HashMap<i64, i64> = sqlx::query_as::<_, (i64, i64)>(
             "SELECT j.id, j.status FROM json_each(?1) p \
                  JOIN job j ON j.id = p.value AND j.workflow_id = ?2",
@@ -1565,33 +1567,51 @@ where
             models::JobStatus::Blocked.to_int() as i64,
             models::JobStatus::Ready.to_int() as i64,
         ];
-        let mut bad: Vec<String> = all_job_ids
+        let mut missing: Vec<i64> = all_job_ids
             .iter()
-            .filter_map(|id| match statuses.get(id) {
-                None => Some(format!("job_id={} (not in workflow)", id)),
-                Some(s) if !pending.contains(s) => Some(format!(
-                    "job_id={} (status {})",
-                    id,
-                    models::JobStatus::from_int(*s as i32)
-                        .map(|s| s.to_string())
-                        .unwrap_or_else(|_| s.to_string())
-                )),
-                _ => None,
-            })
+            .copied()
+            .filter(|id| !statuses.contains_key(id))
             .collect();
-        if !bad.is_empty() {
-            bad.sort();
-            let total = bad.len();
-            bad.truncate(20);
+        if !missing.is_empty() {
+            missing.sort_unstable();
+            let total = missing.len();
+            missing.truncate(20);
             return unprocessable(format!(
-                "{} job(s) in the plan are not pending jobs of workflow_id={}: {}",
-                total,
-                workflow_id,
-                bad.join(", ")
+                "{} job(s) in the plan are not in workflow_id={}: {:?}",
+                total, workflow_id, missing
             ));
         }
-
-        let mut response = models::ApplySchedulerPlanResponse::default();
+        let is_pending = |id: &i64| pending.contains(&statuses[id]);
+        let mut skipped_job_ids: Vec<i64> = all_job_ids
+            .iter()
+            .copied()
+            .filter(|id| !is_pending(id))
+            .collect();
+        skipped_job_ids.sort_unstable();
+        // A recovery action whose scheduler has no pending jobs left is dropped: its allocation
+        // would have nothing to run. One that gates on a skipped job while its scheduler still
+        // has pending jobs (a merged scheduler gates only on its root jobs) cannot be armed
+        // correctly from this plan, so the client must replan.
+        // ponytail: reject-and-replan until workflow action triggering is redesigned.
+        let mut keep_action = Vec::with_capacity(body.recovery_actions.len());
+        for (i, action) in body.recovery_actions.iter().enumerate() {
+            let has_pending = body.schedulers[action.scheduler_index as usize]
+                .job_ids
+                .iter()
+                .any(is_pending);
+            if has_pending && let Some(id) = action.job_ids.iter().find(|id| !is_pending(id)) {
+                return unprocessable(format!(
+                    "recovery_actions[{}]: gate job_id={} is no longer pending but its scheduler \
+                     still has pending jobs; regenerate the plan",
+                    i, id
+                ));
+            }
+            keep_action.push(has_pending);
+        }
+        let mut response = models::ApplySchedulerPlanResponse {
+            skipped_job_ids,
+            ..Default::default()
+        };
         let now = chrono::Utc::now().to_rfc3339();
 
         // Suppress: the old schedule_nodes actions would otherwise start their own allocations.
@@ -1636,13 +1656,14 @@ where
             .fetch_one(&mut *tx)
             .await
             .map_err(|e| database_error_with_msg(e, "Failed to create slurm scheduler"))?;
-            if !entry.job_ids.is_empty() {
+            let job_ids: Vec<i64> = entry.job_ids.iter().copied().filter(is_pending).collect();
+            if !job_ids.is_empty() {
                 sqlx::query(
                     "UPDATE job SET scheduler_id = ?1 \
                      WHERE id IN (SELECT value FROM json_each(?2))",
                 )
                 .bind(id)
-                .bind(to_json(&entry.job_ids))
+                .bind(to_json(&job_ids))
                 .execute(&mut *tx)
                 .await
                 .map_err(|e| database_error_with_msg(e, "Failed to assign jobs to scheduler"))?;
@@ -1652,16 +1673,17 @@ where
 
         // Recovery actions, armed from the jobs' statuses as of this transaction. Of the pending
         // statuses only ready satisfies on_jobs_ready; later transitions to ready increment
-        // trigger_count through check_and_trigger_actions.
+        // trigger_count through check_and_trigger_actions. Every gate job of a kept action is
+        // pending (checked above).
         let ready = models::JobStatus::Ready.to_int() as i64;
-        for action in &body.recovery_actions {
+        for (action, keep) in body.recovery_actions.iter().zip(keep_action) {
+            if !keep {
+                continue;
+            }
+            let job_ids = &action.job_ids;
             let scheduler_id = response.scheduler_ids[action.scheduler_index as usize];
-            let required = action.job_ids.len() as i64;
-            let trigger_count = action
-                .job_ids
-                .iter()
-                .filter(|id| statuses[id] == ready)
-                .count() as i64;
+            let required = job_ids.len() as i64;
+            let trigger_count = job_ids.iter().filter(|id| statuses[id] == ready).count() as i64;
             let config = serde_json::json!({
                 "scheduler_type": "slurm",
                 "scheduler_id": scheduler_id,
@@ -1675,7 +1697,7 @@ where
             )
             .bind(workflow_id)
             .bind(config.to_string())
-            .bind(to_json(&action.job_ids))
+            .bind(to_json(job_ids))
             .bind(trigger_count)
             .bind(required)
             .fetch_one(&mut *tx)
@@ -1698,10 +1720,11 @@ where
                 .await
                 .map_err(|e| database_lock_aware_error(e, "Failed to commit transaction"))?;
             info!(
-                "Applied scheduler plan workflow_id={} schedulers={} jobs={} actions={} suppressed={}",
+                "Applied scheduler plan workflow_id={} schedulers={} jobs={} skipped={} actions={} suppressed={}",
                 workflow_id,
                 response.scheduler_ids.len(),
-                all_job_ids.len(),
+                all_job_ids.len() - response.skipped_job_ids.len(),
+                response.skipped_job_ids.len(),
                 response.actions.len(),
                 response.suppressed_action_ids.len()
             );

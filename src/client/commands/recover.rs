@@ -828,6 +828,14 @@ fn post_reset(
     dry_run: bool,
     force: bool,
 ) -> Result<crate::models::ResetJobStatusResponse, String> {
+    // An older server ignores the body and resets every job, even on a dry run.
+    if !crate::client::version_check::check_version(config).server_supports_selective_reset() {
+        return Err(
+            "the server is too old for selective job reset (needs HTTP API 1.1.0 or later); \
+             upgrade torc-server"
+                .to_string(),
+        );
+    }
     let body = crate::models::ResetJobStatusRequest {
         job_ids,
         statuses,

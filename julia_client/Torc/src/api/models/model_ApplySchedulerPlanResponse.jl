@@ -8,26 +8,29 @@ IDs created by &#x60;apply_scheduler_plan&#x60;. In a dry run, the IDs are those
     ApplySchedulerPlanResponse(;
         actions=nothing,
         scheduler_ids=nothing,
+        skipped_job_ids=nothing,
         suppressed_action_ids=nothing,
     )
 
-    - actions::Vector{AppliedSchedulerAction} : Created recovery actions, in the order of the request&#39;s &#x60;recovery_actions&#x60;.
+    - actions::Vector{AppliedSchedulerAction} : Created recovery actions, in the order of the request&#39;s &#x60;recovery_actions&#x60;. A recovery action whose scheduler has no pending jobs left is not created.
     - scheduler_ids::Vector{Int64} : Created scheduler IDs, in the order of the request&#39;s &#x60;schedulers&#x60;.
+    - skipped_job_ids::Vector{Int64} : Planned jobs left out because they were no longer uninitialized, blocked, or ready when the plan was applied (e.g. a running allocation claimed them after planning).
     - suppressed_action_ids::Vector{Int64}
 """
 Base.@kwdef mutable struct ApplySchedulerPlanResponse <: OpenAPI.APIModel
     actions::Union{Nothing, Vector} = nothing # spec type: Union{ Nothing, Vector{AppliedSchedulerAction} }
     scheduler_ids::Union{Nothing, Vector{Int64}} = nothing
+    skipped_job_ids::Union{Nothing, Vector{Int64}} = nothing
     suppressed_action_ids::Union{Nothing, Vector{Int64}} = nothing
 
-    function ApplySchedulerPlanResponse(actions, scheduler_ids, suppressed_action_ids, )
-        o = new(actions, scheduler_ids, suppressed_action_ids, )
+    function ApplySchedulerPlanResponse(actions, scheduler_ids, skipped_job_ids, suppressed_action_ids, )
+        o = new(actions, scheduler_ids, skipped_job_ids, suppressed_action_ids, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type ApplySchedulerPlanResponse
 
-const _property_types_ApplySchedulerPlanResponse = Dict{Symbol,String}(Symbol("actions")=>"Vector{AppliedSchedulerAction}", Symbol("scheduler_ids")=>"Vector{Int64}", Symbol("suppressed_action_ids")=>"Vector{Int64}", )
+const _property_types_ApplySchedulerPlanResponse = Dict{Symbol,String}(Symbol("actions")=>"Vector{AppliedSchedulerAction}", Symbol("scheduler_ids")=>"Vector{Int64}", Symbol("skipped_job_ids")=>"Vector{Int64}", Symbol("suppressed_action_ids")=>"Vector{Int64}", )
 OpenAPI.property_type(::Type{ ApplySchedulerPlanResponse }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_ApplySchedulerPlanResponse[name]))}
 
 function OpenAPI.check_required(o::ApplySchedulerPlanResponse)
@@ -40,10 +43,12 @@ end
 function OpenAPI.validate_properties(o::ApplySchedulerPlanResponse)
     OpenAPI.validate_property(ApplySchedulerPlanResponse, Symbol("actions"), o.actions)
     OpenAPI.validate_property(ApplySchedulerPlanResponse, Symbol("scheduler_ids"), o.scheduler_ids)
+    OpenAPI.validate_property(ApplySchedulerPlanResponse, Symbol("skipped_job_ids"), o.skipped_job_ids)
     OpenAPI.validate_property(ApplySchedulerPlanResponse, Symbol("suppressed_action_ids"), o.suppressed_action_ids)
 end
 
 function OpenAPI.validate_property(::Type{ ApplySchedulerPlanResponse }, name::Symbol, val)
+
 
 
 

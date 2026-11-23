@@ -18,7 +18,7 @@ import re  # noqa: F401
 import json
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt
-from typing import Any, ClassVar, Dict, List
+from typing import Any, ClassVar, Dict, List, Optional
 from torc.openapi_client.models.applied_scheduler_action import AppliedSchedulerAction
 from typing import Optional, Set
 from typing_extensions import Self
@@ -27,10 +27,11 @@ class ApplySchedulerPlanResponse(BaseModel):
     """
     IDs created by `apply_scheduler_plan`. In a dry run, the IDs are those that would have been assigned; nothing is stored.
     """ # noqa: E501
-    actions: List[AppliedSchedulerAction] = Field(description="Created recovery actions, in the order of the request's `recovery_actions`.")
+    actions: List[AppliedSchedulerAction] = Field(description="Created recovery actions, in the order of the request's `recovery_actions`. A recovery action whose scheduler has no pending jobs left is not created.")
     scheduler_ids: List[StrictInt] = Field(description="Created scheduler IDs, in the order of the request's `schedulers`.")
+    skipped_job_ids: Optional[List[StrictInt]] = Field(default=None, description="Planned jobs left out because they were no longer uninitialized, blocked, or ready when the plan was applied (e.g. a running allocation claimed them after planning).")
     suppressed_action_ids: List[StrictInt]
-    __properties: ClassVar[List[str]] = ["actions", "scheduler_ids", "suppressed_action_ids"]
+    __properties: ClassVar[List[str]] = ["actions", "scheduler_ids", "skipped_job_ids", "suppressed_action_ids"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -92,6 +93,7 @@ class ApplySchedulerPlanResponse(BaseModel):
         _obj = cls.model_validate({
             "actions": [AppliedSchedulerAction.from_dict(_item) for _item in obj["actions"]] if obj.get("actions") is not None else None,
             "scheduler_ids": obj.get("scheduler_ids"),
+            "skipped_job_ids": obj.get("skipped_job_ids"),
             "suppressed_action_ids": obj.get("suppressed_action_ids")
         })
         return _obj

@@ -281,7 +281,8 @@ Retries a failed job by resetting its status to Ready.
 2. `run_id` must match workflow's current run
 3. Job status must be Running, Failed, Terminated, or PendingFailed
 4. If the job has a failure handler, `attempt_id` must be less than the largest `max_retries` among
-   its rules
+   its rules. `attempt_id` starts at 1, so `max_retries` is the total number of attempts, including
+   the first run
 
 The server enforces the largest limit among the rules, not the limit of the rule that matched,
 because the job runner calls `retry_job` before `complete_job`, so the server does not know the exit

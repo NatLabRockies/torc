@@ -62,7 +62,16 @@ impl SqlQueryBuilder {
         } else {
             "ASC"
         };
-        self.order_by_clause = Some(format!("ORDER BY {} {}", sort_column, sort_direction));
+        // Sorting by a non-unique column needs a tie-breaker, or offset paging can skip or
+        // repeat rows. The default sort column is the caller's unique key.
+        self.order_by_clause = Some(if sort_column == default_sort_column {
+            format!("ORDER BY {} {}", sort_column, sort_direction)
+        } else {
+            format!(
+                "ORDER BY {} {}, {} {}",
+                sort_column, sort_direction, default_sort_column, sort_direction
+            )
+        });
 
         self.limit_clause = Some(format!("LIMIT {}", limit));
 
@@ -170,7 +179,15 @@ mod tests {
         let q = SqlQueryBuilder::new("SELECT * FROM job".to_string())
             .with_pagination_and_sorting(0, 10, Some("name".to_string()), Some(true), "id", ALLOWED)
             .build();
-        assert!(q.contains("ORDER BY name DESC"));
+        assert!(q.contains("ORDER BY name DESC, id DESC"), "{q}");
+    }
+
+    #[test]
+    fn test_non_default_sort_gets_unique_tie_breaker() {
+        let q = SqlQueryBuilder::new("SELECT * FROM job".to_string())
+            .with_pagination_and_sorting(0, 10, Some("status".to_string()), None, "id", ALLOWED)
+            .build();
+        assert!(q.contains("ORDER BY status ASC, id ASC"), "{q}");
     }
 
     #[test]

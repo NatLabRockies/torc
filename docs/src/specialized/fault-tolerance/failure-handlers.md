@@ -68,6 +68,9 @@ When a job with a failure handler fails or is terminated:
    - If recovery fails: job is marked as Failed
 3. If no match or max retries exceeded: job is marked as Failed
 
+`attempt_id` starts at 1, so `max_retries` is the total number of attempts, including the first run:
+`max_retries: 3` runs the job at most 3 times (2 retries).
+
 ```mermaid
 flowchart TD
     fail["Job Fails/Terminates<br/>(exit code 10)"]

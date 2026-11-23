@@ -1490,10 +1490,18 @@ export interface components {
          *     assigned; nothing is stored.
          */
         ApplySchedulerPlanResponse: {
-            /** @description Created recovery actions, in the order of the request's `recovery_actions`. */
+            /**
+             * @description Created recovery actions, in the order of the request's `recovery_actions`. A recovery
+             *     action whose scheduler has no pending jobs left is not created.
+             */
             actions: components["schemas"]["AppliedSchedulerAction"][];
             /** @description Created scheduler IDs, in the order of the request's `schedulers`. */
             scheduler_ids: number[];
+            /**
+             * @description Planned jobs left out because they were no longer uninitialized, blocked, or ready when
+             *     the plan was applied (e.g. a running allocation claimed them after planning).
+             */
+            skipped_job_ids?: number[];
             suppressed_action_ids: number[];
         };
         /**

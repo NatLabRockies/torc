@@ -89,6 +89,28 @@ fn test_pending_failed_status(start_server: &ServerProcess) {
     // Fetch the job again to confirm status
     let fetched_job = apis::jobs_api::get_job(config, job_id).expect("Failed to get job");
     assert_eq!(fetched_job.status, Some(JobStatus::PendingFailed));
+
+    // A second completion must not bypass classification: resolution goes through
+    // manage_status_change or retry_job.
+    let second = models::ResultModel::new(
+        job_id,
+        workflow_id,
+        run_id,
+        1,
+        compute_node_id,
+        1,
+        0.1,
+        chrono::Utc::now().to_rfc3339(),
+        JobStatus::Failed,
+    );
+    match apis::jobs_api::complete_job(config, job_id, second.status, run_id, second) {
+        Err(apis::Error::ResponseError(c)) => {
+            assert_eq!(c.status, reqwest::StatusCode::UNPROCESSABLE_ENTITY)
+        }
+        other => panic!("expected 422, got {other:?}"),
+    }
+    let fetched_job = apis::jobs_api::get_job(config, job_id).expect("Failed to get job");
+    assert_eq!(fetched_job.status, Some(JobStatus::PendingFailed));
 }
 
 /// Test listing pending_failed jobs via status filter

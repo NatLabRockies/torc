@@ -414,8 +414,14 @@ impl TorcClient {
             .context("Failed to get workflow")?;
         let run_id = workflow.run_id.unwrap_or(1);
 
-        apis::jobs_api::retry_job(&self.config, job_id, run_id, None)
-            .context("Failed to retry job")?;
+        apis::jobs_api::retry_job(
+            &self.config,
+            job_id,
+            run_id,
+            // Required by servers older than API 1.1.0; newer servers ignore it.
+            Some(i32::MAX),
+        )
+        .context("Failed to retry job")?;
 
         Ok(())
     }
