@@ -342,12 +342,13 @@ heartbeat. A node that died during the outage therefore becomes stale after the 
 (below). Sorting a node list by `last_heartbeat` uses the stored value.
 
 Communication goes one way only: the runner calls the server, and the server records the call. The
-server never contacts a runner, so the server and its runners can be on different networks (for
-example a server in the cloud and runners on an HPC system or on cloud VMs). Stale marking needs no
-shared host, process namespace, or file system.
+server never contacts a runner. This is a hard rule: on many HPC clusters, compute nodes can reach
+the server, but the server cannot reach the compute nodes. Thus the server and its runners can be on
+different networks (for example a server in the cloud and runners on an HPC system or on cloud VMs).
+Stale marking needs no shared host, process namespace, or file system.
 
-The default threshold is 600 seconds. It was 120 seconds before; the longer value lets a healthy
-node survive a short network outage without being marked stale.
+The default threshold is 600 seconds. This lets a healthy node survive a short network outage
+without being marked stale.
 
 **Server crash and restart.** When the server stops or crashes, no runner can send a heartbeat.
 Runners keep their jobs alive. Each API call retries for
@@ -375,11 +376,12 @@ node dead. The server:
    cleanup uses), so dependents are released as for any other failure, and
 3. broadcasts a `compute_node_stopped` event with reason `failed`.
 
-The call is idempotent and works on any node, stale or not. It is a declaration, not a request. The
-caller must first confirm outside torc that the node is dead: for example a cloud VM status check, a
-scheduler query, or a person who looked at the host. A stale flag alone does not prove it. The
-server cannot stop processes on a host, so a node that is still alive and failed by mistake keeps
-running its jobs until its runner is fenced.
+Steps 1 and 2 run in one transaction: if a database error interrupts them, nothing changes and the
+call can be retried. The call is idempotent and works on any node, stale or not. It is a
+declaration, not a request. The caller must first confirm outside torc that the node is dead: for
+example a cloud VM status check, a scheduler query, or a person who looked at the host. A stale flag
+alone does not prove it. The server cannot stop processes on a host, so a node that is still alive
+and failed by mistake keeps running its jobs until its runner is fenced.
 
 **Runner fence.** When a heartbeat reply reports `is_active == false`, the runner kills its running
 jobs and exits. A runner whose node was failed during a server outage is fenced by its first

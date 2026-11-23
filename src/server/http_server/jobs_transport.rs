@@ -669,11 +669,6 @@ fn job_ownership_outcome(
     }
 }
 
-pub(super) enum ServerFailJobError {
-    Rejected(String),
-    Transport(String),
-}
-
 enum CompletionMutationError {
     Response(Box<CompleteJobResponse>),
     Transport(ApiError),
@@ -1634,7 +1629,6 @@ where
             .await
         {
             Ok(completion) => {
-                self.signal_job_completion();
                 let job = completion.job.clone();
                 self.finalize_completed_jobs(completion.workflow_id, &[completion], context)
                     .await;
@@ -1681,32 +1675,103 @@ where
         }
     }
 
-    /// Fail a running job on the server's own authority, for example when the compute node
-    /// that runs it stopped reporting. There is no caller to authorize. The job takes the
-    /// normal completion path, so its result is stored and its dependents are released.
-    pub(super) async fn fail_job_as_server(
+    /// Deactivate a compute node and fail its running jobs in one transaction, on the server's
+    /// own authority. There is no caller to authorize. Each job takes the normal completion path,
+    /// so its result is stored and its dependents are released. A job that the completion path
+    /// rejects is skipped. Returns true when this call deactivated the node.
+    pub(super) async fn fail_compute_node_jobs(
         &self,
-        id: i64,
-        run_id: i64,
-        result: models::ResultModel,
+        node_id: i64,
         context: &C,
-    ) -> Result<(), ServerFailJobError> {
-        match self
-            .complete_job_in_tx("fail", id, models::JobStatus::Failed, run_id, result)
-            .await
-        {
-            Ok(completion) => {
-                self.finalize_completed_jobs(completion.workflow_id, &[completion], context)
-                    .await;
-                Ok(())
-            }
-            Err(CompletionMutationError::Response(response)) => {
-                Err(ServerFailJobError::Rejected(format!("{:?}", response)))
-            }
-            Err(CompletionMutationError::Transport(error)) => {
-                Err(ServerFailJobError::Transport(error.0))
+    ) -> Result<bool, ApiError> {
+        let mut tx = begin_immediate(&self.pool).await.map_err(|e| {
+            database_lock_aware_error(e, "Failed to begin compute node fail transaction")
+        })?;
+        // Every read and write goes through tx: a pool query while tx holds writes deadlocks
+        // under shared-cache SQLite.
+        let deactivated = sqlx::query(
+            "UPDATE compute_node SET is_active = 0 \
+             WHERE id = $1 AND (is_active IS NULL OR is_active = 1)",
+        )
+        .bind(node_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| database_lock_aware_error(e, "Failed to deactivate compute node"))?
+        .rows_affected()
+            > 0;
+
+        let running = sqlx::query(
+            "SELECT j.id, j.workflow_id, j.attempt_id, w.run_id \
+             FROM job j \
+             JOIN workflow w ON w.id = j.workflow_id \
+             WHERE j.compute_node_id = $1 AND j.status = $2",
+        )
+        .bind(node_id)
+        .bind(models::JobStatus::Running.to_int())
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(|e| database_lock_aware_error(e, "Failed to select running jobs"))?;
+
+        let mut by_workflow: std::collections::BTreeMap<i64, Vec<CompletedJobRecord>> =
+            std::collections::BTreeMap::new();
+        for job in running {
+            let job_id: i64 = job.get("id");
+            let workflow_id: i64 = job.get("workflow_id");
+            let run_id: i64 = job.get("run_id");
+            let result = models::ResultModel::new(
+                job_id,
+                workflow_id,
+                run_id,
+                job.get("attempt_id"),
+                node_id,
+                models::ORPHANED_JOB_RETURN_CODE,
+                0.0,
+                chrono::Utc::now().to_rfc3339(),
+                models::JobStatus::Failed,
+            );
+            match self
+                .apply_job_completion_state_tx(
+                    &mut tx,
+                    None,
+                    job_id,
+                    models::JobStatus::Failed,
+                    run_id,
+                    result,
+                )
+                .await
+            {
+                Ok(completion) => by_workflow.entry(workflow_id).or_default().push(completion),
+                Err(CompletionMutationError::Response(response)) => debug!(
+                    "Did not fail workflow_id={} compute_node_id={} job_id={}: {:?}",
+                    workflow_id, node_id, job_id, response
+                ),
+                Err(CompletionMutationError::Transport(error)) => {
+                    let _ = tx.rollback().await;
+                    return Err(error);
+                }
             }
         }
+
+        tx.commit().await.map_err(|e| {
+            database_lock_aware_error(e, "Failed to commit compute node fail transaction")
+        })?;
+
+        for (workflow_id, completions) in by_workflow {
+            for completion in &completions {
+                info!(
+                    "Failed job workflow_id={} compute_node_id={} job_id={} job_name={} \
+                     return_code={}: its compute node was failed",
+                    workflow_id,
+                    node_id,
+                    completion.job_id,
+                    completion.job.name,
+                    completion.result_return_code
+                );
+            }
+            self.finalize_completed_jobs(workflow_id, &completions, context)
+                .await;
+        }
+        Ok(deactivated)
     }
 
     async fn apply_job_completion_state_tx(
@@ -2004,6 +2069,7 @@ where
         if completions.is_empty() {
             return;
         }
+        self.signal_job_completion();
 
         let mut completed_job_ids = Vec::with_capacity(completions.len());
         for completion in completions {
@@ -2154,10 +2220,6 @@ where
         tx.commit().await.map_err(|e| {
             database_lock_aware_error(e, "Failed to commit batch completion transaction")
         })?;
-
-        if !completion_records.is_empty() {
-            self.signal_job_completion();
-        }
 
         self.finalize_completed_jobs(workflow_id, &completion_records, context)
             .await;

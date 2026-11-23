@@ -1235,8 +1235,8 @@ impl JobRunner {
         self.execute_worker_start_actions();
 
         loop {
-            // Check first: a failed node also makes the workflow complete, and the runner
-            // must kill its jobs before that check ends the loop.
+            // Check first. The server already failed the running jobs of this node. If no other
+            // jobs remain, the completion check below can end the loop before the runner kills them.
             if self.node_failed.load(Ordering::SeqCst) {
                 error!(
                     "The server failed this compute node, stopping job runner \
@@ -1617,6 +1617,8 @@ impl JobRunner {
                 self.workflow_id, self.run_id, self.compute_node_id
             );
         } else {
+            // A heartbeat after the deactivation would report the node as failed by the server.
+            self.heartbeat = None;
             self.deactivate_compute_node(system_metrics_summary);
         }
 

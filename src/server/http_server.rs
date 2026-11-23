@@ -263,8 +263,6 @@ mod unblock_processing;
 mod user_data_transport;
 mod workflows_transport;
 
-use jobs_transport::ServerFailJobError;
-
 /// Extract the authenticated subject from the request context, falling back to "unknown" when
 /// the request is anonymous. Used for attribution fields on audit/user-action events.
 fn username_from_context<C>(context: &C) -> String

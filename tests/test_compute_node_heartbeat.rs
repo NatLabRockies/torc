@@ -38,19 +38,39 @@ fn new_node(workflow_id: i64, host: &str) -> models::ComputeNodeModel {
     )
 }
 
+/// Create an active node. The server ignores `last_heartbeat` on create, so a given value is
+/// written to the database directly.
 fn create_node(
-    config: &Configuration,
+    server: &ServerProcess,
     workflow_id: i64,
     host: &str,
     last_heartbeat: Option<String>,
 ) -> i64 {
     let mut node = new_node(workflow_id, host);
     node.is_active = Some(true);
-    node.last_heartbeat = last_heartbeat;
-    apis::compute_nodes_api::create_compute_node(config, node)
+    let id = apis::compute_nodes_api::create_compute_node(&server.config, node)
         .expect("Failed to create compute node")
         .id
-        .unwrap()
+        .unwrap();
+    if let Some(last_heartbeat) = last_heartbeat {
+        store_heartbeat(server, id, &last_heartbeat);
+    }
+    id
+}
+
+/// Write the `last_heartbeat` column past the server.
+fn store_heartbeat(server: &ServerProcess, id: i64, last_heartbeat: &str) {
+    let url = format!("sqlite:{}", server.db_file.path().display());
+    tokio::runtime::Runtime::new().unwrap().block_on(async {
+        let pool = sqlx::SqlitePool::connect(&url).await.unwrap();
+        sqlx::query("UPDATE compute_node SET last_heartbeat = ? WHERE id = ?")
+            .bind(last_heartbeat)
+            .bind(id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        pool.close().await;
+    })
 }
 
 /// Create a job and run it on `compute_node_id`. Returns `(job_id, run_id)`.
@@ -223,7 +243,7 @@ fn test_stale_node_stays_active_and_its_job_keeps_running() {
         .id
         .unwrap();
 
-    let node = create_node(config, workflow_id, "stale-host", Some(heartbeat_age(0)));
+    let node = create_node(&server, workflow_id, "stale-host", Some(heartbeat_age(0)));
     let heartbeater = Heartbeater::start(config, node);
     let (job_id, run_id) = start_running_job(config, workflow_id, "stale_job", node);
     drop(heartbeater);
@@ -258,7 +278,7 @@ fn test_restart_guard_hides_stale_until_uptime_reaches_threshold() {
     let workflow_id = create_test_workflow(config, "test_restart_guard")
         .id
         .unwrap();
-    let node = create_node(config, workflow_id, "old-host", Some(heartbeat_age(1000)));
+    let node = create_node(&server, workflow_id, "old-host", Some(heartbeat_age(1000)));
     assert!(!is_stale(config, node));
     assert!(list_stale(config, workflow_id, true).items.is_empty());
     assert!(wait_until(Duration::from_secs(20), || is_stale(
@@ -273,12 +293,12 @@ fn test_list_filters_stale_nodes() {
     let workflow_id = create_test_workflow(config, "test_list_filters_stale")
         .id
         .unwrap();
-    let old = create_node(config, workflow_id, "old-host", Some(heartbeat_age(1000)));
+    let old = create_node(&server, workflow_id, "old-host", Some(heartbeat_age(1000)));
     assert!(
         wait_until(Duration::from_secs(20), || is_stale(config, old)),
         "node did not become stale"
     );
-    let fresh = create_node(config, workflow_id, "fresh-host", Some(heartbeat_age(0)));
+    let fresh = create_node(&server, workflow_id, "fresh-host", Some(heartbeat_age(0)));
     let _heartbeater = Heartbeater::start(config, fresh);
 
     let stale = list_stale(config, workflow_id, true);
@@ -314,7 +334,7 @@ fn test_heartbeats_stay_in_memory_until_the_node_is_stale() {
     let workflow_id = create_test_workflow(config, "test_heartbeats_in_memory")
         .id
         .unwrap();
-    let node = create_node(config, workflow_id, "live-host", None);
+    let node = create_node(&server, workflow_id, "live-host", None);
     let first = apis::compute_nodes_api::heartbeat_compute_node(config, node)
         .unwrap()
         .last_heartbeat;
@@ -350,8 +370,8 @@ fn test_node_that_dies_during_a_server_outage_becomes_stale() {
     let workflow_id = create_test_workflow(&server.config, "test_outage")
         .id
         .unwrap();
-    let dead = create_node(&server.config, workflow_id, "dead-host", None);
-    let live = create_node(&server.config, workflow_id, "live-host", None);
+    let dead = create_node(&server, workflow_id, "dead-host", None);
+    let live = create_node(&server, workflow_id, "live-host", None);
     for node in [dead, live] {
         apis::compute_nodes_api::heartbeat_compute_node(&server.config, node).unwrap();
     }
@@ -376,7 +396,7 @@ fn test_malformed_heartbeat_is_never_stale() {
         .id
         .unwrap();
     let node = create_node(
-        config,
+        &server,
         workflow_id,
         "bad-host",
         Some("not-a-time".to_string()),
@@ -394,7 +414,12 @@ fn test_failed_node_lets_reset_status_run_without_force(start_server: &ServerPro
     let workflow_id = create_test_workflow(config, "test_fail_unblocks_reset")
         .id
         .unwrap();
-    let node = create_node(config, workflow_id, "dead-host", Some(heartbeat_age(0)));
+    let node = create_node(
+        start_server,
+        workflow_id,
+        "dead-host",
+        Some(heartbeat_age(0)),
+    );
     let (job_id, _) = start_running_job(config, workflow_id, "dead_job", node);
     fail_node(config, node);
 
@@ -410,7 +435,7 @@ fn test_fresh_heartbeat_is_not_stale() {
     let workflow_id = create_test_workflow(config, "test_fresh_heartbeat_not_stale")
         .id
         .unwrap();
-    let node = create_node(config, workflow_id, "live-host", Some(heartbeat_age(0)));
+    let node = create_node(&server, workflow_id, "live-host", Some(heartbeat_age(0)));
     let (job_id, _) = start_running_job(config, workflow_id, "live_job", node);
 
     // Run for twice the threshold, heartbeating every half second.
@@ -438,10 +463,15 @@ fn test_node_without_heartbeat_is_never_stale() {
     let workflow_id = create_test_workflow(config, "test_null_heartbeat_not_stale")
         .id
         .unwrap();
-    let legacy_node = create_node(config, workflow_id, "legacy-host", None);
+    let legacy_node = create_node(&server, workflow_id, "legacy-host", None);
     let (job_id, _) = start_running_job(config, workflow_id, "legacy_job", legacy_node);
     // A stale node on the same server proves the threshold passed during the wait.
-    let stale_node = create_node(config, workflow_id, "stale-host", Some(heartbeat_age(3600)));
+    let stale_node = create_node(
+        &server,
+        workflow_id,
+        "stale-host",
+        Some(heartbeat_age(3600)),
+    );
 
     assert!(
         wait_until(Duration::from_secs(20), || is_stale(config, stale_node)),
@@ -461,7 +491,7 @@ fn test_stale_after_zero_disables_stale_marking() {
     let workflow_id = create_test_workflow(config, "test_stale_disabled")
         .id
         .unwrap();
-    let node = create_node(config, workflow_id, "old-host", Some(heartbeat_age(1000)));
+    let node = create_node(&server, workflow_id, "old-host", Some(heartbeat_age(1000)));
 
     std::thread::sleep(Duration::from_secs(2));
 
@@ -477,14 +507,19 @@ fn test_heartbeat_endpoint_updates_only_active_nodes(start_server: &ServerProces
         .unwrap();
 
     let old = heartbeat_age(3600);
-    let active = create_node(config, workflow_id, "active-host", Some(old.clone()));
+    let active = create_node(start_server, workflow_id, "active-host", Some(old.clone()));
     let model = apis::compute_nodes_api::heartbeat_compute_node(config, active).unwrap();
     let refreshed = model.last_heartbeat.expect("heartbeat not recorded");
     assert!(refreshed > old, "{refreshed} should be newer than {old}");
     assert_eq!(model.is_active, Some(true));
 
     // An inactive node keeps its heartbeat and stays inactive.
-    let inactive = create_node(config, workflow_id, "inactive-host", Some(old.clone()));
+    let inactive = create_node(
+        start_server,
+        workflow_id,
+        "inactive-host",
+        Some(old.clone()),
+    );
     let mut update = new_node(workflow_id, "inactive-host");
     update.is_active = Some(false);
     apis::compute_nodes_api::update_compute_node(config, inactive, update).unwrap();
@@ -679,8 +714,8 @@ fn test_completion_requires_the_owning_node_and_attempt(start_server: &ServerPro
     let workflow_id = create_test_workflow(config, "test_completion_ownership")
         .id
         .unwrap();
-    let owner = create_node(config, workflow_id, "owner-host", None);
-    let other = create_node(config, workflow_id, "other-host", None);
+    let owner = create_node(start_server, workflow_id, "owner-host", None);
+    let other = create_node(start_server, workflow_id, "other-host", None);
     let (job_id, run_id) = start_running_job(config, workflow_id, "owned_job", owner);
 
     let complete = |node: i64, attempt: i64| -> bool {
@@ -720,13 +755,18 @@ fn test_late_completion_after_retry_is_rejected(start_server: &ServerProcess) {
     let workflow_id = create_test_workflow(config, "test_late_completion_after_retry")
         .id
         .unwrap();
-    let old_node = create_node(config, workflow_id, "old-host", Some(heartbeat_age(0)));
+    let old_node = create_node(
+        start_server,
+        workflow_id,
+        "old-host",
+        Some(heartbeat_age(0)),
+    );
     let (job_id, run_id) = start_running_job(config, workflow_id, "retried_job", old_node);
     fail_node(config, old_node);
     assert_eq!(job_status(config, job_id), models::JobStatus::Failed);
 
     apis::jobs_api::retry_job(config, job_id, run_id, 3).expect("retry_job failed");
-    let new_node = create_node(config, workflow_id, "new-host", None);
+    let new_node = create_node(start_server, workflow_id, "new-host", None);
     apis::workflows_api::claim_next_jobs(config, workflow_id, Some(1), None, None, None)
         .expect("claim failed");
     apis::jobs_api::start_job(config, job_id, run_id, new_node).expect("start failed");
@@ -758,7 +798,12 @@ fn test_late_completion_after_reset_is_rejected(start_server: &ServerProcess) {
     let workflow_id = create_test_workflow(config, "test_late_completion_after_reset")
         .id
         .unwrap();
-    let old_node = create_node(config, workflow_id, "old-host", Some(heartbeat_age(0)));
+    let old_node = create_node(
+        start_server,
+        workflow_id,
+        "old-host",
+        Some(heartbeat_age(0)),
+    );
     let (job_id, run_id) = start_running_job(config, workflow_id, "reset_job", old_node);
     fail_node(config, old_node);
     assert_eq!(job_status(config, job_id), models::JobStatus::Failed);
@@ -796,7 +841,12 @@ fn test_late_completion_on_pending_job_from_inactive_node_is_rejected(
     let workflow_id = create_test_workflow(config, "test_late_completion_pending")
         .id
         .unwrap();
-    let old_node = create_node(config, workflow_id, "old-host", Some(heartbeat_age(0)));
+    let old_node = create_node(
+        start_server,
+        workflow_id,
+        "old-host",
+        Some(heartbeat_age(0)),
+    );
     fail_node(config, old_node);
 
     let job = models::JobModel::new(workflow_id, "pending_job".to_string(), "echo".to_string());
@@ -836,7 +886,12 @@ fn test_start_on_failed_node_is_rejected(start_server: &ServerProcess) {
     let workflow_id = create_test_workflow(config, "test_start_on_failed_node")
         .id
         .unwrap();
-    let failed = create_node(config, workflow_id, "failed-host", Some(heartbeat_age(0)));
+    let failed = create_node(
+        start_server,
+        workflow_id,
+        "failed-host",
+        Some(heartbeat_age(0)),
+    );
     fail_node(config, failed);
 
     let job = models::JobModel::new(workflow_id, "late_start".to_string(), "echo".to_string());
@@ -874,7 +929,7 @@ fn test_update_ignores_last_heartbeat(start_server: &ServerProcess) {
     let workflow_id = create_test_workflow(config, "test_update_ignores_heartbeat")
         .id
         .unwrap();
-    let node = create_node(config, workflow_id, "host", Some(heartbeat_age(0)));
+    let node = create_node(start_server, workflow_id, "host", Some(heartbeat_age(0)));
     let stored = apis::compute_nodes_api::get_compute_node(config, node)
         .unwrap()
         .last_heartbeat
@@ -892,11 +947,16 @@ fn test_fail_compute_node_fails_only_its_running_jobs(start_server: &ServerProce
     let workflow_id = create_test_workflow(config, "test_fail_node_scope")
         .id
         .unwrap();
-    let a = create_node(config, workflow_id, "host-a", Some(heartbeat_age(0)));
+    let a = create_node(start_server, workflow_id, "host-a", Some(heartbeat_age(0)));
     let other_workflow_id = create_test_workflow(config, "test_fail_node_scope_other")
         .id
         .unwrap();
-    let b = create_node(config, other_workflow_id, "host-b", Some(heartbeat_age(0)));
+    let b = create_node(
+        start_server,
+        other_workflow_id,
+        "host-b",
+        Some(heartbeat_age(0)),
+    );
     let (job_a, _) = start_running_job(config, workflow_id, "job_a", a);
     let (job_b, _) = start_running_job(config, other_workflow_id, "job_b", b);
 
@@ -911,13 +971,55 @@ fn test_fail_compute_node_fails_only_its_running_jobs(start_server: &ServerProce
     assert!(is_node_active(config, b));
 }
 
+/// The fail call must wake the unblock task. A private server makes sure that no completion from
+/// another test wakes it instead.
+#[test]
+fn test_fail_compute_node_releases_dependent_jobs() {
+    let server = start_server_with_env(&[]);
+    let config = &server.config;
+    let workflow_id = create_test_workflow(config, "test_fail_node_dependents")
+        .id
+        .unwrap();
+    let node = create_node(&server, workflow_id, "host", Some(heartbeat_age(0)));
+    let parent = models::JobModel::new(workflow_id, "parent".to_string(), "echo".to_string());
+    let parent_id = apis::jobs_api::create_job(config, parent)
+        .unwrap()
+        .id
+        .unwrap();
+    let mut child = models::JobModel::new(workflow_id, "child".to_string(), "echo".to_string());
+    child.depends_on_job_ids = Some(vec![parent_id]);
+    let child_id = apis::jobs_api::create_job(config, child)
+        .unwrap()
+        .id
+        .unwrap();
+    apis::workflows_api::initialize_jobs(config, workflow_id, None, None, None).unwrap();
+    let run_id = apis::workflows_api::get_workflow(config, workflow_id)
+        .unwrap()
+        .run_id
+        .unwrap_or(0);
+    apis::workflows_api::claim_next_jobs(config, workflow_id, Some(1), None, None, None).unwrap();
+    apis::jobs_api::start_job(config, parent_id, run_id, node).unwrap();
+    assert_eq!(job_status(config, child_id), models::JobStatus::Blocked);
+
+    fail_node(config, node);
+    assert_eq!(job_status(config, parent_id), models::JobStatus::Failed);
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while job_status(config, child_id) == models::JobStatus::Blocked {
+        assert!(
+            Instant::now() < deadline,
+            "the dependent job stayed blocked"
+        );
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
 #[rstest]
 fn test_fail_compute_node_is_idempotent(start_server: &ServerProcess) {
     let config = &start_server.config;
     let workflow_id = create_test_workflow(config, "test_fail_node_idempotent")
         .id
         .unwrap();
-    let a = create_node(config, workflow_id, "host-a", Some(heartbeat_age(0)));
+    let a = create_node(start_server, workflow_id, "host-a", Some(heartbeat_age(0)));
     let (job_a, _) = start_running_job(config, workflow_id, "job_a", a);
 
     fail_node(config, a);
@@ -942,7 +1044,7 @@ fn test_fail_compute_node_without_heartbeat(start_server: &ServerProcess) {
     let workflow_id = create_test_workflow(config, "test_fail_node_no_heartbeat")
         .id
         .unwrap();
-    let a = create_node(config, workflow_id, "legacy-host", None);
+    let a = create_node(start_server, workflow_id, "legacy-host", None);
     let (job_a, _) = start_running_job(config, workflow_id, "job_a", a);
 
     let failed = fail_node(config, a);
@@ -956,7 +1058,7 @@ fn test_fail_skips_a_job_that_was_already_completed(start_server: &ServerProcess
     let workflow_id = create_test_workflow(config, "test_fail_node_after_complete")
         .id
         .unwrap();
-    let a = create_node(config, workflow_id, "host-a", Some(heartbeat_age(0)));
+    let a = create_node(start_server, workflow_id, "host-a", Some(heartbeat_age(0)));
     let (job_a, run_id) = start_running_job(config, workflow_id, "job_a", a);
     let done = models::ResultModel::new(
         job_a,
@@ -983,7 +1085,7 @@ fn test_heartbeat_after_fail_reports_inactive(start_server: &ServerProcess) {
     let workflow_id = create_test_workflow(config, "test_heartbeat_after_fail")
         .id
         .unwrap();
-    let a = create_node(config, workflow_id, "host-a", Some(heartbeat_age(0)));
+    let a = create_node(start_server, workflow_id, "host-a", Some(heartbeat_age(0)));
     fail_node(config, a);
     let node = apis::compute_nodes_api::heartbeat_compute_node(config, a).unwrap();
     assert_eq!(node.is_active, Some(false));
@@ -1002,8 +1104,8 @@ fn test_orphan_fallback_completes_each_job_with_its_own_node(start_server: &Serv
     let workflow_id = create_test_workflow(config, "test_orphan_fallback_own_node")
         .id
         .unwrap();
-    let a = create_node(config, workflow_id, "host-a", Some(heartbeat_age(0)));
-    let b = create_node(config, workflow_id, "host-b", Some(heartbeat_age(0)));
+    let a = create_node(start_server, workflow_id, "host-a", Some(heartbeat_age(0)));
+    let b = create_node(start_server, workflow_id, "host-b", Some(heartbeat_age(0)));
     let mut job_ids = Vec::new();
     for name in ["job_a", "job_b"] {
         let job = models::JobModel::new(workflow_id, name.to_string(), "echo test".to_string());
@@ -1059,7 +1161,7 @@ fn test_concurrent_fail_calls_record_one_result(start_server: &ServerProcess) {
     let workflow_id = create_test_workflow(config, "test_concurrent_fail")
         .id
         .unwrap();
-    let a = create_node(config, workflow_id, "host-a", Some(heartbeat_age(0)));
+    let a = create_node(start_server, workflow_id, "host-a", Some(heartbeat_age(0)));
     let (job_a, _) = start_running_job(config, workflow_id, "job_a", a);
 
     let barrier = std::sync::Barrier::new(2);

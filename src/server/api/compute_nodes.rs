@@ -312,8 +312,7 @@ where
                 ,avg_memory_bytes
                 ,end_time
                 ,labels
-                ,last_heartbeat
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
             RETURNING id
             "#,
         )
@@ -338,12 +337,14 @@ where
         .bind(body.avg_memory_bytes)
         .bind(&body.end_time)
         .bind(models::labels_to_json(body.labels.as_deref()))
-        .bind(&body.last_heartbeat)
         .fetch_one(self.context.pool.as_ref())
         .await
         {
             Ok(row) => {
                 body.id = Some(row.get("id"));
+                // Only the heartbeat endpoint sets these, from the server clock.
+                body.last_heartbeat = None;
+                body.is_stale = Some(false);
                 Ok(CreateComputeNodeResponse::SuccessfulResponse(body))
             }
             Err(e) => {
