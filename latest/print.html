@@ -1676,7 +1676,8 @@ handful of exit conditions.</p>
 </pre>
 <p>While the worker is in offline-drain mode, <code>on_worker_complete</code> and <code>deactivate_compute_node</code> are
 both skipped — the server is unreachable, so the node is left active and the journal is replayed via
-<code>torc workflows reconcile</code> once connectivity returns.</p>
+<code>torc workflows reconcile</code> once connectivity returns. Heartbeats are also paused while the runner is
+offline (see <a href="core/concepts/job-runners.html#compute-node-heartbeats-and-stale-nodes">Compute Node Heartbeats</a>).</p>
 <h3 id="per-iteration-logic"><a class="header" href="#per-iteration-logic">Per-Iteration Logic</a></h3>
 <pre class="mermaid">flowchart TD
     Iter([Loop iteration]) --&gt; OfflineCheck{Offline?}
@@ -1818,6 +1819,102 @@ the workflow is observed complete or the idle-exit timer fires.</li>
 <p>Without the idle clamp, a node that drained near the start of a 1-hour backoff window could sit
 asleep for nearly the full hour after the workflow completed elsewhere. The clamp bounds that
 worst-case waste to ~30s.</p>
+<h2 id="compute-node-heartbeats-and-stale-nodes"><a class="header" href="#compute-node-heartbeats-and-stale-nodes">Compute Node Heartbeats and Stale Nodes</a></h2>
+<p>A runner marks its compute node <code>is_active</code> when it starts and clears the flag when it exits
+normally. If the runner dies without a normal exit (<code>SIGKILL</code>, an out-of-memory kill, a lost host),
+nothing clears the flag. The node stays active and its jobs stay <code>running</code>, and <code>torc watch</code>,
+<code>torc workflows reset-status</code> and <code>torc recover</code> wait or refuse to continue without <code>--force</code>. The
+client check in <code>torc recover</code> finds dead runners only on the machine that runs the command. It
+cannot see a runner in a container or on another host.</p>
+<p>To close this gap, a runner sends a heartbeat for its compute node, and the server marks nodes that
+stop sending them as stale. The server never decides that a node is dead. Something that can check
+the host does.</p>
+<p><strong>Runner side.</strong> Every <code>client.run.heartbeat_interval_secs</code> (default 30, <code>0</code> turns heartbeats off)
+the runner calls <code>POST /compute_nodes/{id}/heartbeat</code>. The server stamps <code>last_heartbeat</code> with its
+own clock, so clock differences between hosts do not matter. A thread of its own sends the
+heartbeats. It starts with the runner and sends the first heartbeat at once. Slow claims, long
+<code>run_commands</code> actions, and the claim backoff therefore cannot delay it. A failed heartbeat is
+logged and the runner continues. The runner sends no heartbeats in offline-drain mode. With
+heartbeats off, the node keeps no <code>last_heartbeat</code> and is never stale.</p>
+<p><strong>Stale nodes.</strong> The server setting <code>compute_node_stale_after_secs</code> (default 600, <code>0</code> turns stale
+marking off) sets the threshold. Set it with <code>--compute-node-stale-after-secs &lt;N&gt;</code>, the environment
+variable <code>TORC_COMPUTE_NODE_STALE_AFTER_SECS</code>, or the config key
+<code>server.compute_node_stale_after_secs</code>. A node is stale when it is active, has a <code>last_heartbeat</code>,
+and that heartbeat is older than the threshold. A node without a <code>last_heartbeat</code> is never stale.
+This covers runners that predate heartbeats.</p>
+<p>The server computes staleness when it reads a node. It runs no background task and changes no node
+state or job. <code>ComputeNodeModel.is_stale</code> reports the result. <code>GET /compute_nodes?stale=true</code> (or
+<code>stale=false</code>) filters on it, and <code>torc compute-nodes list --stale</code> does the same and shows a Stale
+column.</p>
+<p><strong>Heartbeat storage.</strong> The server keeps the last heartbeat of each node in memory, so heartbeats do
+not compete with job claims for the SQLite write lock. It writes <code>last_heartbeat</code> to the database at
+two times only: on the first heartbeat that a server process gets from a node, and when a read finds
+the node stale. After a server restart, the stored value is the fallback until the node sends a new
+heartbeat. A node that died during the outage therefore becomes stale after the restart guard
+(below). Sorting a node list by <code>last_heartbeat</code> uses the stored value.</p>
+<p>Communication goes one way only: the runner calls the server, and the server records the call. The
+server never contacts a runner. This is a hard rule: on many HPC clusters, compute nodes can reach
+the server, but the server cannot reach the compute nodes. Thus the server and its runners can be on
+different networks (for example a server in the cloud and runners on an HPC system or on cloud VMs).
+Stale marking needs no shared host, process namespace, or file system.</p>
+<p>The default threshold is 600 seconds. This lets a healthy node survive a short network outage
+without being marked stale.</p>
+<p><strong>Server crash and restart.</strong> When the server stops or crashes, no runner can send a heartbeat.
+Runners keep their jobs alive. Each API call retries for
+<code>compute_node_wait_for_healthy_database_minutes</code> (default 20). Then the runner enters offline-drain
+mode and checks for the server every <code>drain_ping_interval_secs</code> (default 120). After the server
+returns, a healthy runner needs up to about 150 seconds (one drain check plus one 30-second
+heartbeat interval) to send a new heartbeat.</p>
+<p>Without a guard, an outage longer than the threshold would make every active node stale the moment
+the server returns. A person or detector that trusts the stale flag could then fail a healthy node,
+and its jobs could run twice. The guard: no node is stale until the server has run for one full
+threshold. The server keeps its start time in memory.</p>
+<p>This is the least-cost answer. It needs no database column, no write on the heartbeat path, and no
+shutdown hook, so it works the same after a crash, a <code>kill -9</code>, or a host reboot. It does not depend
+on the length of the outage. The cost: after a restart, a dead node shows as stale up to one
+threshold later (600 seconds by default). Stale is a hint. A late hint is safe. An early hint is
+not.</p>
+<p><strong>Failing a node.</strong> <code>POST /compute_nodes/{id}/fail</code> (CLI: <code>torc compute-nodes fail &lt;id&gt;</code>) declares a
+node dead. The server:</p>
+<ol>
+<li>sets <code>is_active = false</code>,</li>
+<li>fails each job that is <code>running</code> on that node with return code <code>-128</code> (the code the client orphan
+cleanup uses), so dependents are released as for any other failure, and</li>
+<li>broadcasts a <code>compute_node_stopped</code> event with reason <code>failed</code>.</li>
+</ol>
+<p>Steps 1 and 2 run in one transaction: if a database error interrupts them, nothing changes and the
+call can be retried. The call is idempotent and works on any node, stale or not. It is a
+declaration, not a request. The caller must first confirm outside torc that the node is dead: for
+example a cloud VM status check, a scheduler query, or a person who looked at the host. A stale flag
+alone does not prove it. The server cannot stop processes on a host, so a node that is still alive
+and failed by mistake keeps running its jobs until its runner is fenced.</p>
+<p><strong>Runner fence.</strong> When a heartbeat reply reports <code>is_active == false</code>, the runner kills its running
+jobs and exits. A runner whose node was failed during a server outage is fenced by its first
+heartbeat after offline-drain ends.</p>
+<p><strong>Ownership of a job.</strong> The server rejects a completion (HTTP 422) from a runner that no longer owns
+the job. That happens when the result reports another <code>attempt_id</code> than the job's current one, when
+the job records another compute node, or when the job is not running and the reporting node is
+inactive. A late completion from a failed node is therefore rejected after a retry (new attempt),
+after <code>torc jobs reset-status</code> makes it ready, and after a replacement attempt starts on another
+node. A completion from a stale node that is still active is accepted if its job still runs. A start
+or claim for an inactive node is rejected too, so a job cannot start on a node that was just failed.</p>
+<p><strong><code>torc watch</code>, <code>torc recover</code> and <code>reset-status</code>.</strong> <code>torc watch</code>, <code>torc recover</code> and
+<code>torc jobs reset-status</code> (without <code>--force</code>) wait or refuse while any compute node of the workflow
+is active, unless orphan cleanup proves the runner dead (a dead local PID on the same host, or an
+ended Slurm job). A stale node that is still active therefore blocks them, even when it runs no job.
+<code>torc workflows reset-status</code> (without <code>--force</code>) refuses only while jobs are running or submitted.
+<code>torc compute-nodes fail &lt;id&gt;</code> deactivates the node and fails its running jobs, which ends the wait
+once you know the node is dead.</p>
+<p><strong>Trade-offs.</strong></p>
+<ul>
+<li>The server cannot stop processes on a host. A job that you rerun after failing a node whose host
+is still running can run twice at the same time.</li>
+<li>A node that is truly dead but never failed blocks <code>torc recover</code> and <code>torc watch</code> until someone
+fails it. Stale marking only helps you find it.</li>
+<li>A threshold below a few heartbeat intervals marks healthy nodes stale. This is harmless, because
+it only changes the hint.</li>
+<li>After a server restart, stale marking starts one threshold late (see above).</li>
+</ul>
 <h2 id="surviving-server-outages-offline-drain"><a class="header" href="#surviving-server-outages-offline-drain">Surviving Server Outages (Offline Drain)</a></h2>
 <p>Job runners need the server to claim work, report completions, and unblock dependents. But a running
 job is an ordinary subprocess on the compute node — it does not need the server to keep running.
@@ -13181,6 +13278,9 @@ torc config validate          # Validate current configuration
 <tr><td><code>num_gpus</code></td><td>int</td><td>(none)</td><td>Available GPUs for resource-based scheduling</td></tr>
 </tbody></table>
 </div>
+<p>Heartbeats: <code>heartbeat_interval_secs</code> (int, default <code>30</code>, environment variable
+<code>TORC_CLIENT__RUN__HEARTBEAT_INTERVAL_SECS</code>) sets the seconds between compute node heartbeats. <code>0</code>
+turns them off. See <a href="core/reference/./../concepts/job-runners.html#compute-node-heartbeats-and-stale-nodes">Compute Node Heartbeats and Stale Nodes</a>.</p>
 <h3 id="clientoffline-section"><a class="header" href="#clientoffline-section"><code>[client.offline]</code> Section</a></h3>
 <p>Settings for offline-drain behavior when a job runner loses contact with the server.</p>
 <p>By default, if a runner cannot reach the server for longer than the workflow's
@@ -13305,6 +13405,13 @@ shared = false
 <tr><td><code>admin_users</code></td><td>string array</td><td><code>[]</code></td><td>Users to add to the admin group</td></tr>
 </tbody></table>
 </div>
+<p>Compute node stale marking (see <a href="core/reference/./../concepts/job-runners.html#compute-node-heartbeats-and-stale-nodes">Compute Node Heartbeats and Stale Nodes</a>):</p>
+<ul>
+<li><code>compute_node_stale_after_secs</code> (int, default <code>600</code>, environment variable
+<code>TORC_SERVER__COMPUTE_NODE_STALE_AFTER_SECS</code>): seconds without a heartbeat after which an active
+node shows as stale. <code>0</code> turns stale marking off. No node is stale until the server has run for
+one threshold.</li>
+</ul>
 <h3 id="serverlogging-section"><a class="header" href="#serverlogging-section"><code>[server.logging]</code> Section</a></h3>
 <div class="table-wrapper"><table><thead><tr><th>Option</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>log_dir</code></td><td>path</td><td>(none)</td><td>Directory for log files (enables file logging)</td></tr>
@@ -19183,6 +19290,9 @@ RUST_LOG=debug torc-server run --log-dir /var/log/torc
 <code>./torc-server-snapshot.db</code>). See
 <a href="specialized/admin/server-deployment.html#in-memory-database-with-snapshots-advanced">In-Memory Database with Snapshots</a>.</li>
 <li><code>TORC_SERVER_SNAPSHOT_KEEP</code>: Number of snapshots to retain (default <code>5</code>, minimum <code>1</code>)</li>
+<li><code>TORC_COMPUTE_NODE_STALE_AFTER_SECS</code>: Seconds without a runner heartbeat after which an active
+compute node shows as stale (default <code>600</code>, <code>0</code> turns stale marking off). The server changes no
+node or job. See <a href="specialized/admin/../../core/concepts/job-runners.html#compute-node-heartbeats-and-stale-nodes">Compute Node Heartbeats and Stale Nodes</a>.</li>
 <li><code>TORC_API_EVENT_BODY_MAX_BYTES</code>: Per-direction cap on captured request/response bodies surfaced
 through <code>torc admin tail-api</code> (default <code>8192</code>). See
 <a href="specialized/admin/server-deployment.html#live-api-request-inspection">Live API Request Inspection</a>.</li>
@@ -25497,6 +25607,12 @@ job no longer exists (cancelled or failed before starting)</p>
 compute nodes to process them (fallback for non-Slurm cases)</p>
 </li>
 </ol>
+<p>The checks above run on the client. A runner that dies without a normal exit in a container or on
+another host leaves its compute node active, and the client cannot see it. The server marks nodes
+that stopped sending heartbeats as stale (<code>compute_node_stale_after_secs</code>). It does not fail their
+jobs. Once you confirm the node is dead, <code>torc compute-nodes fail &lt;id&gt;</code> marks it inactive and fails
+its running jobs with the same return code (<code>-128</code>). See
+<a href="specialized/design/../../core/concepts/job-runners.html#compute-node-heartbeats-and-stale-nodes">Compute Node Heartbeats and Stale Nodes</a>.</p>
 <pre class="mermaid">flowchart TD
     A[Start Orphan Detection] --&gt; B[List active ScheduledComputeNodes]
     B --&gt; C{For each Slurm allocation}

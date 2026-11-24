@@ -225,6 +225,12 @@ job no longer exists (cancelled or failed before starting)</p>
 compute nodes to process them (fallback for non-Slurm cases)</p>
 </li>
 </ol>
+<p>The checks above run on the client. A runner that dies without a normal exit in a container or on
+another host leaves its compute node active, and the client cannot see it. The server marks nodes
+that stopped sending heartbeats as stale (<code>compute_node_stale_after_secs</code>). It does not fail their
+jobs. Once you confirm the node is dead, <code>torc compute-nodes fail &lt;id&gt;</code> marks it inactive and fails
+its running jobs with the same return code (<code>-128</code>). See
+<a href="../../core/concepts/job-runners.html#compute-node-heartbeats-and-stale-nodes">Compute Node Heartbeats and Stale Nodes</a>.</p>
 <pre class="mermaid">flowchart TD
     A[Start Orphan Detection] --&gt; B[List active ScheduledComputeNodes]
     B --&gt; C{For each Slurm allocation}

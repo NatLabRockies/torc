@@ -234,6 +234,9 @@ torc config validate          # Validate current configuration
 <tr><td><code>num_gpus</code></td><td>int</td><td>(none)</td><td>Available GPUs for resource-based scheduling</td></tr>
 </tbody></table>
 </div>
+<p>Heartbeats: <code>heartbeat_interval_secs</code> (int, default <code>30</code>, environment variable
+<code>TORC_CLIENT__RUN__HEARTBEAT_INTERVAL_SECS</code>) sets the seconds between compute node heartbeats. <code>0</code>
+turns them off. See <a href="./../concepts/job-runners.html#compute-node-heartbeats-and-stale-nodes">Compute Node Heartbeats and Stale Nodes</a>.</p>
 <h3 id="clientoffline-section"><a class="header" href="#clientoffline-section"><code>[client.offline]</code> Section</a></h3>
 <p>Settings for offline-drain behavior when a job runner loses contact with the server.</p>
 <p>By default, if a runner cannot reach the server for longer than the workflow's
@@ -358,6 +361,13 @@ shared = false
 <tr><td><code>admin_users</code></td><td>string array</td><td><code>[]</code></td><td>Users to add to the admin group</td></tr>
 </tbody></table>
 </div>
+<p>Compute node stale marking (see <a href="./../concepts/job-runners.html#compute-node-heartbeats-and-stale-nodes">Compute Node Heartbeats and Stale Nodes</a>):</p>
+<ul>
+<li><code>compute_node_stale_after_secs</code> (int, default <code>600</code>, environment variable
+<code>TORC_SERVER__COMPUTE_NODE_STALE_AFTER_SECS</code>): seconds without a heartbeat after which an active
+node shows as stale. <code>0</code> turns stale marking off. No node is stale until the server has run for
+one threshold.</li>
+</ul>
 <h3 id="serverlogging-section"><a class="header" href="#serverlogging-section"><code>[server.logging]</code> Section</a></h3>
 <div class="table-wrapper"><table><thead><tr><th>Option</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>log_dir</code></td><td>path</td><td>(none)</td><td>Directory for log files (enables file logging)</td></tr>
