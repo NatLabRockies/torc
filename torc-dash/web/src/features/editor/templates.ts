@@ -10,6 +10,7 @@ const GROUPS: [string, string[]][] = [
   ["Many jobs", ["hundred_jobs_parameterized", "hyperparameter_sweep", "data_pipeline_parameterized"]],
   ["Slurm", ["workflow_actions_simple_slurm", "multi_node_slurm"]],
   ["Reliability", ["simple_retry"]],
+  ["Monitoring", ["resource_monitoring_demo"]],
 ];
 
 // import.meta.glob needs literal patterns, so the files are listed again here.
@@ -22,6 +23,7 @@ const FILES = import.meta.glob<string>(
     "../../../../../examples/yaml/workflow_actions_simple_slurm.yaml",
     "../../../../../examples/yaml/multi_node_slurm.yaml",
     "../../../../../examples/yaml/simple_retry.yaml",
+    "../../../../../examples/yaml/resource_monitoring_demo.yaml",
   ],
   { query: "?raw", import: "default" },
 );
