@@ -93,12 +93,12 @@ echo 'export PATH="/scratch/dthom/torc/latest:$PATH"' >> ~/.bashrc
 ```
 
 **Shared server**: A `torc-server` instance runs on a dedicated VM within the Kestrel environment at
-`torc.hpc.nrel.gov`. See [How to Set Up Authentication](../core/how-to/set-up-authentication.md) to
+`torc.hpc.nlr.gov`. See [How to Set Up Authentication](../core/how-to/set-up-authentication.md) to
 configure your credentials. Contact Daniel Thom if you would like to create an access group to store
 private workflows for your team.
 
 ```bash
-export TORC_API_URL="http://torc.hpc.nrel.gov:8080/torc-service/v1"
+export TORC_API_URL="http://torc.hpc.nlr.gov:8080/torc-service/v1"
 ```
 
 **Note:** Be mindful of how much data you store in this database. Delete workflows that you don't
@@ -183,7 +183,7 @@ docker run --rm ghcr.io/natlabrockies/torc:latest torc --version
 
 # List workflows (pointing at a running server)
 docker run --rm ghcr.io/natlabrockies/torc:latest \
-  torc --url http://torc.hpc.nrel.gov:8080/torc-service/v1 workflows list
+  torc --url http://torc.hpc.nlr.gov:8080/torc-service/v1 workflows list
 ```
 
 ## Building from Source

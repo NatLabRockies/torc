@@ -26,7 +26,7 @@ Open `~/.config/torc/config.toml` and set the server URL and CA certificate path
 
 ```toml
 [client]
-api_url = "https://torc.hpc.nrel.gov:8080/torc-service/v1"
+api_url = "https://torc.hpc.nlr.gov:8080/torc-service/v1"
 
 [client.tls]
 ca_cert = "/shared/certs/corporate-ca.pem"
@@ -62,7 +62,7 @@ torc slurm generate --account myproject workflow.yaml | torc submit -
 You can override config file settings on any command:
 
 ```bash
-torc --url https://torc.hpc.nrel.gov:8080/torc-service/v1 \
+torc --url https://torc.hpc.nlr.gov:8080/torc-service/v1 \
      --tls-ca-cert /path/to/ca.pem \
      workflows list
 ```
@@ -70,7 +70,7 @@ torc --url https://torc.hpc.nrel.gov:8080/torc-service/v1 \
 ### Environment Variables
 
 ```bash
-export TORC_API_URL=https://torc.hpc.nrel.gov:8080/torc-service/v1
+export TORC_API_URL=https://torc.hpc.nlr.gov:8080/torc-service/v1
 export TORC_TLS_CA_CERT=/path/to/ca.pem
 
 torc workflows list
@@ -115,7 +115,7 @@ let tls = TlsConfig {
 };
 let mut config = Configuration::with_tls(tls);
 config.base_path =
-    "https://torc.hpc.nrel.gov:8080/torc-service/v1".to_string();
+    "https://torc.hpc.nlr.gov:8080/torc-service/v1".to_string();
 ```
 
 ## Troubleshooting

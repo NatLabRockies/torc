@@ -4,7 +4,7 @@ torc.
 
 ## Sienna simulation script
 Create a simulation script with build and execute functions as defined in the
-  [Sienna docs](https://nrel-sienna.github.io/PowerSimulations.jl/latest/modeler_guide/parallel_simulations/#Run-a-Simulation-in-Parallel-on-an-HPC). Refer to the example script `run_rts_uc_ed.jl`.
+  [Sienna docs](https://sienna-platform.github.io/PowerSimulations.jl/stable/how_to/parallel_simulations/#Run-a-Simulation-in-Parallel-on-an-HPC). Refer to the example script `run_rts_uc_ed.jl`.
 
 ## Torc configuration script
 The script `configure_parallel_simulation.jl` builds a torc workflow and adds it to the database.

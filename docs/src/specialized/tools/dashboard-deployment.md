@@ -179,7 +179,7 @@ dashboard.
 torc-dash --standalone \
   --socket /tmp/torc-dash-$USER.sock \
   --database /scratch/$USER/torc.db \
-  --server-host kl1.hsn.cm.kestrel.hpc.nrel.gov
+  --server-host kl1.hsn.cm.kestrel.hpc.nlr.gov
 ```
 
 **Step 3: Access via SSH tunnel**
@@ -206,7 +206,7 @@ If you prefer TCP, omit `--socket` and use `--port` instead:
 torc-dash --standalone \
   --database /scratch/$USER/torc.db \
   --port 8090 \
-  --server-host kl1.hsn.cm.kestrel.hpc.nrel.gov
+  --server-host kl1.hsn.cm.kestrel.hpc.nlr.gov
 ```
 
 Then tunnel to the TCP port:
@@ -457,7 +457,7 @@ If Slurm jobs fail with connection errors (e.g., "Connection refused" or "Name n
    ```
 
 2. On some HPC systems, the login node's default hostname is not routable from compute nodes. For
-   example, on NLR's Kestrel, login node `kl1` must be accessed as `kl1.hsn.cm.kestrel.hpc.nrel.gov`
+   example, on NLR's Kestrel, login node `kl1` must be accessed as `kl1.hsn.cm.kestrel.hpc.nlr.gov`
    from compute nodes. Check with your HPC administrators for the correct routable hostname, then
    use `--host`:
    ```bash

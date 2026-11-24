@@ -26,9 +26,10 @@ pub fn kestrel_profile() -> HpcProfile {
         metadata: [
             (
                 "documentation".to_string(),
-                "https://nrel.github.io/HPC/Documentation/Systems/Kestrel/Running/".to_string(),
+                "https://natlabrockies.github.io/HPC/Documentation/Systems/Kestrel/Running/"
+                    .to_string(),
             ),
-            ("support_email".to_string(), "HPC-Help@nrel.gov".to_string()),
+            ("support_email".to_string(), "HPC-Help@nlr.gov".to_string()),
         ]
         .into_iter()
         .collect(),

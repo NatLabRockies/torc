@@ -143,7 +143,7 @@ authentication is enabled:
 torc-server run --https --auth-file /path/to/htpasswd --require-auth
 
 # Client connects via HTTPS (with custom CA certificate if needed)
-torc --url https://torc.hpc.nrel.gov:8080/torc-service/v1 \
+torc --url https://torc.hpc.nlr.gov:8080/torc-service/v1 \
      --tls-ca-cert /path/to/ca.pem \
      --username alice workflows list
 ```
@@ -232,7 +232,7 @@ torc-server run \
   --database /var/lib/torc/production.db
 
 # 4. Clients must authenticate
-torc --url https://torc.hpc.nrel.gov:8080/torc-service/v1 --prompt-password workflows list
+torc --url https://torc.hpc.nlr.gov:8080/torc-service/v1 --prompt-password workflows list
 Password: ****
 ```
 
@@ -244,7 +244,7 @@ Password: ****
 
 # Use in pipeline
 export TORC_PASSWORD="${TORC_PASSWORD}"
-export TORC_API_URL=https://torc.hpc.nrel.gov:8080/torc-service/v1
+export TORC_API_URL=https://torc.hpc.nlr.gov:8080/torc-service/v1
 
 # Run workflow
 torc create pipeline.yaml

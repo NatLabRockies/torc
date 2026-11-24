@@ -1,6 +1,6 @@
 name = "Torc"
 uuid = "4ca87d3a-10fc-487d-a92c-2338a8c3af27"
-authors = ["Daniel Thom <daniel.thom@nrel.gov>"]
+authors = ["Daniel Thom <daniel.thom@nlr.gov>"]
 version = "0.1.0"
 
 [deps]

@@ -17,9 +17,9 @@ Running Torc on HPC systems requires special configuration to ensure:
 
 On most HPC systems, login nodes have multiple network interfaces:
 
-- **External hostname**: Used for SSH access from outside (e.g., `kl3.hpc.nrel.gov`)
+- **External hostname**: Used for SSH access from outside (e.g., `kl3.hpc.nlr.gov`)
 - **Internal hostname**: Used by compute nodes via the high-speed interconnect (e.g.,
-  `kl3.hsn.cm.kestrel.hpc.nrel.gov`)
+  `kl3.hsn.cm.kestrel.hpc.nlr.gov`)
 
 When running `torc-server` on a login node, you must use the **internal hostname** so compute nodes
 can connect.
@@ -28,11 +28,11 @@ can connect.
 
 On NLR's Kestrel system, login nodes use the High-Speed Network (HSN) for internal communication:
 
-| Login Node | External Hostname  | Internal Hostname (for `--host` flag) |
-| ---------- | ------------------ | ------------------------------------- |
-| kl1        | `kl1.hpc.nrel.gov` | `kl1.hsn.cm.kestrel.hpc.nrel.gov`     |
-| kl2        | `kl2.hpc.nrel.gov` | `kl2.hsn.cm.kestrel.hpc.nrel.gov`     |
-| kl3        | `kl3.hpc.nrel.gov` | `kl3.hsn.cm.kestrel.hpc.nrel.gov`     |
+| Login Node | External Hostname | Internal Hostname (for `--host` flag) |
+| ---------- | ----------------- | ------------------------------------- |
+| kl1        | `kl1.hpc.nlr.gov` | `kl1.hsn.cm.kestrel.hpc.nlr.gov`      |
+| kl2        | `kl2.hpc.nlr.gov` | `kl2.hsn.cm.kestrel.hpc.nlr.gov`      |
+| kl3        | `kl3.hpc.nlr.gov` | `kl3.hsn.cm.kestrel.hpc.nlr.gov`      |
 
 **Starting the server:**
 
@@ -40,7 +40,7 @@ On NLR's Kestrel system, login nodes use the High-Speed Network (HSN) for intern
 # On login node kl3, use the internal hostname
 torc-server run \
     --database /scratch/$USER/torc.db \
-    --host kl3.hsn.cm.kestrel.hpc.nrel.gov \
+    --host kl3.hsn.cm.kestrel.hpc.nlr.gov \
     --port 8085
 ```
 
@@ -48,7 +48,7 @@ torc-server run \
 
 ```bash
 # Set the API URL using the internal hostname
-export TORC_API_URL="http://kl3.hsn.cm.kestrel.hpc.nrel.gov:8085/torc-service/v1"
+export TORC_API_URL="http://kl3.hsn.cm.kestrel.hpc.nlr.gov:8085/torc-service/v1"
 
 # Now torc commands will use this URL
 torc workflows list
@@ -109,7 +109,7 @@ whose home/scratch is fast and POSIX-correct, but when in doubt prefer `/tmp`:
 # Live DB on node-local disk; back up to durable shared storage periodically
 torc-server run \
     --database /tmp/torc-$USER.db \
-    --host $(hostname -s).hsn.cm.kestrel.hpc.nrel.gov \
+    --host $(hostname -s).hsn.cm.kestrel.hpc.nlr.gov \
     --port 8085
 ```
 
@@ -141,7 +141,7 @@ Login nodes are shared resources. To avoid conflicts:
 MY_PORT=$((8000 + $(id -u) % 1000))
 torc-server run \
     --database /scratch/$USER/torc.db \
-    --host kl3.hsn.cm.kestrel.hpc.nrel.gov \
+    --host kl3.hsn.cm.kestrel.hpc.nlr.gov \
     --port $MY_PORT
 ```
 
@@ -156,7 +156,7 @@ tmux new -s torc
 # Start the server
 torc-server run \
     --database /scratch/$USER/torc.db \
-    --host kl3.hsn.cm.kestrel.hpc.nrel.gov \
+    --host kl3.hsn.cm.kestrel.hpc.nlr.gov \
     --port 8085
 
 # Detach with Ctrl+b, then d
@@ -221,7 +221,7 @@ Create `~/.config/torc/config.toml`:
 ```toml
 [server]
 # Use internal hostname for compute node access
-host = "kl3.hsn.cm.kestrel.hpc.nrel.gov"
+host = "kl3.hsn.cm.kestrel.hpc.nlr.gov"
 port = 8085
 database = "/scratch/myuser/torc/workflows.db"
 threads = 4
@@ -238,7 +238,7 @@ Create `~/.config/torc/config.toml` (or add to existing):
 ```toml
 [client]
 # Match the server's internal hostname and port
-api_url = "http://kl3.hsn.cm.kestrel.hpc.nrel.gov:8085/torc-service/v1"
+api_url = "http://kl3.hsn.cm.kestrel.hpc.nlr.gov:8085/torc-service/v1"
 format = "table"
 
 [client.run]
@@ -251,7 +251,7 @@ Alternatively, set environment variables in your shell profile:
 
 ```bash
 # Add to ~/.bashrc or ~/.bash_profile
-export TORC_API_URL="http://kl3.hsn.cm.kestrel.hpc.nrel.gov:8085/torc-service/v1"
+export TORC_API_URL="http://kl3.hsn.cm.kestrel.hpc.nlr.gov:8085/torc-service/v1"
 export TORC_CLIENT__RUN__OUTPUT_DIR="/scratch/$USER/torc/torc_output"
 ```
 
