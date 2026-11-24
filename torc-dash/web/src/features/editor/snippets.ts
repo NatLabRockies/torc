@@ -60,6 +60,24 @@ sigterm_lead_seconds: 30
 `,
   },
   {
+    label: "Resource monitoring",
+    section: "resource_monitor",
+    map: true,
+    text: `sample_interval_seconds: 10
+generate_plots: true
+jobs:
+  enabled: true
+  granularity: summary  # or time_series
+compute_node:
+  enabled: false
+  granularity: summary  # or time_series
+  # cpu: true
+  # memory: true
+# flush_interval_seconds: 300  # how often time-series samples are written to SQLite
+# live_monitoring: false  # checkpoint after each flush so torc-dash live plots see new samples
+`,
+  },
+  {
     // on_jobs_ready, not on_workflow_start: a selective re-run (reset-status --reinit, then
     // submit) re-schedules only the allocations whose jobs were reset.
     label: "Action: schedule Slurm nodes when jobs are ready",

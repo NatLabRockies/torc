@@ -22,7 +22,7 @@ systems. Adjust as necessary or exclude `--host` to use the default.
 ```console
 torc-server run \
     --database torc.db \
-    --host kl1.hsn.cm.kestrel.hpc.nrel.gov \
+    --host kl1.hsn.cm.kestrel.hpc.nlr.gov \
     --port 0
 ```
 
@@ -42,7 +42,7 @@ below. You will need this number when connecting from the client.
 Set the Torc API URL in your environment using the port number from above:
 
 ```
-export TORC_API_URL=http://kl1.hsn.cm.kestrel.hpc.nrel.gov:52619/torc-service/v1
+export TORC_API_URL=http://kl1.hsn.cm.kestrel.hpc.nlr.gov:52619/torc-service/v1
 ```
 
 **Note:** You can also set a custom port number as long as it does not conflict with others.

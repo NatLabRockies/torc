@@ -12,8 +12,8 @@ requires-python = ">=3.11,<3.14"
 license = "BSD-3-Clause"
 readme = "README.md"
 authors = [
-    { name = "Daniel Thom", email = "daniel.thom@nrel.gov" },
-    { name = "Joseph McKinsey", email = "joseph.mckinsey@nrel.gov" },
+    { name = "Daniel Thom", email = "daniel.thom@nlr.gov" },
+    { name = "Joseph McKinsey", email = "joseph.mckinsey@nlr.gov" },
 ]
 keywords = ["hpc", "workflow", "pipeline"]
 classifiers = [

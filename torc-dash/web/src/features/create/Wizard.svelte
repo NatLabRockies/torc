@@ -214,7 +214,7 @@
             </div>
             <span class="hint">
               <a
-                href="https://nrel.github.io/torc/explanation/parallelization.html"
+                href="https://natlabrockies.github.io/torc/latest/core/concepts/parallelization.html"
                 target="_blank"
                 rel="noreferrer">Learn more about parallelization</a
               >

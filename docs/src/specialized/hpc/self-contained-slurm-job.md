@@ -120,7 +120,7 @@ getent hosts $(hostname -s)       # canonical address lookup
 ```
 
 On NLR Kestrel, for example, the HSN hostname follows the pattern
-`<shortname>.hsn.cm.kestrel.hpc.nrel.gov`. See
+`<shortname>.hsn.cm.kestrel.hpc.nlr.gov`. See
 [HPC Deployment → Finding the Internal Hostname](./hpc-deployment.md#finding-the-internal-hostname)
 for cluster-specific hostnames and
 [Network Connectivity → Scenario 3](../../core/concepts/network-connectivity.md#scenario-3-hpc-with-non-routable-hostname)

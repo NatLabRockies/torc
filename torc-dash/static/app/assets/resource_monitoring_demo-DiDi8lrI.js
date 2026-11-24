@@ -1,0 +1,63 @@
+var e=`# Resource Monitoring Demo Workflow
+# This workflow demonstrates the resource monitoring feature with 3 independent jobs
+# that consume CPU and memory for about a minute each.
+#
+# To run this workflow:
+# 1. Start the torc server
+# 2. Run the workflow: torc run examples/resource_monitoring_demo.yaml
+# 3. Check results with resource metrics: torc results list <workflow_id>
+
+name: resource_monitoring_demo
+description: Demonstrates resource monitoring with CPU and memory intensive Python jobs
+
+# Enable resource monitoring with time-series data collection
+resource_monitor:
+  sample_interval_seconds: 10  # Sample every 10 seconds
+  generate_plots: true
+  jobs:
+    enabled: true
+    granularity: "time_series"  # Options: "summary" or "time_series"
+  compute_node:
+    enabled: true
+    granularity: "time_series"  # Overall system CPU/memory samples for plot-resources
+
+# Three independent jobs that run concurrently
+jobs:
+  - name: cpu_heavy_job
+    command: "python3 examples/scripts/cpu_intensive.py"
+    resource_requirements: cpu
+
+  - name: memory_heavy_job
+    command: "python3 examples/scripts/memory_intensive.py"
+    resource_requirements: memory
+
+  - name: mixed_workload_job
+    command: "python3 examples/scripts/mixed_workload.py"
+    resource_requirements: mixed
+
+# No files needed for this demo
+files: []
+
+# No user data needed
+user_data: []
+
+resource_requirements:
+  - name: cpu
+    num_cpus: 3
+    num_gpus: 0
+    num_nodes: 1
+    memory: 1g
+    runtime: PT15M  # ISO 8601 duration: 15 minutes
+  - name: memory
+    num_cpus: 2
+    num_gpus: 0
+    num_nodes: 1
+    memory: 3g
+    runtime: PT10M
+  - name: mixed
+    num_cpus: 3
+    num_gpus: 0
+    num_nodes: 1
+    memory: 3g
+    runtime: PT15M
+`;export{e as default};

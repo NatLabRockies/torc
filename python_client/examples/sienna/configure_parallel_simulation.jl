@@ -1,4 +1,4 @@
-const TORC_SERVICE_URL = "http://dsgrid-registry.hpc.nrel.gov:8529/_db/sienna/torc-service"
+const TORC_SERVICE_URL = "http://torc.hpc.nlr.gov:8080/torc-service/v1"
 
 using PowerSimulations
 using Torc

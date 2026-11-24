@@ -77,7 +77,7 @@
     <h4>Jobs</h4>
     <p class="muted">
       Need file-based dependencies or complex pipelines? Use a spec file instead (<a
-        href="https://nrel.github.io/torc/how-to/creating-workflows.html"
+        href="https://natlabrockies.github.io/torc/latest/core/workflows/creating-workflows.html"
         target="_blank"
         rel="noreferrer">guide</a
       >).

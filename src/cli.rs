@@ -557,7 +557,7 @@ AUTO-SCHEDULING BEHAVIOR:
 
 SEE ALSO:
     torc recover    One-shot recovery (no continuous monitoring)
-    Docs: https://nrel.github.io/torc/specialized/fault-tolerance/automatic-recovery.html
+    Docs: https://natlabrockies.github.io/torc/latest/specialized/fault-tolerance/automatic-recovery.html
 "
     )]
     Watch {
@@ -766,7 +766,7 @@ WHEN TO USE:
 
 SEE ALSO:
     torc watch --recover    Continuous monitoring with automatic recovery
-    Docs: https://nrel.github.io/torc/specialized/fault-tolerance/automatic-recovery.html
+    Docs: https://natlabrockies.github.io/torc/latest/specialized/fault-tolerance/automatic-recovery.html
 "
     )]
     Recover {

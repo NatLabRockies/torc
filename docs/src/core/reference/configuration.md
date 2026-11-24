@@ -92,7 +92,7 @@ Settings for client-side TLS when connecting to an HTTPS server.
 
 ```toml
 [client]
-api_url = "https://torc.hpc.nrel.gov:8080/torc-service/v1"
+api_url = "https://torc.hpc.nlr.gov:8080/torc-service/v1"
 format = "table"
 log_level = "info"
 username = "myuser"
@@ -403,7 +403,7 @@ These environment variables are still supported directly by clap:
 # ~/.config/torc/config.toml
 
 [client]
-api_url = "https://torc.hpc.nrel.gov:8080/torc-service/v1"
+api_url = "https://torc.hpc.nlr.gov:8080/torc-service/v1"
 format = "table"
 log_level = "info"
 username = "developer"

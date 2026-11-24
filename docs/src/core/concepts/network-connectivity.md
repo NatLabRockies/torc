@@ -143,14 +143,14 @@ the Slurm job was submitted. Torc handles this automatically.
 
 **Problem:** Some HPC systems have login nodes where the default hostname is not routable from
 compute nodes. For example, on NLR's Kestrel cluster, login node `kl1` must be accessed as
-`kl1.hsn.cm.kestrel.hpc.nrel.gov` from compute nodes.
+`kl1.hsn.cm.kestrel.hpc.nlr.gov` from compute nodes.
 
 ```mermaid
 flowchart TB
     subgraph login["Login Node"]
         direction TB
         note1["Hostname: kl1<br/>(not routable from compute)"]
-        note2["Routable: kl1.hsn.cm.kestrel.hpc.nrel.gov"]
+        note2["Routable: kl1.hsn.cm.kestrel.hpc.nlr.gov"]
         SERVER["torc-server"]
     end
 
@@ -158,7 +158,7 @@ flowchart TB
         R1["Job Runner"]
     end
 
-    R1 -->|"kl1.hsn.cm.kestrel.hpc.nrel.gov:8080"| SERVER
+    R1 -->|"kl1.hsn.cm.kestrel.hpc.nlr.gov:8080"| SERVER
     R1 -.-x|"kl1:8080 (fails)"| SERVER
 
     style note1 fill:#dc3545,color:#fff
@@ -169,7 +169,7 @@ flowchart TB
 
 ```bash
 # Bind to the routable hostname
-torc-server run --host kl1.hsn.cm.kestrel.hpc.nrel.gov --database torc.db
+torc-server run --host kl1.hsn.cm.kestrel.hpc.nlr.gov --database torc.db
 ```
 
 **How to find the routable hostname:**
@@ -181,7 +181,7 @@ torc-server run --host kl1.hsn.cm.kestrel.hpc.nrel.gov --database torc.db
 **Verification:** From a compute node, test connectivity:
 
 ```bash
-srun --pty curl -s http://kl1.hsn.cm.kestrel.hpc.nrel.gov:8080/torc-service/v1/workflows
+srun --pty curl -s http://kl1.hsn.cm.kestrel.hpc.nlr.gov:8080/torc-service/v1/workflows
 ```
 
 ---
@@ -247,7 +247,7 @@ torc-dash --standalone
 torc-dash --standalone --server-host 127.0.0.1
 
 # Bind to specific hostname (HPC with non-routable default hostname)
-torc-dash --standalone --server-host kl1.hsn.cm.kestrel.hpc.nrel.gov
+torc-dash --standalone --server-host kl1.hsn.cm.kestrel.hpc.nlr.gov
 ```
 
 The dashboard always connects to the managed server locally, but external workers will use the
@@ -261,7 +261,7 @@ preventing other users on the login node from accessing your dashboard.
 # HPC login node with UNIX socket
 torc-dash --standalone \
   --socket /tmp/torc-dash-$USER.sock \
-  --server-host kl1.hsn.cm.kestrel.hpc.nrel.gov
+  --server-host kl1.hsn.cm.kestrel.hpc.nlr.gov
 
 # Access from your local machine via SSH tunnel
 ssh -L 8090:/tmp/torc-dash-$USER.sock user@login-node
