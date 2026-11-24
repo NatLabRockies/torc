@@ -201,7 +201,7 @@ submitted to Slurm and run on compute nodes.</p>
 systems. Adjust as necessary or exclude <code>--host</code> to use the default.</p>
 <pre><code class="language-console">torc-server run \
     --database torc.db \
-    --host kl1.hsn.cm.kestrel.hpc.nrel.gov \
+    --host kl1.hsn.cm.kestrel.hpc.nlr.gov \
     --port 0
 </code></pre>
 <p>With <code>port=0</code> torc will find a random free port. It will print the port number on the console like
@@ -215,7 +215,7 @@ that can reach this host. For networks with untrusted users, see
 </blockquote>
 <h2 id="setup-the-client"><a class="header" href="#setup-the-client">Setup the client</a></h2>
 <p>Set the Torc API URL in your environment using the port number from above:</p>
-<pre><code>export TORC_API_URL=http://kl1.hsn.cm.kestrel.hpc.nrel.gov:52619/torc-service/v1
+<pre><code>export TORC_API_URL=http://kl1.hsn.cm.kestrel.hpc.nlr.gov:52619/torc-service/v1
 </code></pre>
 <p><strong>Note:</strong> You can also set a custom port number as long as it does not conflict with others.</p>
 <h2 id="check-your-hpc-profile"><a class="header" href="#check-your-hpc-profile">Check Your HPC Profile</a></h2>

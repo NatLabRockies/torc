@@ -452,10 +452,10 @@ automatically receive updates and bug fixes without changing your configuration.
 <pre><code class="language-bash">echo 'export PATH="/scratch/dthom/torc/latest:$PATH"' &gt;&gt; ~/.bashrc
 </code></pre>
 <p><strong>Shared server</strong>: A <code>torc-server</code> instance runs on a dedicated VM within the Kestrel environment at
-<code>torc.hpc.nrel.gov</code>. See <a href="getting-started/../core/how-to/set-up-authentication.html">How to Set Up Authentication</a> to
+<code>torc.hpc.nlr.gov</code>. See <a href="getting-started/../core/how-to/set-up-authentication.html">How to Set Up Authentication</a> to
 configure your credentials. Contact Daniel Thom if you would like to create an access group to store
 private workflows for your team.</p>
-<pre><code class="language-bash">export TORC_API_URL="http://torc.hpc.nrel.gov:8080/torc-service/v1"
+<pre><code class="language-bash">export TORC_API_URL="http://torc.hpc.nlr.gov:8080/torc-service/v1"
 </code></pre>
 <p><strong>Note:</strong> Be mindful of how much data you store in this database. Delete workflows that you don't
 need any longer. Refer to <code>torc workflows export --help</code> for making backups of your workflows.</p>
@@ -517,7 +517,7 @@ docker run --rm ghcr.io/natlabrockies/torc:latest torc --version
 
 # List workflows (pointing at a running server)
 docker run --rm ghcr.io/natlabrockies/torc:latest \
-  torc --url http://torc.hpc.nrel.gov:8080/torc-service/v1 workflows list
+  torc --url http://torc.hpc.nlr.gov:8080/torc-service/v1 workflows list
 </code></pre>
 <h2 id="building-from-source"><a class="header" href="#building-from-source">Building from Source</a></h2>
 <h3 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h3>
@@ -717,7 +717,7 @@ submitted to Slurm and run on compute nodes.</p>
 systems. Adjust as necessary or exclude <code>--host</code> to use the default.</p>
 <pre><code class="language-console">torc-server run \
     --database torc.db \
-    --host kl1.hsn.cm.kestrel.hpc.nrel.gov \
+    --host kl1.hsn.cm.kestrel.hpc.nlr.gov \
     --port 0
 </code></pre>
 <p>With <code>port=0</code> torc will find a random free port. It will print the port number on the console like
@@ -731,7 +731,7 @@ that can reach this host. For networks with untrusted users, see
 </blockquote>
 <h2 id="setup-the-client"><a class="header" href="#setup-the-client">Setup the client</a></h2>
 <p>Set the Torc API URL in your environment using the port number from above:</p>
-<pre><code>export TORC_API_URL=http://kl1.hsn.cm.kestrel.hpc.nrel.gov:52619/torc-service/v1
+<pre><code>export TORC_API_URL=http://kl1.hsn.cm.kestrel.hpc.nlr.gov:52619/torc-service/v1
 </code></pre>
 <p><strong>Note:</strong> You can also set a custom port number as long as it does not conflict with others.</p>
 <h2 id="check-your-hpc-profile"><a class="header" href="#check-your-hpc-profile">Check Your HPC Profile</a></h2>
@@ -1119,12 +1119,12 @@ the Slurm job was submitted. Torc handles this automatically.</p>
 <h2 id="scenario-3-hpc-with-non-routable-hostname"><a class="header" href="#scenario-3-hpc-with-non-routable-hostname">Scenario 3: HPC with Non-Routable Hostname</a></h2>
 <p><strong>Problem:</strong> Some HPC systems have login nodes where the default hostname is not routable from
 compute nodes. For example, on NLR's Kestrel cluster, login node <code>kl1</code> must be accessed as
-<code>kl1.hsn.cm.kestrel.hpc.nrel.gov</code> from compute nodes.</p>
+<code>kl1.hsn.cm.kestrel.hpc.nlr.gov</code> from compute nodes.</p>
 <pre class="mermaid">flowchart TB
     subgraph login[&quot;Login Node&quot;]
         direction TB
         note1[&quot;Hostname: kl1&lt;br/&gt;(not routable from compute)&quot;]
-        note2[&quot;Routable: kl1.hsn.cm.kestrel.hpc.nrel.gov&quot;]
+        note2[&quot;Routable: kl1.hsn.cm.kestrel.hpc.nlr.gov&quot;]
         SERVER[&quot;torc-server&quot;]
     end
 
@@ -1132,7 +1132,7 @@ compute nodes. For example, on NLR's Kestrel cluster, login node <code>kl1</code
         R1[&quot;Job Runner&quot;]
     end
 
-    R1 --&gt;|&quot;kl1.hsn.cm.kestrel.hpc.nrel.gov:8080&quot;| SERVER
+    R1 --&gt;|&quot;kl1.hsn.cm.kestrel.hpc.nlr.gov:8080&quot;| SERVER
     R1 -.-x|&quot;kl1:8080 (fails)&quot;| SERVER
 
     style note1 fill:#dc3545,color:#fff
@@ -1140,7 +1140,7 @@ compute nodes. For example, on NLR's Kestrel cluster, login node <code>kl1</code
 </pre>
 <p><strong>Configuration:</strong></p>
 <pre><code class="language-bash"># Bind to the routable hostname
-torc-server run --host kl1.hsn.cm.kestrel.hpc.nrel.gov --database torc.db
+torc-server run --host kl1.hsn.cm.kestrel.hpc.nlr.gov --database torc.db
 </code></pre>
 <p><strong>How to find the routable hostname:</strong></p>
 <ol>
@@ -1149,7 +1149,7 @@ torc-server run --host kl1.hsn.cm.kestrel.hpc.nrel.gov --database torc.db
 <li>Try <code>hostname -f</code> or check <code>/etc/hosts</code></li>
 </ol>
 <p><strong>Verification:</strong> From a compute node, test connectivity:</p>
-<pre><code class="language-bash">srun --pty curl -s http://kl1.hsn.cm.kestrel.hpc.nrel.gov:8080/torc-service/v1/workflows
+<pre><code class="language-bash">srun --pty curl -s http://kl1.hsn.cm.kestrel.hpc.nlr.gov:8080/torc-service/v1/workflows
 </code></pre>
 <hr />
 <h2 id="scenario-4-shared-server"><a class="header" href="#scenario-4-shared-server">Scenario 4: Shared Server</a></h2>
@@ -1199,7 +1199,7 @@ torc-dash --standalone
 torc-dash --standalone --server-host 127.0.0.1
 
 # Bind to specific hostname (HPC with non-routable default hostname)
-torc-dash --standalone --server-host kl1.hsn.cm.kestrel.hpc.nrel.gov
+torc-dash --standalone --server-host kl1.hsn.cm.kestrel.hpc.nlr.gov
 </code></pre>
 <p>The dashboard always connects to the managed server locally, but external workers will use the
 configured <code>--server-host</code> to reach the server.</p>
@@ -1209,7 +1209,7 @@ preventing other users on the login node from accessing your dashboard.</p>
 <pre><code class="language-bash"># HPC login node with UNIX socket
 torc-dash --standalone \
   --socket /tmp/torc-dash-$USER.sock \
-  --server-host kl1.hsn.cm.kestrel.hpc.nrel.gov
+  --server-host kl1.hsn.cm.kestrel.hpc.nlr.gov
 
 # Access from your local machine via SSH tunnel
 ssh -L 8090:/tmp/torc-dash-$USER.sock user@login-node
@@ -13304,7 +13304,7 @@ with <code>torc workflows reconcile &lt;workflow_id&gt; &lt;run_id&gt;</code>.</
 </div>
 <h3 id="example-2"><a class="header" href="#example-2">Example</a></h3>
 <pre><code class="language-toml">[client]
-api_url = "https://torc.hpc.nrel.gov:8080/torc-service/v1"
+api_url = "https://torc.hpc.nlr.gov:8080/torc-service/v1"
 format = "table"
 log_level = "info"
 username = "myuser"
@@ -13571,7 +13571,7 @@ yourself over SSH), torc-dash reads the config file on the login node.</p>
 <pre><code class="language-toml"># ~/.config/torc/config.toml
 
 [client]
-api_url = "https://torc.hpc.nrel.gov:8080/torc-service/v1"
+api_url = "https://torc.hpc.nlr.gov:8080/torc-service/v1"
 format = "table"
 log_level = "info"
 username = "developer"
@@ -16471,30 +16471,30 @@ database file directly — they reach it through the server over HTTP)</li>
 <h3 id="hostname-requirements"><a class="header" href="#hostname-requirements">Hostname Requirements</a></h3>
 <p>On most HPC systems, login nodes have multiple network interfaces:</p>
 <ul>
-<li><strong>External hostname</strong>: Used for SSH access from outside (e.g., <code>kl3.hpc.nrel.gov</code>)</li>
+<li><strong>External hostname</strong>: Used for SSH access from outside (e.g., <code>kl3.hpc.nlr.gov</code>)</li>
 <li><strong>Internal hostname</strong>: Used by compute nodes via the high-speed interconnect (e.g.,
-<code>kl3.hsn.cm.kestrel.hpc.nrel.gov</code>)</li>
+<code>kl3.hsn.cm.kestrel.hpc.nlr.gov</code>)</li>
 </ul>
 <p>When running <code>torc-server</code> on a login node, you must use the <strong>internal hostname</strong> so compute nodes
 can connect.</p>
 <h3 id="nlr-kestrel-example"><a class="header" href="#nlr-kestrel-example">NLR Kestrel Example</a></h3>
 <p>On NLR's Kestrel system, login nodes use the High-Speed Network (HSN) for internal communication:</p>
 <div class="table-wrapper"><table><thead><tr><th>Login Node</th><th>External Hostname</th><th>Internal Hostname (for <code>--host</code> flag)</th></tr></thead><tbody>
-<tr><td>kl1</td><td><code>kl1.hpc.nrel.gov</code></td><td><code>kl1.hsn.cm.kestrel.hpc.nrel.gov</code></td></tr>
-<tr><td>kl2</td><td><code>kl2.hpc.nrel.gov</code></td><td><code>kl2.hsn.cm.kestrel.hpc.nrel.gov</code></td></tr>
-<tr><td>kl3</td><td><code>kl3.hpc.nrel.gov</code></td><td><code>kl3.hsn.cm.kestrel.hpc.nrel.gov</code></td></tr>
+<tr><td>kl1</td><td><code>kl1.hpc.nlr.gov</code></td><td><code>kl1.hsn.cm.kestrel.hpc.nlr.gov</code></td></tr>
+<tr><td>kl2</td><td><code>kl2.hpc.nlr.gov</code></td><td><code>kl2.hsn.cm.kestrel.hpc.nlr.gov</code></td></tr>
+<tr><td>kl3</td><td><code>kl3.hpc.nlr.gov</code></td><td><code>kl3.hsn.cm.kestrel.hpc.nlr.gov</code></td></tr>
 </tbody></table>
 </div>
 <p><strong>Starting the server:</strong></p>
 <pre><code class="language-bash"># On login node kl3, use the internal hostname
 torc-server run \
     --database /scratch/$USER/torc.db \
-    --host kl3.hsn.cm.kestrel.hpc.nrel.gov \
+    --host kl3.hsn.cm.kestrel.hpc.nlr.gov \
     --port 8085
 </code></pre>
 <p><strong>Connecting clients:</strong></p>
 <pre><code class="language-bash"># Set the API URL using the internal hostname
-export TORC_API_URL="http://kl3.hsn.cm.kestrel.hpc.nrel.gov:8085/torc-service/v1"
+export TORC_API_URL="http://kl3.hsn.cm.kestrel.hpc.nlr.gov:8085/torc-service/v1"
 
 # Now torc commands will use this URL
 torc workflows list
@@ -16542,7 +16542,7 @@ whose home/scratch is fast and POSIX-correct, but when in doubt prefer <code>/tm
 <pre><code class="language-bash"># Live DB on node-local disk; back up to durable shared storage periodically
 torc-server run \
     --database /tmp/torc-$USER.db \
-    --host $(hostname -s).hsn.cm.kestrel.hpc.nrel.gov \
+    --host $(hostname -s).hsn.cm.kestrel.hpc.nlr.gov \
     --port 8085
 </code></pre>
 <p>For RAM-backed operation with snapshots, see
@@ -16565,7 +16565,7 @@ see <a href="specialized/hpc/../admin/server-deployment.html#persisting-state-wi
 MY_PORT=$((8000 + $(id -u) % 1000))
 torc-server run \
     --database /scratch/$USER/torc.db \
-    --host kl3.hsn.cm.kestrel.hpc.nrel.gov \
+    --host kl3.hsn.cm.kestrel.hpc.nlr.gov \
     --port $MY_PORT
 </code></pre>
 <h2 id="running-in-tmuxscreen"><a class="header" href="#running-in-tmuxscreen">Running in tmux/screen</a></h2>
@@ -16576,7 +16576,7 @@ tmux new -s torc
 # Start the server
 torc-server run \
     --database /scratch/$USER/torc.db \
-    --host kl3.hsn.cm.kestrel.hpc.nrel.gov \
+    --host kl3.hsn.cm.kestrel.hpc.nlr.gov \
     --port 8085
 
 # Detach with Ctrl+b, then d
@@ -16629,7 +16629,7 @@ resume if that happens.</li>
 <p>Create <code>~/.config/torc/config.toml</code>:</p>
 <pre><code class="language-toml">[server]
 # Use internal hostname for compute node access
-host = "kl3.hsn.cm.kestrel.hpc.nrel.gov"
+host = "kl3.hsn.cm.kestrel.hpc.nlr.gov"
 port = 8085
 database = "/scratch/myuser/torc/workflows.db"
 threads = 4
@@ -16642,7 +16642,7 @@ log_dir = "/scratch/myuser/torc/logs"
 <p>Create <code>~/.config/torc/config.toml</code> (or add to existing):</p>
 <pre><code class="language-toml">[client]
 # Match the server's internal hostname and port
-api_url = "http://kl3.hsn.cm.kestrel.hpc.nrel.gov:8085/torc-service/v1"
+api_url = "http://kl3.hsn.cm.kestrel.hpc.nlr.gov:8085/torc-service/v1"
 format = "table"
 
 [client.run]
@@ -16651,7 +16651,7 @@ output_dir = "/scratch/myuser/torc/torc_output"
 <h3 id="environment-variables-3"><a class="header" href="#environment-variables-3">Environment Variables</a></h3>
 <p>Alternatively, set environment variables in your shell profile:</p>
 <pre><code class="language-bash"># Add to ~/.bashrc or ~/.bash_profile
-export TORC_API_URL="http://kl3.hsn.cm.kestrel.hpc.nrel.gov:8085/torc-service/v1"
+export TORC_API_URL="http://kl3.hsn.cm.kestrel.hpc.nlr.gov:8085/torc-service/v1"
 export TORC_CLIENT__RUN__OUTPUT_DIR="/scratch/$USER/torc/torc_output"
 </code></pre>
 <h2 id="slurm-job-runner-configuration"><a class="header" href="#slurm-job-runner-configuration">Slurm Job Runner Configuration</a></h2>
@@ -17149,7 +17149,7 @@ grep $(hostname -s) /etc/hosts    # often shows the HSN alias explicitly
 getent hosts $(hostname -s)       # canonical address lookup
 </code></pre>
 <p>On NLR Kestrel, for example, the HSN hostname follows the pattern
-<code>&lt;shortname&gt;.hsn.cm.kestrel.hpc.nrel.gov</code>. See
+<code>&lt;shortname&gt;.hsn.cm.kestrel.hpc.nlr.gov</code>. See
 <a href="specialized/hpc/./hpc-deployment.html#finding-the-internal-hostname">HPC Deployment → Finding the Internal Hostname</a>
 for cluster-specific hostnames and
 <a href="specialized/hpc/../../core/concepts/network-connectivity.html#scenario-3-hpc-with-non-routable-hostname">Network Connectivity → Scenario 3</a>
@@ -20100,7 +20100,7 @@ authentication is enabled:</p>
 torc-server run --https --auth-file /path/to/htpasswd --require-auth
 
 # Client connects via HTTPS (with custom CA certificate if needed)
-torc --url https://torc.hpc.nrel.gov:8080/torc-service/v1 \
+torc --url https://torc.hpc.nlr.gov:8080/torc-service/v1 \
      --tls-ca-cert /path/to/ca.pem \
      --username alice workflows list
 </code></pre>
@@ -20173,7 +20173,7 @@ torc-server run \
   --database /var/lib/torc/production.db
 
 # 4. Clients must authenticate
-torc --url https://torc.hpc.nrel.gov:8080/torc-service/v1 --prompt-password workflows list
+torc --url https://torc.hpc.nlr.gov:8080/torc-service/v1 --prompt-password workflows list
 Password: ****
 </code></pre>
 <h3 id="cicd-pipeline-1"><a class="header" href="#cicd-pipeline-1">CI/CD Pipeline</a></h3>
@@ -20182,7 +20182,7 @@ Password: ****
 
 # Use in pipeline
 export TORC_PASSWORD="${TORC_PASSWORD}"
-export TORC_API_URL=https://torc.hpc.nrel.gov:8080/torc-service/v1
+export TORC_API_URL=https://torc.hpc.nlr.gov:8080/torc-service/v1
 
 # Run workflow
 torc create pipeline.yaml
@@ -20431,7 +20431,7 @@ typically lives on a shared filesystem, e.g., <code>/shared/certs/corporate-ca.p
 <h3 id="step-3-edit-the-config-file"><a class="header" href="#step-3-edit-the-config-file">Step 3: Edit the Config File</a></h3>
 <p>Open <code>~/.config/torc/config.toml</code> and set the server URL and CA certificate path:</p>
 <pre><code class="language-toml">[client]
-api_url = "https://torc.hpc.nrel.gov:8080/torc-service/v1"
+api_url = "https://torc.hpc.nlr.gov:8080/torc-service/v1"
 
 [client.tls]
 ca_cert = "/shared/certs/corporate-ca.pem"
@@ -20453,12 +20453,12 @@ torc slurm generate --account myproject workflow.yaml | torc submit -
 <h2 id="advanced-configuration-1"><a class="header" href="#advanced-configuration-1">Advanced Configuration</a></h2>
 <h3 id="cli-flags"><a class="header" href="#cli-flags">CLI Flags</a></h3>
 <p>You can override config file settings on any command:</p>
-<pre><code class="language-bash">torc --url https://torc.hpc.nrel.gov:8080/torc-service/v1 \
+<pre><code class="language-bash">torc --url https://torc.hpc.nlr.gov:8080/torc-service/v1 \
      --tls-ca-cert /path/to/ca.pem \
      workflows list
 </code></pre>
 <h3 id="environment-variables-7"><a class="header" href="#environment-variables-7">Environment Variables</a></h3>
-<pre><code class="language-bash">export TORC_API_URL=https://torc.hpc.nrel.gov:8080/torc-service/v1
+<pre><code class="language-bash">export TORC_API_URL=https://torc.hpc.nlr.gov:8080/torc-service/v1
 export TORC_TLS_CA_CERT=/path/to/ca.pem
 
 torc workflows list
@@ -20499,7 +20499,7 @@ let tls = TlsConfig {
 };
 let mut config = Configuration::with_tls(tls);
 config.base_path =
-    "https://torc.hpc.nrel.gov:8080/torc-service/v1".to_string();
+    "https://torc.hpc.nlr.gov:8080/torc-service/v1".to_string();
 <span class="boring">}</span></code></pre></pre>
 <h2 id="troubleshooting-15"><a class="header" href="#troubleshooting-15">Troubleshooting</a></h2>
 <h3 id="certificate-verify-failed-or-unable-to-get-local-issuer-certificate"><a class="header" href="#certificate-verify-failed-or-unable-to-get-local-issuer-certificate">"certificate verify failed" or "unable to get local issuer certificate"</a></h3>
@@ -21129,12 +21129,12 @@ API Handler (receives authorization context)
 torc-server run --https --auth-file /etc/torc/htpasswd
 
 # Client with custom CA certificate (e.g., corporate PKI)
-torc --url https://torc.hpc.nrel.gov:8080/torc-service/v1 \
+torc --url https://torc.hpc.nlr.gov:8080/torc-service/v1 \
      --tls-ca-cert /etc/pki/tls/certs/corporate-ca.pem \
      workflows list
 
 # Client with publicly trusted certificate (no extra config needed)
-torc --url https://torc.hpc.nrel.gov:8080/torc-service/v1 workflows list
+torc --url https://torc.hpc.nlr.gov:8080/torc-service/v1 workflows list
 </code></pre>
 <p><strong>TLS Version:</strong> Torc uses the system's OpenSSL/native-tls library. Ensure:</p>
 <ul>
@@ -22277,7 +22277,7 @@ dashboard.</p>
 <pre><code class="language-bash">torc-dash --standalone \
   --socket /tmp/torc-dash-$USER.sock \
   --database /scratch/$USER/torc.db \
-  --server-host kl1.hsn.cm.kestrel.hpc.nrel.gov
+  --server-host kl1.hsn.cm.kestrel.hpc.nlr.gov
 </code></pre>
 <p><strong>Step 3: Access via SSH tunnel</strong></p>
 <p>From your local machine, create an SSH tunnel that forwards a local TCP port to the UNIX socket on
@@ -22296,7 +22296,7 @@ natively supports forwarding local TCP ports to remote UNIX sockets.</p>
 <pre><code class="language-bash">torc-dash --standalone \
   --database /scratch/$USER/torc.db \
   --port 8090 \
-  --server-host kl1.hsn.cm.kestrel.hpc.nrel.gov
+  --server-host kl1.hsn.cm.kestrel.hpc.nlr.gov
 </code></pre>
 <p>Then tunnel to the TCP port:</p>
 <pre><code class="language-bash">ssh -L 8090:localhost:8090 user@login-node
@@ -22482,7 +22482,7 @@ cat output/slurm_output_*.e
 </li>
 <li>
 <p>On some HPC systems, the login node's default hostname is not routable from compute nodes. For
-example, on NLR's Kestrel, login node <code>kl1</code> must be accessed as <code>kl1.hsn.cm.kestrel.hpc.nrel.gov</code>
+example, on NLR's Kestrel, login node <code>kl1</code> must be accessed as <code>kl1.hsn.cm.kestrel.hpc.nlr.gov</code>
 from compute nodes. Check with your HPC administrators for the correct routable hostname, then
 use <code>--host</code>:</p>
 <pre><code class="language-bash">torc-server run --host &lt;routable-hostname&gt; --port 8080 ...

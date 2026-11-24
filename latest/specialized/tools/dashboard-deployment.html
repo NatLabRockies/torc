@@ -330,7 +330,7 @@ dashboard.</p>
 <pre><code class="language-bash">torc-dash --standalone \
   --socket /tmp/torc-dash-$USER.sock \
   --database /scratch/$USER/torc.db \
-  --server-host kl1.hsn.cm.kestrel.hpc.nrel.gov
+  --server-host kl1.hsn.cm.kestrel.hpc.nlr.gov
 </code></pre>
 <p><strong>Step 3: Access via SSH tunnel</strong></p>
 <p>From your local machine, create an SSH tunnel that forwards a local TCP port to the UNIX socket on
@@ -349,7 +349,7 @@ natively supports forwarding local TCP ports to remote UNIX sockets.</p>
 <pre><code class="language-bash">torc-dash --standalone \
   --database /scratch/$USER/torc.db \
   --port 8090 \
-  --server-host kl1.hsn.cm.kestrel.hpc.nrel.gov
+  --server-host kl1.hsn.cm.kestrel.hpc.nlr.gov
 </code></pre>
 <p>Then tunnel to the TCP port:</p>
 <pre><code class="language-bash">ssh -L 8090:localhost:8090 user@login-node
@@ -535,7 +535,7 @@ cat output/slurm_output_*.e
 </li>
 <li>
 <p>On some HPC systems, the login node's default hostname is not routable from compute nodes. For
-example, on NLR's Kestrel, login node <code>kl1</code> must be accessed as <code>kl1.hsn.cm.kestrel.hpc.nrel.gov</code>
+example, on NLR's Kestrel, login node <code>kl1</code> must be accessed as <code>kl1.hsn.cm.kestrel.hpc.nlr.gov</code>
 from compute nodes. Check with your HPC administrators for the correct routable hostname, then
 use <code>--host</code>:</p>
 <pre><code class="language-bash">torc-server run --host &lt;routable-hostname&gt; --port 8080 ...

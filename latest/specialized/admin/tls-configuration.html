@@ -199,7 +199,7 @@ typically lives on a shared filesystem, e.g., <code>/shared/certs/corporate-ca.p
 <h3 id="step-3-edit-the-config-file"><a class="header" href="#step-3-edit-the-config-file">Step 3: Edit the Config File</a></h3>
 <p>Open <code>~/.config/torc/config.toml</code> and set the server URL and CA certificate path:</p>
 <pre><code class="language-toml">[client]
-api_url = "https://torc.hpc.nrel.gov:8080/torc-service/v1"
+api_url = "https://torc.hpc.nlr.gov:8080/torc-service/v1"
 
 [client.tls]
 ca_cert = "/shared/certs/corporate-ca.pem"
@@ -221,12 +221,12 @@ torc slurm generate --account myproject workflow.yaml | torc submit -
 <h2 id="advanced-configuration"><a class="header" href="#advanced-configuration">Advanced Configuration</a></h2>
 <h3 id="cli-flags"><a class="header" href="#cli-flags">CLI Flags</a></h3>
 <p>You can override config file settings on any command:</p>
-<pre><code class="language-bash">torc --url https://torc.hpc.nrel.gov:8080/torc-service/v1 \
+<pre><code class="language-bash">torc --url https://torc.hpc.nlr.gov:8080/torc-service/v1 \
      --tls-ca-cert /path/to/ca.pem \
      workflows list
 </code></pre>
 <h3 id="environment-variables"><a class="header" href="#environment-variables">Environment Variables</a></h3>
-<pre><code class="language-bash">export TORC_API_URL=https://torc.hpc.nrel.gov:8080/torc-service/v1
+<pre><code class="language-bash">export TORC_API_URL=https://torc.hpc.nlr.gov:8080/torc-service/v1
 export TORC_TLS_CA_CERT=/path/to/ca.pem
 
 torc workflows list
@@ -267,7 +267,7 @@ let tls = TlsConfig {
 };
 let mut config = Configuration::with_tls(tls);
 config.base_path =
-    "https://torc.hpc.nrel.gov:8080/torc-service/v1".to_string();
+    "https://torc.hpc.nlr.gov:8080/torc-service/v1".to_string();
 <span class="boring">}</span></code></pre></pre>
 <h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
 <h3 id="certificate-verify-failed-or-unable-to-get-local-issuer-certificate"><a class="header" href="#certificate-verify-failed-or-unable-to-get-local-issuer-certificate">"certificate verify failed" or "unable to get local issuer certificate"</a></h3>

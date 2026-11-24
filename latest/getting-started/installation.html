@@ -257,10 +257,10 @@ automatically receive updates and bug fixes without changing your configuration.
 <pre><code class="language-bash">echo 'export PATH="/scratch/dthom/torc/latest:$PATH"' &gt;&gt; ~/.bashrc
 </code></pre>
 <p><strong>Shared server</strong>: A <code>torc-server</code> instance runs on a dedicated VM within the Kestrel environment at
-<code>torc.hpc.nrel.gov</code>. See <a href="../core/how-to/set-up-authentication.html">How to Set Up Authentication</a> to
+<code>torc.hpc.nlr.gov</code>. See <a href="../core/how-to/set-up-authentication.html">How to Set Up Authentication</a> to
 configure your credentials. Contact Daniel Thom if you would like to create an access group to store
 private workflows for your team.</p>
-<pre><code class="language-bash">export TORC_API_URL="http://torc.hpc.nrel.gov:8080/torc-service/v1"
+<pre><code class="language-bash">export TORC_API_URL="http://torc.hpc.nlr.gov:8080/torc-service/v1"
 </code></pre>
 <p><strong>Note:</strong> Be mindful of how much data you store in this database. Delete workflows that you don't
 need any longer. Refer to <code>torc workflows export --help</code> for making backups of your workflows.</p>
@@ -322,7 +322,7 @@ docker run --rm ghcr.io/natlabrockies/torc:latest torc --version
 
 # List workflows (pointing at a running server)
 docker run --rm ghcr.io/natlabrockies/torc:latest \
-  torc --url http://torc.hpc.nrel.gov:8080/torc-service/v1 workflows list
+  torc --url http://torc.hpc.nlr.gov:8080/torc-service/v1 workflows list
 </code></pre>
 <h2 id="building-from-source"><a class="header" href="#building-from-source">Building from Source</a></h2>
 <h3 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h3>

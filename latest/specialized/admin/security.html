@@ -234,12 +234,12 @@ API Handler (receives authorization context)
 torc-server run --https --auth-file /etc/torc/htpasswd
 
 # Client with custom CA certificate (e.g., corporate PKI)
-torc --url https://torc.hpc.nrel.gov:8080/torc-service/v1 \
+torc --url https://torc.hpc.nlr.gov:8080/torc-service/v1 \
      --tls-ca-cert /etc/pki/tls/certs/corporate-ca.pem \
      workflows list
 
 # Client with publicly trusted certificate (no extra config needed)
-torc --url https://torc.hpc.nrel.gov:8080/torc-service/v1 workflows list
+torc --url https://torc.hpc.nlr.gov:8080/torc-service/v1 workflows list
 </code></pre>
 <p><strong>TLS Version:</strong> Torc uses the system's OpenSSL/native-tls library. Ensure:</p>
 <ul>

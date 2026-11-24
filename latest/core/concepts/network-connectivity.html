@@ -292,12 +292,12 @@ the Slurm job was submitted. Torc handles this automatically.</p>
 <h2 id="scenario-3-hpc-with-non-routable-hostname"><a class="header" href="#scenario-3-hpc-with-non-routable-hostname">Scenario 3: HPC with Non-Routable Hostname</a></h2>
 <p><strong>Problem:</strong> Some HPC systems have login nodes where the default hostname is not routable from
 compute nodes. For example, on NLR's Kestrel cluster, login node <code>kl1</code> must be accessed as
-<code>kl1.hsn.cm.kestrel.hpc.nrel.gov</code> from compute nodes.</p>
+<code>kl1.hsn.cm.kestrel.hpc.nlr.gov</code> from compute nodes.</p>
 <pre class="mermaid">flowchart TB
     subgraph login[&quot;Login Node&quot;]
         direction TB
         note1[&quot;Hostname: kl1&lt;br/&gt;(not routable from compute)&quot;]
-        note2[&quot;Routable: kl1.hsn.cm.kestrel.hpc.nrel.gov&quot;]
+        note2[&quot;Routable: kl1.hsn.cm.kestrel.hpc.nlr.gov&quot;]
         SERVER[&quot;torc-server&quot;]
     end
 
@@ -305,7 +305,7 @@ compute nodes. For example, on NLR's Kestrel cluster, login node <code>kl1</code
         R1[&quot;Job Runner&quot;]
     end
 
-    R1 --&gt;|&quot;kl1.hsn.cm.kestrel.hpc.nrel.gov:8080&quot;| SERVER
+    R1 --&gt;|&quot;kl1.hsn.cm.kestrel.hpc.nlr.gov:8080&quot;| SERVER
     R1 -.-x|&quot;kl1:8080 (fails)&quot;| SERVER
 
     style note1 fill:#dc3545,color:#fff
@@ -313,7 +313,7 @@ compute nodes. For example, on NLR's Kestrel cluster, login node <code>kl1</code
 </pre>
 <p><strong>Configuration:</strong></p>
 <pre><code class="language-bash"># Bind to the routable hostname
-torc-server run --host kl1.hsn.cm.kestrel.hpc.nrel.gov --database torc.db
+torc-server run --host kl1.hsn.cm.kestrel.hpc.nlr.gov --database torc.db
 </code></pre>
 <p><strong>How to find the routable hostname:</strong></p>
 <ol>
@@ -322,7 +322,7 @@ torc-server run --host kl1.hsn.cm.kestrel.hpc.nrel.gov --database torc.db
 <li>Try <code>hostname -f</code> or check <code>/etc/hosts</code></li>
 </ol>
 <p><strong>Verification:</strong> From a compute node, test connectivity:</p>
-<pre><code class="language-bash">srun --pty curl -s http://kl1.hsn.cm.kestrel.hpc.nrel.gov:8080/torc-service/v1/workflows
+<pre><code class="language-bash">srun --pty curl -s http://kl1.hsn.cm.kestrel.hpc.nlr.gov:8080/torc-service/v1/workflows
 </code></pre>
 <hr />
 <h2 id="scenario-4-shared-server"><a class="header" href="#scenario-4-shared-server">Scenario 4: Shared Server</a></h2>
@@ -372,7 +372,7 @@ torc-dash --standalone
 torc-dash --standalone --server-host 127.0.0.1
 
 # Bind to specific hostname (HPC with non-routable default hostname)
-torc-dash --standalone --server-host kl1.hsn.cm.kestrel.hpc.nrel.gov
+torc-dash --standalone --server-host kl1.hsn.cm.kestrel.hpc.nlr.gov
 </code></pre>
 <p>The dashboard always connects to the managed server locally, but external workers will use the
 configured <code>--server-host</code> to reach the server.</p>
@@ -382,7 +382,7 @@ preventing other users on the login node from accessing your dashboard.</p>
 <pre><code class="language-bash"># HPC login node with UNIX socket
 torc-dash --standalone \
   --socket /tmp/torc-dash-$USER.sock \
-  --server-host kl1.hsn.cm.kestrel.hpc.nrel.gov
+  --server-host kl1.hsn.cm.kestrel.hpc.nlr.gov
 
 # Access from your local machine via SSH tunnel
 ssh -L 8090:/tmp/torc-dash-$USER.sock user@login-node
