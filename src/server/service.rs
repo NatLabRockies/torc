@@ -41,6 +41,7 @@ pub struct ServiceConfig {
     pub admin_users: Vec<String>,
     pub disable_admin_sql: bool,
     pub disable_admin_sql_writes: bool,
+    pub compute_node_stale_after_secs: u64,
 }
 
 impl ServiceConfig {
@@ -67,6 +68,7 @@ impl ServiceConfig {
             admin_users: Vec::new(),
             disable_admin_sql: false,
             disable_admin_sql_writes: false,
+            compute_node_stale_after_secs: 600,
         }
     }
 
@@ -93,6 +95,7 @@ impl ServiceConfig {
             admin_users: Vec::new(),
             disable_admin_sql: false,
             disable_admin_sql_writes: false,
+            compute_node_stale_after_secs: 600,
         }
     }
 
@@ -229,6 +232,9 @@ pub fn install_service(config: &ServiceConfig, user_level: bool) -> Result<()> {
     if config.disable_admin_sql_writes {
         args.push("--disable-admin-sql-writes".into());
     }
+
+    args.push("--compute-node-stale-after-secs".into());
+    args.push(config.compute_node_stale_after_secs.to_string().into());
 
     // Create service install context
     let install_ctx = ServiceInstallCtx {

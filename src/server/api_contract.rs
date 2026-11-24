@@ -514,6 +514,7 @@ pub trait TransportApiCore<C: Send + Sync> {
         hostname: Option<String>,
         is_active: Option<bool>,
         scheduled_compute_node_id: Option<i64>,
+        stale: Option<bool>,
         context: &C,
     ) -> Result<ListComputeNodesResponse, ApiError>;
 
@@ -877,6 +878,20 @@ pub trait TransportApiCore<C: Send + Sync> {
         &self,
         id: i64,
         body: models::ComputeNodeModel,
+        context: &C,
+    ) -> Result<UpdateComputeNodeResponse, ApiError>;
+
+    /// Record a heartbeat for a compute node.
+    async fn heartbeat_compute_node(
+        &self,
+        id: i64,
+        context: &C,
+    ) -> Result<UpdateComputeNodeResponse, ApiError>;
+
+    /// Declare a compute node dead: deactivate it and fail its running jobs.
+    async fn fail_compute_node(
+        &self,
+        id: i64,
         context: &C,
     ) -> Result<UpdateComputeNodeResponse, ApiError>;
 

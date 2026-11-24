@@ -435,6 +435,7 @@ fn test_persistent_runner_exits_when_its_label_is_done(start_server: &ServerProc
         None,
         None,
         None,
+        None,
     )
     .expect("Failed to list compute nodes")
     .items;
@@ -597,6 +598,7 @@ fn test_slurm_runner_labels_and_persistent(start_server: &ServerProcess) {
     let nodes = apis::compute_nodes_api::list_compute_nodes(
         config,
         workflow_id,
+        None,
         None,
         None,
         None,

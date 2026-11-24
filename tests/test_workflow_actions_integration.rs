@@ -91,7 +91,7 @@ actions:
         .expect("Failed to initialize workflow");
 
     // Create compute node
-    let compute_node = torc::models::ComputeNodeModel::new(
+    let mut compute_node = torc::models::ComputeNodeModel::new(
         workflow_id,
         "test-host".to_string(),
         std::process::id() as i64,
@@ -103,6 +103,7 @@ actions:
         "local".to_string(),
         None,
     );
+    compute_node.is_active = Some(true);
     let created_node = apis::compute_nodes_api::create_compute_node(config, compute_node)
         .expect("Failed to create compute node");
     let compute_node_id = created_node.id.unwrap();
@@ -248,7 +249,7 @@ actions:
         .expect("Failed to initialize workflow");
 
     // Create job runner to check and execute actions
-    let compute_node = torc::models::ComputeNodeModel::new(
+    let mut compute_node = torc::models::ComputeNodeModel::new(
         workflow_id,
         "test-host".to_string(),
         std::process::id() as i64,
@@ -260,6 +261,7 @@ actions:
         "local".to_string(),
         None,
     );
+    compute_node.is_active = Some(true);
     let created_node = apis::compute_nodes_api::create_compute_node(config, compute_node)
         .expect("Failed to create compute node");
 
@@ -356,7 +358,7 @@ actions:
         .expect("Failed to initialize workflow");
 
     // Create and run job runner
-    let compute_node = torc::models::ComputeNodeModel::new(
+    let mut compute_node = torc::models::ComputeNodeModel::new(
         workflow_id,
         "test-host".to_string(),
         std::process::id() as i64,
@@ -368,6 +370,7 @@ actions:
         "local".to_string(),
         None,
     );
+    compute_node.is_active = Some(true);
     let created_node = apis::compute_nodes_api::create_compute_node(config, compute_node)
         .expect("Failed to create compute node");
 
@@ -474,7 +477,7 @@ actions:
         .initialize(true)
         .expect("Failed to initialize workflow");
 
-    let compute_node = torc::models::ComputeNodeModel::new(
+    let mut compute_node = torc::models::ComputeNodeModel::new(
         workflow_id,
         "test-host".to_string(),
         std::process::id() as i64,
@@ -486,6 +489,7 @@ actions:
         "local".to_string(),
         None,
     );
+    compute_node.is_active = Some(true);
     let created_node = apis::compute_nodes_api::create_compute_node(config, compute_node)
         .expect("Failed to create compute node");
 
@@ -588,7 +592,7 @@ actions:
         .initialize(true)
         .expect("Failed to initialize workflow");
 
-    let compute_node = torc::models::ComputeNodeModel::new(
+    let mut compute_node = torc::models::ComputeNodeModel::new(
         workflow_id,
         "test-host".to_string(),
         std::process::id() as i64,
@@ -600,6 +604,7 @@ actions:
         "local".to_string(),
         None,
     );
+    compute_node.is_active = Some(true);
     let created_node = apis::compute_nodes_api::create_compute_node(config, compute_node)
         .expect("Failed to create compute node");
 
@@ -710,7 +715,7 @@ actions:
     // Create two compute nodes and job runners (simulating concurrent execution)
     let mut runners = vec![];
     for i in 0..2 {
-        let compute_node = torc::models::ComputeNodeModel::new(
+        let mut compute_node = torc::models::ComputeNodeModel::new(
             workflow_id,
             format!("test-host-{}", i),
             (std::process::id() + i as u32) as i64,
@@ -722,6 +727,7 @@ actions:
             "local".to_string(),
             None,
         );
+        compute_node.is_active = Some(true);
         let created_node = apis::compute_nodes_api::create_compute_node(config, compute_node)
             .expect("Failed to create compute node");
 
@@ -845,7 +851,7 @@ actions:
     let num_workers = 3;
     let mut runners = vec![];
     for i in 0..num_workers {
-        let compute_node = torc::models::ComputeNodeModel::new(
+        let mut compute_node = torc::models::ComputeNodeModel::new(
             workflow_id,
             format!("test-host-{}", i),
             (std::process::id() + i as u32) as i64,
@@ -857,6 +863,7 @@ actions:
             "local".to_string(),
             None,
         );
+        compute_node.is_active = Some(true);
         let created_node = apis::compute_nodes_api::create_compute_node(config, compute_node)
             .expect("Failed to create compute node");
 
@@ -986,7 +993,7 @@ actions:
     let num_workers = 3;
     let mut runners = vec![];
     for i in 0..num_workers {
-        let compute_node = torc::models::ComputeNodeModel::new(
+        let mut compute_node = torc::models::ComputeNodeModel::new(
             workflow_id,
             format!("test-host-{}", i),
             (std::process::id() + i as u32) as i64,
@@ -998,6 +1005,7 @@ actions:
             "local".to_string(),
             None,
         );
+        compute_node.is_active = Some(true);
         let created_node = apis::compute_nodes_api::create_compute_node(config, compute_node)
             .expect("Failed to create compute node");
 
@@ -1125,7 +1133,7 @@ actions:
     let num_workers = 3;
     let mut runners = vec![];
     for i in 0..num_workers {
-        let compute_node = torc::models::ComputeNodeModel::new(
+        let mut compute_node = torc::models::ComputeNodeModel::new(
             workflow_id,
             format!("test-host-{}", i),
             (std::process::id() + i as u32) as i64,
@@ -1137,6 +1145,7 @@ actions:
             "local".to_string(),
             None,
         );
+        compute_node.is_active = Some(true);
         let created_node = apis::compute_nodes_api::create_compute_node(config, compute_node)
             .expect("Failed to create compute node");
 
@@ -1263,7 +1272,7 @@ actions:
         .expect("Failed to initialize workflow");
 
     // Create and run job runner
-    let compute_node = torc::models::ComputeNodeModel::new(
+    let mut compute_node = torc::models::ComputeNodeModel::new(
         workflow_id,
         "test-host".to_string(),
         std::process::id() as i64,
@@ -1275,6 +1284,7 @@ actions:
         "local".to_string(),
         None,
     );
+    compute_node.is_active = Some(true);
     let created_node = apis::compute_nodes_api::create_compute_node(config, compute_node)
         .expect("Failed to create compute node");
 
@@ -1371,7 +1381,7 @@ actions:
     // Create two compute nodes and job runners (simulating concurrent execution)
     let mut runners = vec![];
     for i in 0..2 {
-        let compute_node = torc::models::ComputeNodeModel::new(
+        let mut compute_node = torc::models::ComputeNodeModel::new(
             workflow_id,
             format!("test-host-{}", i),
             (std::process::id() + i as u32) as i64,
@@ -1383,6 +1393,7 @@ actions:
             "local".to_string(),
             None,
         );
+        compute_node.is_active = Some(true);
         let created_node = apis::compute_nodes_api::create_compute_node(config, compute_node)
             .expect("Failed to create compute node");
 

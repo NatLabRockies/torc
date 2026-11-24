@@ -1156,6 +1156,7 @@ fn test_results_report_resolves_compute_nodes(start_server: &ServerProcess) {
         Some("test-host"),
         None,
         None,
+        None,
     )
     .unwrap()
     .items

@@ -56,6 +56,12 @@ Settings for `torc run` command.
 | `memory_gb`              | float | (none)        | Available memory (GB) for resource-based scheduling                    |
 | `num_gpus`               | int   | (none)        | Available GPUs for resource-based scheduling                           |
 
+Heartbeats: `heartbeat_interval_secs` (int, default `30`, environment variable
+`TORC_CLIENT__RUN__HEARTBEAT_INTERVAL_SECS`) sets the seconds between compute node heartbeats. `0`
+turns them off. See [Compute Node Heartbeats and Stale Nodes][heartbeats].
+
+[heartbeats]: ./../concepts/job-runners.md#compute-node-heartbeats-and-stale-nodes
+
 ### `[client.offline]` Section
 
 Settings for offline-drain behavior when a job runner loses contact with the server.
@@ -201,6 +207,13 @@ Settings for `torc-server`.
 | `require_auth`           | bool         | `false`   | Require authentication for all requests                 |
 | `enforce_access_control` | bool         | `false`   | Enforce access control based on workflow ownership      |
 | `admin_users`            | string array | `[]`      | Users to add to the admin group                         |
+
+Compute node stale marking (see [Compute Node Heartbeats and Stale Nodes][heartbeats]):
+
+- `compute_node_stale_after_secs` (int, default `600`, environment variable
+  `TORC_SERVER__COMPUTE_NODE_STALE_AFTER_SECS`): seconds without a heartbeat after which an active
+  node shows as stale. `0` turns stale marking off. No node is stale until the server has run for
+  one threshold.
 
 ### `[server.logging]` Section
 

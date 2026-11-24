@@ -338,6 +338,7 @@ impl TorcClient {
             hostname,  // hostname
             is_active, // is_active
             None,      // scheduled_compute_node_id
+            None,      // stale
         )
         .context("Failed to list compute nodes")?;
 

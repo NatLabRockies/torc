@@ -33,6 +33,8 @@ struct ComputeNodeTableRow {
     num_gpus: i64,
     #[tabled(rename = "Active")]
     is_active: String,
+    #[tabled(rename = "Stale")]
+    is_stale: String,
     #[tabled(rename = "Start Time")]
     start_time: String,
     #[tabled(rename = "Duration")]
@@ -56,6 +58,11 @@ impl From<&models::ComputeNodeModel> for ComputeNodeTableRow {
             None => "-".to_string(),
         };
 
+        let is_stale = node
+            .is_stale
+            .map_or("-", |s| if s { "Yes" } else { "No" })
+            .to_string();
+
         ComputeNodeTableRow {
             id: node.id.unwrap_or(-1),
             hostname: node.hostname.clone(),
@@ -67,6 +74,7 @@ impl From<&models::ComputeNodeModel> for ComputeNodeTableRow {
             memory_gb: format!("{:.2}", node.memory_gb),
             num_gpus: node.num_gpus,
             is_active,
+            is_stale,
             start_time: format_local_timestamp(&node.start_time),
             duration,
             system_cpu: format_system_cpu(node),
@@ -129,6 +137,12 @@ pub enum ComputeNodeCommands {
         #[arg()]
         id: i64,
     },
+    /// Declare a compute node dead: deactivate it and fail its running jobs
+    Fail {
+        /// ID of the compute node
+        #[arg()]
+        id: i64,
+    },
     /// List compute nodes for a workflow
     List {
         /// List compute nodes for this workflow (optional - will prompt if not provided)
@@ -149,6 +163,9 @@ pub enum ComputeNodeCommands {
         /// Filter by scheduled compute node ID
         #[arg(long)]
         scheduled_compute_node: Option<i64>,
+        /// List only stale nodes
+        #[arg(long)]
+        stale: bool,
     },
 }
 
@@ -158,6 +175,19 @@ pub fn handle_compute_node_commands(
     format: &str,
 ) {
     match command {
+        ComputeNodeCommands::Fail { id } => {
+            match apis::compute_nodes_api::fail_compute_node(config, *id) {
+                Ok(node) => {
+                    if !print_if_json(format, &node, "compute node") {
+                        println!("Failed compute node {} (hostname {})", id, node.hostname);
+                    }
+                }
+                Err(e) => {
+                    print_error("failing compute node", &e);
+                    std::process::exit(1);
+                }
+            }
+        }
         ComputeNodeCommands::Get { id } => {
             match apis::compute_nodes_api::get_compute_node(config, *id) {
                 Ok(node) => {
@@ -206,6 +236,7 @@ pub fn handle_compute_node_commands(
             sort_by,
             reverse_sort,
             scheduled_compute_node,
+            stale,
         } => {
             let user_name = get_env_user_name();
             let selected_workflow_id = match workflow_id {
@@ -233,6 +264,9 @@ pub fn handle_compute_node_commands(
             }
             if let Some(scn_id) = scheduled_compute_node {
                 params = params.with_scheduled_compute_node_id(*scn_id);
+            }
+            if *stale {
+                params = params.with_stale(true);
             }
 
             match paginate_compute_nodes(config, selected_workflow_id, params) {

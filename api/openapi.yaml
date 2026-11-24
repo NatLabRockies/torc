@@ -493,6 +493,13 @@ paths:
           - integer
           - 'null'
           format: int64
+      - name: stale
+        in: query
+        required: false
+        schema:
+          type:
+          - boolean
+          - 'null'
       responses:
         '200':
           description: Successful response
@@ -690,6 +697,82 @@ paths:
       - name: id
         in: path
         description: Compute node ID
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComputeNodeModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /compute_nodes/{id}/fail:
+    post:
+      tags:
+      - compute_nodes
+      operationId: fail_compute_node
+      parameters:
+      - name: id
+        in: path
+        description: ID of the compute node.
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ComputeNodeModel'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /compute_nodes/{id}/heartbeat:
+    post:
+      tags:
+      - compute_nodes
+      operationId: heartbeat_compute_node
+      parameters:
+      - name: id
+        in: path
+        description: ID of the compute node.
         required: true
         schema:
           type: integer
@@ -6597,6 +6680,13 @@ components:
           type:
           - boolean
           - 'null'
+        is_stale:
+          type:
+          - boolean
+          - 'null'
+          description: |-
+            True when the node is active and its last heartbeat is older than the server's stale
+            threshold. Read-only: the server computes it when it reads the node.
         labels:
           type:
           - array
@@ -6606,6 +6696,14 @@ components:
           description: |-
             Labels the runner was started with; it claims only jobs whose every
             label it has (or only unlabeled jobs, when unset).
+        last_heartbeat:
+          type:
+          - string
+          - 'null'
+          description: |-
+            Time of the last liveness signal from the runner that owns this node (RFC3339, UTC).
+            Unset for runners that do not send heartbeats. The server never marks such a node stale.
+            Set at creation and by the heartbeat endpoint only; updates ignore it.
         memory_gb:
           type: number
           format: double

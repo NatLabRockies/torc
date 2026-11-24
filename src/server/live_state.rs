@@ -77,6 +77,7 @@ impl LiveServerState {
         auth_file_path: Option<String>,
         credential_cache: SharedCredentialCache,
         admin_sql: AdminSqlConfig,
+        compute_node_stale_after_secs: u64,
     ) -> Self {
         let pool_arc = Arc::new(pool);
         let api_context = ApiContext::new(pool_arc.as_ref().clone());
@@ -96,7 +97,10 @@ impl LiveServerState {
             credential_cache,
             admin_sql,
             access_groups_api: AccessGroupsApiImpl::new(api_context.clone()),
-            compute_nodes_api: ComputeNodesApiImpl::new(api_context.clone()),
+            compute_nodes_api: ComputeNodesApiImpl::new(
+                api_context.clone(),
+                compute_node_stale_after_secs,
+            ),
             events_api: EventsApiImpl::new(api_context.clone()),
             failure_handlers_api: FailureHandlersApiImpl::new(api_context.clone()),
             files_api: FilesApiImpl::new(api_context.clone()),

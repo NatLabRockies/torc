@@ -202,6 +202,12 @@ poll_interval = 5.0
 # to disable backoff.
 claim_backoff_max_secs = 300.0
 
+# Seconds between heartbeats the runner sends for its compute node. The server
+# marks nodes whose runner stopped sending them as stale (torc-server
+# --compute-node-stale-after-secs). Independent of the claim backoff.
+# 0 disables heartbeats.
+heartbeat_interval_secs = 30
+
 # Output directory for job logs and artifacts
 output_dir = "torc_output"
 
