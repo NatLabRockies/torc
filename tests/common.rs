@@ -3,9 +3,9 @@
 use rstest::*;
 use serde_json::{self, Value};
 use std::collections::HashMap;
-use std::net::TcpListener;
+use std::io::{BufRead, BufReader};
 use std::path::Path;
-use std::process::{Child, Command};
+use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
@@ -98,12 +98,36 @@ impl Drop for ServerProcess {
     }
 }
 
-fn find_available_port() -> u16 {
-    TcpListener::bind("127.0.0.1:0")
-        .expect("Failed to bind to random port")
-        .local_addr()
-        .expect("Failed to get local address")
-        .port()
+/// Spawn `cmd` (a `torc-server run` command without `--port`) on an OS-assigned port and return
+/// the port the server reports after binding. Picking a free port up front and passing it in races
+/// with other parallel tests: the port can be taken before the server binds, and the readiness probe
+/// is then answered by the other test's server.
+fn spawn_server_on_free_port(cmd: &mut Command) -> Result<(Child, u16), String> {
+    let mut child = cmd
+        .arg("--port")
+        .arg("0")
+        .stdout(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("failed to start server process: {e}"))?;
+    track_server_pid(child.id());
+    let mut lines = BufReader::new(child.stdout.take().unwrap()).lines();
+    // Forward stdout through println! so the test harness still captures it.
+    let port = lines.by_ref().map_while(Result::ok).find_map(|line| {
+        println!("{line}");
+        line.strip_prefix("TORC_SERVER_PORT=")
+            .and_then(|p| p.trim().parse::<u16>().ok())
+    });
+    thread::spawn(move || lines.map_while(Result::ok).for_each(|l| println!("{l}")));
+    match port {
+        Some(port) => Ok((child, port)),
+        None => {
+            let _ = child.kill();
+            let status = child.wait();
+            Err(format!(
+                "server exited before reporting its port: {status:?}"
+            ))
+        }
+    }
 }
 
 fn wait_for_server_ready(child: &mut Child, port: u16, timeout_secs: u64) -> Result<(), String> {
@@ -291,29 +315,27 @@ fn start_process_with_env(
 
     let mut last_error = None;
     for attempt in 1..=SERVER_START_ATTEMPTS {
-        let port = find_available_port();
         eprintln!(
-            "Starting server on port {} (attempt {}/{})",
-            port, attempt, SERVER_START_ATTEMPTS
+            "Starting server (attempt {}/{})",
+            attempt, SERVER_START_ATTEMPTS
         );
         let mut command = Command::new(get_exe_path("./target/debug/torc-server"));
         command
             .arg("run")
-            .arg("--port")
-            .arg(port.to_string())
             .env("DATABASE_URL", db_url)
             .env("RUST_LOG", "info")
-            .stdout(std::process::Stdio::inherit())
-            .stderr(std::process::Stdio::inherit());
+            .stderr(Stdio::inherit());
         for (key, value) in extra_env {
             command.env(key, value);
         }
-        let mut child = command.spawn().expect("failed to start server process");
-
+        let (mut child, port) = match spawn_server_on_free_port(&mut command) {
+            Ok(v) => v,
+            Err(e) => {
+                last_error = Some(e);
+                continue;
+            }
+        };
         let pid = child.id();
-
-        // Track this PID for cleanup at program exit (handles #[once] fixture limitation)
-        track_server_pid(pid);
 
         match wait_for_server_ready(&mut child, port, 10) {
             Ok(()) => {
@@ -1698,15 +1720,12 @@ fn start_process_with_access_control_impl(
     let htpasswd_path = htpasswd_file.path().to_string_lossy().to_string();
     let mut last_error = None;
     for attempt in 1..=SERVER_START_ATTEMPTS {
-        let port = find_available_port();
         eprintln!(
-            "Starting server with access control on port {} (attempt {}/{})",
-            port, attempt, SERVER_START_ATTEMPTS
+            "Starting server with access control (attempt {}/{})",
+            attempt, SERVER_START_ATTEMPTS
         );
         let mut cmd = Command::new(get_exe_path("./target/debug/torc-server"));
         cmd.arg("run")
-            .arg("--port")
-            .arg(port.to_string())
             .arg("--enforce-access-control") // Enable access control enforcement
             .arg("--auth-file")
             .arg(&htpasswd_path)
@@ -1729,18 +1748,17 @@ fn start_process_with_access_control_impl(
             cmd.arg("--require-auth");
         }
         cmd.args(extra_args);
-        let mut child = cmd
-            .env("DATABASE_URL", db_url)
+        cmd.env("DATABASE_URL", db_url)
             .env("RUST_LOG", "info")
-            .stdout(std::process::Stdio::inherit())
-            .stderr(std::process::Stdio::inherit())
-            .spawn()
-            .expect("failed to start server process");
-
+            .stderr(Stdio::inherit());
+        let (mut child, port) = match spawn_server_on_free_port(&mut cmd) {
+            Ok(v) => v,
+            Err(e) => {
+                last_error = Some(e);
+                continue;
+            }
+        };
         let pid = child.id();
-
-        // Track this PID for cleanup at program exit
-        track_server_pid(pid);
 
         match wait_for_server_ready(&mut child, port, 10) {
             Ok(()) => {

@@ -1208,8 +1208,8 @@ impl WorkflowActionsApiImpl {
                 sqlx::query("UPDATE workflow_action SET trigger_count = ? WHERE id = ?")
             } else {
                 sqlx::query(
-                    "UPDATE workflow_action SET executed = 0, executed_by = NULL, state = NULL, \
-                     error = NULL, trigger_count = ? WHERE id = ?",
+                    "UPDATE workflow_action SET executed = 0, executed_at = NULL, executed_by = NULL, \
+                     state = NULL, error = NULL, trigger_count = ? WHERE id = ?",
                 )
             };
             query
@@ -1224,8 +1224,8 @@ impl WorkflowActionsApiImpl {
                     )
                 })?;
             debug!(
-                "Reinit action {} (trigger_type={}, action_type={}) workflow_id={}: trigger_count={}, kept_executed={}",
-                action_id, trigger_type, action_type, workflow_id, trigger_count, keep_executed
+                "Reinit workflow_id={} action_id={} (trigger_type={}, action_type={}): trigger_count={}, kept_executed={}",
+                workflow_id, action_id, trigger_type, action_type, trigger_count, keep_executed
             );
         }
 

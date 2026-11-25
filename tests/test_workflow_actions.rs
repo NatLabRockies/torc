@@ -1653,15 +1653,15 @@ fn test_schedule_action_rearmed_when_gate_job_reset(start_server: &ServerProcess
 ///
 /// This guards against keying the keep-executed decision off the action's own `trigger_count`. That
 /// would be wrong for `on_jobs_ready`: `count_jobs_in_satisfied_state` counts `Ready` as satisfied,
-/// and `reset_actions_for_reinitialize` runs AFTER `initialize_jobs` has already returned the reset
-/// gate to `Ready`. A *full* re-run of the gate would then still yield
-/// `trigger_count >= required_triggers`, the action that already fired would never be re-armed, no
-/// allocation would be requested, and the gate would sit `Ready` forever.
+/// and a reset gate ends initialize as `Ready` again, so a *full* re-run of the gate would still
+/// yield `trigger_count >= required_triggers`. The action that already fired would never be
+/// re-armed, no allocation would be requested, and the gate would sit `Ready` forever.
 ///
-/// `reset_actions_for_reinitialize` instead measures keep-executed with the terminal-only
-/// `on_jobs_complete` notion, so a reset (now `Ready`, not terminal) gate correctly re-arms. This
-/// asserts that correct behavior (re-arm on a full re-run, exactly like the on_jobs_complete sibling
-/// test). It would fail against a `trigger_count`-based heuristic.
+/// Instead, `initialize_jobs` snapshots gate statuses before and during its status changes, and
+/// `reset_gate_job_ids` reports the gates this initialize actually reset.
+/// `reset_actions_for_reinitialize` (run in the same transaction) re-arms any job-gated action with
+/// a gate in that set, so this asserts re-arm on a full re-run, exactly like the on_jobs_complete
+/// sibling test.
 #[rstest]
 fn test_on_jobs_ready_schedule_action_rearmed_when_gate_job_reset(start_server: &ServerProcess) {
     let config = &start_server.config;
