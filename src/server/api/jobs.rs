@@ -361,6 +361,48 @@ pub(crate) async fn job_refs_outside_workflow(
     )))
 }
 
+/// Each file has at most one producing job. Returns a 422 message if a job lists an output
+/// that another job in `jobs` or an existing job already produces.
+pub(crate) async fn output_files_with_producer(
+    conn: &mut sqlx::SqliteConnection,
+    jobs: &[&models::JobModel],
+) -> Result<Option<String>, ApiError> {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut shared = std::collections::BTreeSet::new();
+    for job in jobs {
+        let ids: std::collections::BTreeSet<i64> =
+            job.output_file_ids.iter().flatten().copied().collect();
+        for id in ids {
+            if !seen.insert(id) {
+                shared.insert(id);
+            }
+        }
+    }
+    if !seen.is_empty() {
+        let ids_json = serde_json::to_string(&seen)
+            .map_err(|e| ApiError(format!("Failed to serialize output_file_ids: {}", e)))?;
+        let produced: Vec<i64> = sqlx::query_scalar(
+            "SELECT j.value FROM json_each(?1) j \
+             WHERE EXISTS (SELECT 1 FROM job_output_file o WHERE o.file_id = j.value)",
+        )
+        .bind(ids_json)
+        .fetch_all(&mut *conn)
+        .await
+        .map_err(|e| database_error_with_msg(e, "Failed to validate output_file_ids"))?;
+        shared.extend(produced);
+    }
+    if shared.is_empty() {
+        return Ok(None);
+    }
+    let shown: Vec<String> = shared.iter().take(20).map(i64::to_string).collect();
+    Ok(Some(format!(
+        "A file can be an output of only one job; already produced by another job: \
+         file_id [{}]{}",
+        shown.join(", "),
+        if shared.len() > 20 { ", ..." } else { "" }
+    )))
+}
+
 /// Trait defining job-related API operations
 #[async_trait]
 pub trait JobsApi<C> {
@@ -1753,10 +1795,14 @@ where
         job.env = Self::merge_env(workflow_env.as_ref(), job.env.as_ref());
         let job_env = crate::tx_try!(tx, serialize_env_map(job.env.clone(), "job env"));
 
-        if let Some(msg) = crate::tx_try!(
+        let problem = match crate::tx_try!(
             tx,
             job_refs_outside_workflow(&mut tx, job.workflow_id, &[&job]).await
         ) {
+            Some(msg) => Some(msg),
+            None => crate::tx_try!(tx, output_files_with_producer(&mut tx, &[&job]).await),
+        };
+        if let Some(msg) = problem {
             let _ = tx.rollback().await;
             return Ok(CreateJobResponse::UnprocessableContentErrorResponse(
                 message_error_response(msg),
@@ -2053,7 +2099,11 @@ where
             ));
         }
         let job_refs: Vec<&models::JobModel> = prepared.iter().map(|p| &p.job).collect();
-        let refs_check = job_refs_outside_workflow(&mut transaction, workflow_id, &job_refs).await;
+        let refs_check =
+            match job_refs_outside_workflow(&mut transaction, workflow_id, &job_refs).await {
+                Ok(None) => output_files_with_producer(&mut transaction, &job_refs).await,
+                other => other,
+            };
         match refs_check {
             Ok(None) => {}
             Ok(Some(msg)) => {

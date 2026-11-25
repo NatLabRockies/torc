@@ -141,6 +141,9 @@ fn test_create_job_accepts_same_workflow_refs(start_server: &ServerProcess) {
         for field in FIELDS {
             set_field(&mut job, field, &a);
         }
+        // A file has only one producer, so each job gets its own output.
+        let output = create_test_file(config, a.workflow_id, name, &format!("/tmp/{name}"));
+        job.output_file_ids = Some(vec![output.id.unwrap()]);
         job
     };
     let created = apis::jobs_api::create_job(config, all_refs("single")).unwrap();

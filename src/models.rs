@@ -213,6 +213,14 @@ pub struct FileModel {
     pub path: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub st_mtime: Option<f64>,
+    /// Size in bytes, recorded with `st_mtime`. Set only for workflows with
+    /// `enable_ro_crate`. Set together with `sha256`. When `st_mtime` changes without a new
+    /// `size` and `sha256`, or the path changes, the server clears both.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<i64>,
+    /// SHA-256 of the contents (lowercase hex), recorded with `st_mtime`. Same rules as `size`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<String>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -411,6 +419,12 @@ pub struct JobCompletionEntry {
 pub struct OutputFileStat {
     pub file_id: i64,
     pub st_mtime: f64,
+    /// Size in bytes. Sent only for workflows with `enable_ro_crate`, together with `sha256`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<i64>,
+    /// SHA-256 of the contents (lowercase hex). Sent only for workflows with `enable_ro_crate`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<String>,
 }
 
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
@@ -1624,6 +1638,8 @@ impl FileModel {
             name,
             path,
             st_mtime: None,
+            size: None,
+            sha256: None,
         }
     }
 }
@@ -2812,6 +2828,12 @@ pub struct FileStatEntry {
     /// Modification time in seconds since the Unix epoch. Required when `exists` is true.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub st_mtime: Option<f64>,
+    /// Size in bytes. Sent only for workflows with `enable_ro_crate`, together with `sha256`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<i64>,
+    /// SHA-256 of the contents (lowercase hex). Sent only for workflows with `enable_ro_crate`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<String>,
 }
 
 /// A batch of file observations (at most `MAX_RECORD_TRANSFER_COUNT` entries).
@@ -3060,6 +3082,8 @@ mod tests {
             name: "f".into(),
             path: "/tmp/f".into(),
             st_mtime: Some(1.0),
+            size: None,
+            sha256: None,
         };
         let user_data = UserDataModel {
             id: Some(1),

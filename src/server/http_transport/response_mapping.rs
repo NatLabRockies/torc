@@ -66,7 +66,12 @@ map_response!(
     CreateEventResponse,
     SuccessfulResponse
 );
-map_response!(create_file_response, CreateFileResponse, SuccessfulResponse);
+map_response!(
+    create_file_response,
+    CreateFileResponse,
+    SuccessfulResponse,
+    UnprocessableContentErrorResponse => StatusCode::UNPROCESSABLE_ENTITY
+);
 map_response!(
     create_local_scheduler_response,
     CreateLocalSchedulerResponse,

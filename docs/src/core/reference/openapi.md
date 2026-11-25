@@ -295,6 +295,10 @@ curl -X POST "http://localhost:8080/torc-service/v1/workflows/1/file_stats?dry_r
   | jq '.reset_jobs'
 ```
 
+For workflows with `enable_ro_crate`, each entry can also carry `size` and `sha256` (both or
+neither; a size without a hash is rejected with 422). An entry that changes a file's `st_mtime`
+without a new size and hash clears the stored pair.
+
 **Apply Scheduler Plan** (`torc slurm regenerate`)
 
 ```bash

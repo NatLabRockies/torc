@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictFloat, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional, Union
 from typing import Optional, Set
 from typing_extensions import Self
@@ -29,9 +29,11 @@ class FileModel(BaseModel):
     id: Optional[StrictInt] = None
     name: StrictStr
     path: StrictStr
+    sha256: Optional[StrictStr] = Field(default=None, description="SHA-256 of the contents (lowercase hex), recorded with `st_mtime`. Same rules as `size`.")
+    size: Optional[StrictInt] = Field(default=None, description="Size in bytes, recorded with `st_mtime`. Set only for workflows with `enable_ro_crate`. Set together with `sha256`. When `st_mtime` changes without a new `size` and `sha256`, or the path changes, the server clears both.")
     st_mtime: Optional[Union[StrictFloat, StrictInt]] = None
     workflow_id: StrictInt
-    __properties: ClassVar[List[str]] = ["id", "name", "path", "st_mtime", "workflow_id"]
+    __properties: ClassVar[List[str]] = ["id", "name", "path", "sha256", "size", "st_mtime", "workflow_id"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -77,6 +79,16 @@ class FileModel(BaseModel):
         if self.id is None and "id" in self.model_fields_set:
             _dict['id'] = None
 
+        # set to None if sha256 (nullable) is None
+        # and model_fields_set contains the field
+        if self.sha256 is None and "sha256" in self.model_fields_set:
+            _dict['sha256'] = None
+
+        # set to None if size (nullable) is None
+        # and model_fields_set contains the field
+        if self.size is None and "size" in self.model_fields_set:
+            _dict['size'] = None
+
         # set to None if st_mtime (nullable) is None
         # and model_fields_set contains the field
         if self.st_mtime is None and "st_mtime" in self.model_fields_set:
@@ -97,6 +109,8 @@ class FileModel(BaseModel):
             "id": obj.get("id"),
             "name": obj.get("name"),
             "path": obj.get("path"),
+            "sha256": obj.get("sha256"),
+            "size": obj.get("size"),
             "st_mtime": obj.get("st_mtime"),
             "workflow_id": obj.get("workflow_id")
         })

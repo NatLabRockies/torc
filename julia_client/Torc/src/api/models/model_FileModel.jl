@@ -8,6 +8,8 @@
         id=nothing,
         name=nothing,
         path=nothing,
+        sha256=nothing,
+        size=nothing,
         st_mtime=nothing,
         workflow_id=nothing,
     )
@@ -15,6 +17,8 @@
     - id::Int64
     - name::String
     - path::String
+    - sha256::String : SHA-256 of the contents (lowercase hex), recorded with &#x60;st_mtime&#x60;. Same rules as &#x60;size&#x60;.
+    - size::Int64 : Size in bytes, recorded with &#x60;st_mtime&#x60;. Set only for workflows with &#x60;enable_ro_crate&#x60;. Set together with &#x60;sha256&#x60;. When &#x60;st_mtime&#x60; changes without a new &#x60;size&#x60; and &#x60;sha256&#x60;, or the path changes, the server clears both.
     - st_mtime::Float64
     - workflow_id::Int64
 """
@@ -22,17 +26,19 @@ Base.@kwdef mutable struct FileModel <: OpenAPI.APIModel
     id::Union{Nothing, Int64} = nothing
     name::Union{Nothing, String} = nothing
     path::Union{Nothing, String} = nothing
+    sha256::Union{Nothing, String} = nothing
+    size::Union{Nothing, Int64} = nothing
     st_mtime::Union{Nothing, Float64} = nothing
     workflow_id::Union{Nothing, Int64} = nothing
 
-    function FileModel(id, name, path, st_mtime, workflow_id, )
-        o = new(id, name, path, st_mtime, workflow_id, )
+    function FileModel(id, name, path, sha256, size, st_mtime, workflow_id, )
+        o = new(id, name, path, sha256, size, st_mtime, workflow_id, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type FileModel
 
-const _property_types_FileModel = Dict{Symbol,String}(Symbol("id")=>"Int64", Symbol("name")=>"String", Symbol("path")=>"String", Symbol("st_mtime")=>"Float64", Symbol("workflow_id")=>"Int64", )
+const _property_types_FileModel = Dict{Symbol,String}(Symbol("id")=>"Int64", Symbol("name")=>"String", Symbol("path")=>"String", Symbol("sha256")=>"String", Symbol("size")=>"Int64", Symbol("st_mtime")=>"Float64", Symbol("workflow_id")=>"Int64", )
 OpenAPI.property_type(::Type{ FileModel }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_FileModel[name]))}
 
 function OpenAPI.check_required(o::FileModel)
@@ -46,6 +52,8 @@ function OpenAPI.validate_properties(o::FileModel)
     OpenAPI.validate_property(FileModel, Symbol("id"), o.id)
     OpenAPI.validate_property(FileModel, Symbol("name"), o.name)
     OpenAPI.validate_property(FileModel, Symbol("path"), o.path)
+    OpenAPI.validate_property(FileModel, Symbol("sha256"), o.sha256)
+    OpenAPI.validate_property(FileModel, Symbol("size"), o.size)
     OpenAPI.validate_property(FileModel, Symbol("st_mtime"), o.st_mtime)
     OpenAPI.validate_property(FileModel, Symbol("workflow_id"), o.workflow_id)
 end
@@ -57,6 +65,11 @@ function OpenAPI.validate_property(::Type{ FileModel }, name::Symbol, val)
     end
 
 
+
+
+    if name === Symbol("size")
+        OpenAPI.validate_param(name, "FileModel", :format, val, "int64")
+    end
 
     if name === Symbol("st_mtime")
         OpenAPI.validate_param(name, "FileModel", :format, val, "double")

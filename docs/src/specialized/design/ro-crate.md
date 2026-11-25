@@ -38,12 +38,11 @@ flowchart TD
     A --> C[Server creates<br/>#software-torc-server-run-id-N]
     A --> D[Client attempts to create<br/>#software-torc-run-id-N<br/>and optional<br/>#software-torc-slurm-job-runner-run-id-N]
 
-    B -->|yes| E[Server upserts input File entities<br/>from DB rows with st_mtime]
+    B -->|yes| G[Client records size and sha256<br/>with each file's st_mtime]
+    G --> E[Server upserts input File entities<br/>from DB rows with st_mtime]
     B -->|yes| F[Client creates or updates<br/>#torc-workflow and #torc-run-id-N]
-    B -->|yes| G[Client creates or updates<br/>input File entities]
     B -->|no| H[No automatic file provenance]
 
-    G --> I[Workflow execution]
     E --> I
     F --> I
     C --> I
@@ -51,9 +50,8 @@ flowchart TD
 
     I --> J[Job completes successfully]
     J --> J2{Job has output files?}
-    J2 -->|yes| K[Client refreshes<br/>#torc-workflow and #torc-run-id-N]
-    J2 -->|yes| L[Client creates<br/>#job-job_id-attempt-attempt_id]
-    J2 -->|yes| M[Client creates or updates<br/>output File entity]
+    J2 -->|yes| L[Server creates<br/>#job-job_id-attempt-attempt_id<br/>in the completion transaction]
+    J2 -->|yes| M[Server creates or updates<br/>output File entity<br/>in the completion transaction]
     J2 -->|no| P[No additional automatic<br/>RO-Crate entities for this job]
 
     L --> N[Job CreateAction metadata]
@@ -79,7 +77,7 @@ flowchart TD
     class A,I,J init;
     class C,D software;
     class E,G input;
-    class F,K run;
+    class F run;
     class L,N,N1,N2,N3,N4,N5 job;
     class M,O,O1,O2,O3 output;
     class H,P disabled;
@@ -98,8 +96,9 @@ flowchart TD
 
 ### Jobs
 
-- The client creates one `CreateAction` per successful job completion **that has at least one output
-  file**
+- The server creates one `CreateAction` per accepted successful job completion **that has at least
+  one output file**, in the completion transaction. If the entity already exists for the same job
+  attempt, it is kept
 - The entity id is `#job-{job_id}-attempt-{attempt_id}`
 - Jobs with no output files currently do not emit an automatic `CreateAction`
 - When present, the job entity is the main join point between inputs, outputs, workflow run, and
@@ -108,15 +107,16 @@ flowchart TD
 ### Input files
 
 - Input files are detected by `st_mtime IS NOT NULL`
-- During initialization, both the server and the client currently upsert the same input file entity
+- Before `initialize_jobs()`, the client stats every file and sends the snapshot to
+  `update_file_stats`. For RO-Crate workflows the snapshot carries the size and SHA-256 of each file
+  that is new, changed, or not yet hashed
+- During initialization, the server upserts the input file entity from the file record, including
+  `contentSize` and `sha256`. It overlays the fields it builds on any stored metadata
 - The entity is keyed by workflow and `file_id`, with `entity_id = file.path` by default
 - When a `FileSpec` carries a user-supplied `identifier`, `create_files` pre-creates the entity row
   at workflow-creation time with `entity_id = identifier` and `metadata["@id"] = identifier`. The
-  server's init-time upsert preserves the `entity_id` column even though it rewrites
-  `metadata["@id"]` back to `file.path`. Export then uses `entity_id` as the authoritative `@id`
-  (overwriting whatever ends up in `metadata["@id"]`), so the user identifier survives regardless of
-  whether the client-side `create_ro_crate_entity_for_file` ran afterward — important because the
-  async-init path returns before the client-side rebuild can re-write `metadata["@id"]`.
+  server's init-time upsert keeps an `entity_id` that differs from `file.path` as `metadata["@id"]`
+  and records the path as `sameAs`. Export also uses `entity_id` as the authoritative `@id`.
 - Export also builds a path → entity_id map from File entities' `sameAs` and rewrites nested
   `{ "@id": "<path>" }` references throughout the graph, so CreateAction `prov:used` / `object` and
   output `prov:wasDerivedFrom` link to the identifier rather than the path. The entity's own `@id`
@@ -128,14 +128,21 @@ flowchart TD
 
 ### Output files
 
-- Output file entities are created or replaced after a job succeeds and the file record has been
-  refreshed
+- The job runner sends each output's `st_mtime`, size, and SHA-256 in the completion entry. The
+  server writes them to the file record and creates or replaces the output file entity in the same
+  transaction, and only if it accepts the completion
+- A server older than HTTP API 1.1.0 ignores those fields, so for it the runner still writes the
+  file records and creates the entities itself after the completion
 - If a file already had an entity from initialization or a prior run, the same DB row is updated
   rather than creating a new file entity for each run
 - Run-specific provenance is recorded in the metadata relationships, not by giving the file entity a
   run-specific identity
-- The same successful-job path also refreshes `#torc-workflow`, refreshes `#torc-run-id-{run_id}`,
-  and creates the job `CreateAction`, but only when there is at least one output file to process
+- The same completion also creates the job `CreateAction`, but only when there is at least one
+  output file to process. `#torc-workflow` and `#torc-run-id-{run_id}` are created by the client at
+  initialization and when a job runner starts
+- Offline completions get the same treatment when they are replayed: the journal carries the stats
+  recorded at completion, and `torc workflows reconcile` adds stats from disk for outputs the
+  journal lacks
 
 ## Important Asymmetries
 

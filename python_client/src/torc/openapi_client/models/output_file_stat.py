@@ -17,8 +17,8 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, StrictFloat, StrictInt
-from typing import Any, ClassVar, Dict, List, Union
+from pydantic import BaseModel, ConfigDict, Field, StrictFloat, StrictInt, StrictStr
+from typing import Any, ClassVar, Dict, List, Optional, Union
 from typing import Optional, Set
 from typing_extensions import Self
 
@@ -27,8 +27,10 @@ class OutputFileStat(BaseModel):
     An output file's modification time, as observed by the job runner at completion.
     """ # noqa: E501
     file_id: StrictInt
+    sha256: Optional[StrictStr] = Field(default=None, description="SHA-256 of the contents (lowercase hex). Sent only for workflows with `enable_ro_crate`.")
+    size: Optional[StrictInt] = Field(default=None, description="Size in bytes. Sent only for workflows with `enable_ro_crate`, together with `sha256`.")
     st_mtime: Union[StrictFloat, StrictInt]
-    __properties: ClassVar[List[str]] = ["file_id", "st_mtime"]
+    __properties: ClassVar[List[str]] = ["file_id", "sha256", "size", "st_mtime"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -69,6 +71,16 @@ class OutputFileStat(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if sha256 (nullable) is None
+        # and model_fields_set contains the field
+        if self.sha256 is None and "sha256" in self.model_fields_set:
+            _dict['sha256'] = None
+
+        # set to None if size (nullable) is None
+        # and model_fields_set contains the field
+        if self.size is None and "size" in self.model_fields_set:
+            _dict['size'] = None
+
         return _dict
 
     @classmethod
@@ -82,6 +94,8 @@ class OutputFileStat(BaseModel):
 
         _obj = cls.model_validate({
             "file_id": obj.get("file_id"),
+            "sha256": obj.get("sha256"),
+            "size": obj.get("size"),
             "st_mtime": obj.get("st_mtime")
         })
         return _obj

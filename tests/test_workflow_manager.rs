@@ -63,7 +63,7 @@ fn wait_for_task_completion(
     );
 }
 
-/// Move a file's mtime well past the 10 ms change-detection tolerance.
+/// Move a file's mtime well past its current value.
 fn bump_mtime(path: &str) {
     fs::File::options()
         .write(true)
@@ -3537,6 +3537,8 @@ fn stat_entry(file: &models::FileModel) -> models::FileStatEntry {
         id: file.id.unwrap(),
         exists: st_mtime.is_some(),
         st_mtime,
+        size: None,
+        sha256: None,
     }
 }
 
@@ -3734,6 +3736,8 @@ fn test_file_stats_endpoint_rejects_invalid_batches(start_server: &ServerProcess
         id,
         exists,
         st_mtime,
+        size: None,
+        sha256: None,
     };
     let fid = file.id.unwrap();
     for files in [

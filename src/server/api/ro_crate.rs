@@ -13,7 +13,9 @@ use crate::server::api_responses::{
 };
 
 use crate::models;
-use crate::ro_crate_json_ld::typed_entity;
+use crate::ro_crate_json_ld::{
+    build_create_action_entity, build_file_entity, build_file_entity_with_provenance, typed_entity,
+};
 
 use super::{
     ApiContext, MAX_RECORD_TRANSFER_COUNT, SqlQueryBuilder, database_error_with_msg,
@@ -147,6 +149,175 @@ pub trait RoCrateApi<C> {
     ) -> Result<DeleteRoCrateEntitiesResponse, ApiError>;
 }
 
+/// Create the RO-Crate entities for a job's accepted output files inside the completion
+/// transaction: one File entity per accepted output (with `prov:wasGeneratedBy` provenance)
+/// and the job attempt's CreateAction, whose `result` lists all of the job's outputs. Does nothing unless the workflow has `enable_ro_crate`.
+///
+/// Idempotent, so replaying a completion converges: a File entity is replaced by `file_id`,
+/// and an existing CreateAction for the same job attempt is kept. A uniqueness conflict with
+/// an unrelated entity is logged and skipped so it never costs the completion; other database
+/// errors are returned.
+pub(crate) async fn create_output_entities_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    workflow_id: i64,
+    run_id: i64,
+    job_id: i64,
+    job_name: &str,
+    attempt_id: i64,
+    output_file_ids: &[i64],
+) -> Result<(), sqlx::Error> {
+    let enabled: Option<i64> =
+        sqlx::query_scalar("SELECT enable_ro_crate FROM workflow WHERE id = ?")
+            .bind(workflow_id)
+            .fetch_one(&mut **tx)
+            .await?;
+    if enabled != Some(1) {
+        return Ok(());
+    }
+
+    // The CreateAction lists every output of the job, including any whose stats were not
+    // recorded with this completion, so a later restore never leaves it incomplete.
+    let output_paths: Vec<String> = sqlx::query_scalar(
+        "SELECT f.path FROM job_output_file jof JOIN file f ON f.id = jof.file_id \
+         WHERE jof.job_id = ? ORDER BY f.id",
+    )
+    .bind(job_id)
+    .fetch_all(&mut **tx)
+    .await?;
+    if output_paths.is_empty() {
+        return Ok(());
+    }
+
+    let ids_json = serde_json::to_string(output_file_ids).expect("serialize ids");
+    let outputs: Vec<models::FileModel> = sqlx::query(
+        "SELECT f.id, f.workflow_id, f.name, f.path, f.st_mtime, f.size, f.sha256 \
+         FROM json_each(?1) j CROSS JOIN file f ON f.id = j.value AND f.workflow_id = ?2 \
+         ORDER BY f.id",
+    )
+    .bind(&ids_json)
+    .bind(workflow_id)
+    .fetch_all(&mut **tx)
+    .await?
+    .into_iter()
+    .map(|r| models::FileModel {
+        id: Some(r.get("id")),
+        workflow_id: r.get("workflow_id"),
+        name: r.get("name"),
+        path: r.get("path"),
+        st_mtime: r.get("st_mtime"),
+        size: r.get("size"),
+        sha256: r.get("sha256"),
+    })
+    .collect();
+    let input_paths: Vec<String> = sqlx::query_scalar(
+        "SELECT f.path FROM job_input_file jif JOIN file f ON f.id = jif.file_id \
+         WHERE jif.job_id = ? ORDER BY f.id",
+    )
+    .bind(job_id)
+    .fetch_all(&mut **tx)
+    .await?;
+
+    let action = build_create_action_entity(
+        workflow_id,
+        run_id,
+        job_id,
+        job_name,
+        attempt_id,
+        &input_paths,
+        &output_paths,
+    );
+    let inserted = sqlx::query(
+        "INSERT OR IGNORE INTO ro_crate_entity \
+         (workflow_id, file_id, entity_id, entity_type, metadata) VALUES (?, NULL, ?, ?, ?)",
+    )
+    .bind(workflow_id)
+    .bind(&action.entity_id)
+    .bind(&action.entity_type)
+    .bind(entity_metadata_json(&action))
+    .execute(&mut **tx)
+    .await?;
+    if inserted.rows_affected() == 0 {
+        // An existing action (a replay, or one `ro-crate add-dataset -j` pre-created) gains
+        // the tracked references it lacks. Any other entity that happens to use this ID is
+        // left untouched.
+        let existing: Option<(i64, String)> = sqlx::query_as(
+            "SELECT id, metadata FROM ro_crate_entity WHERE workflow_id = ? AND entity_id = ? \
+             AND file_id IS NULL AND entity_type = 'CreateAction'",
+        )
+        .bind(workflow_id)
+        .bind(&action.entity_id)
+        .fetch_optional(&mut **tx)
+        .await?;
+        if let Some((id, metadata)) = existing {
+            let mut merged = serde_json::from_str::<serde_json::Value>(&metadata)
+                .map(|v| crate::ro_crate_json_ld::metadata_value_to_map(&v))
+                .unwrap_or_default();
+            if crate::ro_crate_json_ld::merge_create_action(&mut merged, &action.metadata) {
+                let merged = serde_json::Value::Object(merged.into_iter().collect());
+                sqlx::query("UPDATE ro_crate_entity SET metadata = ? WHERE id = ?")
+                    .bind(merged.to_string())
+                    .bind(id)
+                    .execute(&mut **tx)
+                    .await?;
+            }
+        }
+    }
+
+    for file in &outputs {
+        let entity = build_file_entity_with_provenance(
+            workflow_id,
+            run_id,
+            file,
+            file.size.and_then(|s| u64::try_from(s).ok()),
+            file.sha256.clone(),
+            job_id,
+            attempt_id,
+            &input_paths,
+        );
+        let metadata = entity_metadata_json(&entity);
+        let updated = sqlx::query(
+            "UPDATE OR IGNORE ro_crate_entity SET entity_id = ?, entity_type = ?, metadata = ? \
+             WHERE workflow_id = ? AND file_id = ?",
+        )
+        .bind(&entity.entity_id)
+        .bind(&entity.entity_type)
+        .bind(&metadata)
+        .bind(workflow_id)
+        .bind(file.id)
+        .execute(&mut **tx)
+        .await?;
+        if updated.rows_affected() > 0 {
+            continue;
+        }
+        let inserted = sqlx::query(
+            "INSERT OR IGNORE INTO ro_crate_entity \
+             (workflow_id, file_id, entity_id, entity_type, metadata) VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(workflow_id)
+        .bind(file.id)
+        .bind(&entity.entity_id)
+        .bind(&entity.entity_type)
+        .bind(&metadata)
+        .execute(&mut **tx)
+        .await?;
+        if inserted.rows_affected() == 0 {
+            warn!(
+                "Skipping RO-Crate entity for output file_id={}: entity_id={} conflicts with an \
+                 existing entity workflow_id={} job_id={}",
+                file.id.unwrap_or_default(),
+                entity.entity_id,
+                workflow_id,
+                job_id
+            );
+        }
+    }
+    Ok(())
+}
+
+fn entity_metadata_json(entity: &models::RoCrateEntityModel) -> String {
+    serde_json::Value::Object(entity.metadata.clone().into_iter().collect()).to_string()
+}
+
 /// Implementation of RO-Crate entity API for the server
 #[derive(Clone)]
 pub struct RoCrateApiImpl {
@@ -170,7 +341,7 @@ impl RoCrateApiImpl {
         // Get all files with st_mtime set (input files)
         let input_files = match sqlx::query!(
             r#"
-            SELECT id, workflow_id, name, path, st_mtime
+            SELECT id, workflow_id, name, path, st_mtime, size, sha256
             FROM file
             WHERE workflow_id = $1 AND st_mtime IS NOT NULL
             "#,
@@ -206,74 +377,78 @@ impl RoCrateApiImpl {
             .collect();
 
         // Get existing RO-Crate entities by file_id for upsert
-        let existing_entities: std::collections::HashMap<i64, (i64, String)> = match sqlx::query!(
-            r#"
-            SELECT id, file_id, metadata
+        let existing_entities: std::collections::HashMap<i64, (i64, String, String)> =
+            match sqlx::query!(
+                r#"
+            SELECT id, file_id, entity_id, metadata
             FROM ro_crate_entity
             WHERE workflow_id = $1 AND file_id IS NOT NULL
             "#,
-            workflow_id
-        )
-        .fetch_all(self.context.pool.as_ref())
-        .await
-        {
-            Ok(rows) => rows
-                .into_iter()
-                .filter_map(|r| r.file_id.map(|fid| (fid, (r.id, r.metadata))))
-                .collect(),
-            Err(e) => {
-                return Err(super::database_error_with_msg(
-                    e,
-                    "Failed to check existing RO-Crate entities",
-                ));
-            }
-        };
+                workflow_id
+            )
+            .fetch_all(self.context.pool.as_ref())
+            .await
+            {
+                Ok(rows) => rows
+                    .into_iter()
+                    .filter_map(|r| r.file_id.map(|fid| (fid, (r.id, r.entity_id, r.metadata))))
+                    .collect(),
+                Err(e) => {
+                    return Err(super::database_error_with_msg(
+                        e,
+                        "Failed to check existing RO-Crate entities",
+                    ));
+                }
+            };
 
         let mut upserted_count = 0i64;
         for file in input_files {
-            // Infer MIME type from file extension
-            let mime_type = mime_guess::from_path(&file.path)
-                .first()
-                .map(|m| m.to_string())
-                .unwrap_or_else(|| "application/octet-stream".to_string());
+            let existing = existing_entities.get(&file.id);
+            let file = models::FileModel {
+                id: Some(file.id),
+                workflow_id: file.workflow_id,
+                name: file.name,
+                path: file.path,
+                st_mtime: file.st_mtime,
+                size: file.size,
+                sha256: file.sha256,
+            };
+            // An entity_id that differs from the path is the user's stable identifier
+            // (FileSpec::identifier, pre-created at workflow creation). Keep it as @id.
+            let identifier = existing
+                .map(|(_, entity_id, _)| entity_id.as_str())
+                .filter(|id| *id != file.path.as_str());
+            let built = build_file_entity(
+                workflow_id,
+                &file,
+                file.size.and_then(|s| u64::try_from(s).ok()),
+                file.sha256.clone(),
+                identifier,
+            );
 
-            // Get basename from path
-            let basename = std::path::Path::new(&file.path)
-                .file_name()
-                .map(|s| s.to_string_lossy().to_string())
-                .unwrap_or_else(|| file.path.clone());
-
-            // The server cannot inspect workflow files on disk. Preserve any richer
-            // client-provided metadata already stored for this entity and only refresh
-            // fields derivable from database state.
-            let mut metadata = existing_entities
-                .get(&file.id)
-                .and_then(|(_, existing_metadata)| {
+            // Overlay the built fields on any stored metadata, so fields added by other
+            // tools are kept.
+            let mut metadata = existing
+                .and_then(|(_, _, existing_metadata)| {
                     serde_json::from_str::<serde_json::Value>(existing_metadata).ok()
                 })
+                .filter(serde_json::Value::is_object)
                 .unwrap_or_else(|| serde_json::json!({}));
-
-            if !metadata.is_object() {
-                metadata = serde_json::json!({});
+            // The builder omits stats it does not have, so drop the server-owned ones first;
+            // otherwise a cleared size/hash would leave the previous run's values in place.
+            if let Some(obj) = metadata.as_object_mut() {
+                for key in ["contentSize", "sha256", "dateModified"] {
+                    obj.remove(key);
+                }
             }
-
-            metadata["@id"] = serde_json::json!(file.path);
-            metadata["@type"] = typed_entity("File", "prov:Entity");
-            metadata["name"] = serde_json::json!(basename);
-            metadata["encodingFormat"] = serde_json::json!(mime_type);
-
-            // Add dateModified if st_mtime is available
-            if let Some(st_mtime) = file.st_mtime
-                && let Some(datetime) =
-                    chrono::DateTime::<chrono::Utc>::from_timestamp(st_mtime as i64, 0)
-            {
-                metadata["dateModified"] = serde_json::json!(datetime.to_rfc3339());
+            for (key, value) in built.metadata {
+                metadata[key] = value;
             }
 
             let metadata_str = metadata.to_string();
 
             // Update existing entity or create new one
-            let result = if let Some(&(entity_db_id, _)) = existing_entities.get(&file.id) {
+            let result = if let Some(&(entity_db_id, _, _)) = existing {
                 sqlx::query!(
                     r#"
                     UPDATE ro_crate_entity SET metadata = $1 WHERE id = $2
@@ -304,7 +479,8 @@ impl RoCrateApiImpl {
                 Ok(_) => {
                     debug!(
                         "Upserted RO-Crate entity for input file '{}' (file_id={})",
-                        file.path, file.id
+                        file.path,
+                        file.id.unwrap_or_default()
                     );
                     upserted_count += 1;
                 }

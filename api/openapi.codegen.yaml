@@ -1307,6 +1307,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Unprocessable content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Internal server error
           content:
@@ -7069,6 +7075,20 @@ components:
           type: string
         path:
           type: string
+        sha256:
+          type:
+          - string
+          - 'null'
+          description: SHA-256 of the contents (lowercase hex), recorded with `st_mtime`. Same rules as `size`.
+        size:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          description: |-
+            Size in bytes, recorded with `st_mtime`. Set only for workflows with
+            `enable_ro_crate`. Set together with `sha256`. When `st_mtime` changes without a new
+            `size` and `sha256`, or the path changes, the server clears both.
         st_mtime:
           type:
           - number
@@ -7104,6 +7124,17 @@ components:
           type: integer
           format: int64
           description: File ID. Must belong to the workflow in the request path.
+        sha256:
+          type:
+          - string
+          - 'null'
+          description: SHA-256 of the contents (lowercase hex). Sent only for workflows with `enable_ro_crate`.
+        size:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          description: Size in bytes. Sent only for workflows with `enable_ro_crate`, together with `sha256`.
         st_mtime:
           type:
           - number
@@ -8221,6 +8252,17 @@ components:
         file_id:
           type: integer
           format: int64
+        sha256:
+          type:
+          - string
+          - 'null'
+          description: SHA-256 of the contents (lowercase hex). Sent only for workflows with `enable_ro_crate`.
+        size:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          description: Size in bytes. Sent only for workflows with `enable_ro_crate`, together with `sha256`.
         st_mtime:
           type: number
           format: double

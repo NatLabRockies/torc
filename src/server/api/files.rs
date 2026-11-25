@@ -98,7 +98,74 @@ pub struct FilesApiImpl {
     pub context: ApiContext,
 }
 
-const FILE_COLUMNS: &[&str] = &["id", "workflow_id", "name", "path", "st_mtime"];
+const FILE_COLUMNS: &[&str] = &["id", "workflow_id", "name", "path", "st_mtime", "size"];
+
+/// `SET` clause that writes a file's `st_mtime` (`?1`), `size` (`?2`), and `sha256` (`?3`)
+/// together, in one statement so no concurrent write can interleave. A stored size and hash
+/// describe the file at its stored mtime, so they are kept only when `st_mtime` is unchanged
+/// and no new pair is given. Otherwise they are replaced by the new pair, or
+/// cleared without one: a stale hash is never stored next to a new mtime. Clearing `st_mtime`
+/// clears all three. `clear_if` is an extra SQL condition that clears them even when a new
+/// pair is given (for example a path change, where a client may echo back the old file's
+/// pair); pass `"0"` for none.
+pub(crate) fn file_stat_set_sql(clear_if: &str) -> String {
+    let column = |name: &str, param: &str| {
+        format!(
+            "{name} = CASE WHEN ?1 IS NULL OR ({clear_if}) THEN NULL \
+             WHEN {param} IS NOT NULL THEN {param} \
+             WHEN st_mtime IS NULL OR st_mtime <> ?1 THEN NULL \
+             ELSE {name} END"
+        )
+    };
+    format!(
+        "st_mtime = ?1, {}, {}",
+        column("size", "?2"),
+        column("sha256", "?3")
+    )
+}
+
+/// True if two mtimes differ, or only one is set. Mtimes round-trip exactly as f64 through
+/// JSON and SQLite, so any difference is a real change.
+pub(crate) fn mtime_changed(old: Option<f64>, new: Option<f64>) -> bool {
+    old != new
+}
+
+/// Check that a file's `size` and `sha256` are set together. `require_mtime` (for new
+/// records) also requires an `st_mtime` with them; on updates a missing `st_mtime` clears all
+/// three.
+pub(crate) fn validate_size_sha256(
+    file_id: Option<i64>,
+    name: &str,
+    st_mtime: Option<f64>,
+    size: Option<i64>,
+    sha256: Option<&str>,
+    require_mtime: bool,
+) -> Result<(), String> {
+    let file = match file_id {
+        Some(id) => format!("file_id={}", id),
+        None => format!("file '{}'", name),
+    };
+    if size.is_some() != sha256.is_some() {
+        return Err(format!("{}: size and sha256 must be set together", file));
+    }
+    if size.is_some_and(|n| n < 0) {
+        return Err(format!("{}: size must not be negative", file));
+    }
+    if let Some(h) = sha256
+        && !(h.len() == 64
+            && h.bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
+    {
+        return Err(format!(
+            "{}: sha256 must be 64 lowercase hex characters",
+            file
+        ));
+    }
+    if require_mtime && size.is_some() && st_mtime.is_none() {
+        return Err(format!("{}: size and sha256 require st_mtime", file));
+    }
+    Ok(())
+}
 
 impl FilesApiImpl {
     pub fn new(context: ApiContext) -> Self {
@@ -122,6 +189,18 @@ where
             file,
             context.get().0.clone()
         );
+        if let Err(msg) = validate_size_sha256(
+            None,
+            &file.name,
+            file.st_mtime,
+            file.size,
+            file.sha256.as_deref(),
+            true,
+        ) {
+            return Ok(CreateFileResponse::UnprocessableContentErrorResponse(
+                message_error_response(msg),
+            ));
+        }
 
         let result = match sqlx::query!(
             r#"
@@ -130,15 +209,19 @@ where
                 workflow_id,
                 name,
                 path,
-                st_mtime
+                st_mtime,
+                size,
+                sha256
             )
-            VALUES ($1, $2, $3, $4)
+            VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING rowid AS "id!"
             "#,
             file.workflow_id,
             file.name,
             file.path,
             file.st_mtime,
+            file.size,
+            file.sha256,
         )
         .fetch_one(self.context.pool.as_ref())
         .await
@@ -200,6 +283,18 @@ where
             let mut seen: std::collections::HashSet<&str> =
                 std::collections::HashSet::with_capacity(body.files.len());
             for file in &body.files {
+                if let Err(msg) = validate_size_sha256(
+                    None,
+                    &file.name,
+                    file.st_mtime,
+                    file.size,
+                    file.sha256.as_deref(),
+                    true,
+                ) {
+                    return Ok(CreateFilesResponse::UnprocessableContentErrorResponse(
+                        message_error_response(msg),
+                    ));
+                }
                 if !seen.insert(file.name.as_str()) {
                     return Ok(CreateFilesResponse::UnprocessableContentErrorResponse(
                         message_error_response(format!(
@@ -218,7 +313,7 @@ where
             Err(e) => return Err(database_error_with_msg(e, "Failed to begin transaction")),
         };
 
-        // 4 bound parameters per row × 500 rows = 2000 params, well under SQLite's
+        // 6 bound parameters per row × 500 rows = 3000 params, well under SQLite's
         // SQLITE_MAX_VARIABLE_NUMBER limit (32766 since 3.32).
         const ROWS_PER_INSERT: usize = 500;
         let mut id_by_name: std::collections::HashMap<String, i64> =
@@ -226,13 +321,15 @@ where
 
         for chunk in body.files.chunks(ROWS_PER_INSERT) {
             let mut qb = sqlx::QueryBuilder::<sqlx::Sqlite>::new(
-                "INSERT INTO file (workflow_id, name, path, st_mtime) ",
+                "INSERT INTO file (workflow_id, name, path, st_mtime, size, sha256) ",
             );
             qb.push_values(chunk, |mut row, file| {
                 row.push_bind(file.workflow_id)
                     .push_bind(&file.name)
                     .push_bind(&file.path)
-                    .push_bind(file.st_mtime);
+                    .push_bind(file.st_mtime)
+                    .push_bind(file.size)
+                    .push_bind(&file.sha256);
             });
             qb.push(" RETURNING id, name");
 
@@ -335,7 +432,7 @@ where
         );
 
         let record = match sqlx::query!(
-            "SELECT id, workflow_id, name, path, st_mtime FROM file WHERE id = $1",
+            "SELECT id, workflow_id, name, path, st_mtime, size, sha256 FROM file WHERE id = $1",
             id
         )
         .fetch_optional(self.context.pool.as_ref())
@@ -358,6 +455,8 @@ where
             name: record.name,
             path: record.path,
             st_mtime: record.st_mtime,
+            size: record.size,
+            sha256: record.sha256,
         };
 
         debug!(
@@ -408,12 +507,14 @@ where
                     ,f.name
                     ,f.path
                     ,f.st_mtime
+                    ,f.size
+                    ,f.sha256
                 FROM file f
                 JOIN job_output_file jof ON f.id = jof.file_id
             "
             .to_string()
         } else {
-            "SELECT id, workflow_id, name, path, st_mtime FROM file".to_string()
+            "SELECT id, workflow_id, name, path, st_mtime, size, sha256 FROM file".to_string()
         };
 
         // Build WHERE clause conditions
@@ -503,6 +604,8 @@ where
                 name: record.get("name"),
                 path: record.get("path"),
                 st_mtime: record.get("st_mtime"),
+                size: record.get("size"),
+                sha256: record.get("sha256"),
             });
         }
 
@@ -630,6 +733,12 @@ where
             if f.exists && !f.st_mtime.is_some_and(f64::is_finite) {
                 return unprocessable(format!("file_id={} exists but has no valid st_mtime", f.id));
             }
+            if !f.exists && (f.size.is_some() || f.sha256.is_some()) {
+                return unprocessable(format!(
+                    "file_id={} does not exist but has a size or sha256",
+                    f.id
+                ));
+            }
         }
         let mut response = models::FileStatsResponse::default();
         if ids.is_empty() {
@@ -651,9 +760,11 @@ where
         }
         .map_err(|e| database_lock_aware_error(e, "Failed to begin transaction"))?;
 
-        let stored: std::collections::HashMap<i64, Option<f64>> =
-            sqlx::query_as::<_, (i64, Option<f64>)>(
-                "SELECT f.id, f.st_mtime FROM json_each(?1) j \
+        // Per file: stored st_mtime and whether a size or sha256 is stored.
+        let stored: std::collections::HashMap<i64, (Option<f64>, bool)> =
+            sqlx::query_as::<_, (i64, Option<f64>, bool)>(
+                "SELECT f.id, f.st_mtime, (f.size IS NOT NULL OR f.sha256 IS NOT NULL) \
+                 FROM json_each(?1) j \
                  CROSS JOIN file f ON f.id = j.value AND f.workflow_id = ?2",
             )
             .bind(to_json(&ids))
@@ -662,6 +773,7 @@ where
             .await
             .map_err(|e| database_error_with_msg(e, "Failed to read file mtimes"))?
             .into_iter()
+            .map(|(id, mtime, has_hash)| (id, (mtime, has_hash)))
             .collect();
         if stored.len() != ids.len() {
             let bad: Vec<String> = ids
@@ -677,28 +789,41 @@ where
             ));
         }
 
-        // Same rules and 10 ms tolerance (filesystem timestamp precision) the client used.
-        let mut updates: Vec<(i64, Option<f64>)> = Vec::new();
+        // Same exact-mtime rules the client used.
+        // `updates` holds (id, st_mtime, size, sha256) for every write; `changed_ids` only the
+        // files whose mtime changed, which reset jobs.
+        let mut updates: Vec<(i64, Option<f64>, Option<i64>, Option<&str>)> = Vec::new();
+        let mut changed_ids: Vec<i64> = Vec::new();
         let mut missing_ids: Vec<i64> = Vec::new();
         for f in &body.files {
-            let reason = match (f.exists, stored[&f.id], f.st_mtime) {
-                (true, Some(old), Some(new)) if (old - new).abs() > 0.01 => Some("modified"),
-                (true, None, _) => Some("appeared"),
-                (false, Some(_), _) => Some("disappeared"),
+            let (stored_mtime, stored_has_hash) = stored[&f.id];
+            let st_mtime = if f.exists { f.st_mtime } else { None };
+            if let Err(msg) =
+                validate_size_sha256(Some(f.id), "", st_mtime, f.size, f.sha256.as_deref(), false)
+            {
+                return unprocessable(msg);
+            }
+            let reason = match (f.exists, stored_mtime) {
+                (true, Some(_)) if mtime_changed(stored_mtime, st_mtime) => Some("modified"),
+                (true, None) => Some("appeared"),
+                (false, Some(_)) => Some("disappeared"),
                 _ => None,
             };
             if let Some(reason) = reason {
-                updates.push((f.id, if f.exists { f.st_mtime } else { None }));
+                changed_ids.push(f.id);
                 response.changed_files.push(models::FileStatChange {
                     file_id: f.id,
                     reason: reason.to_string(),
                 });
             }
+            // Also record a size and hash for an unchanged file that has none yet.
+            if reason.is_some() || (f.sha256.is_some() && !stored_has_hash) {
+                updates.push((f.id, st_mtime, f.size, f.sha256.as_deref()));
+            }
             if !f.exists {
                 missing_ids.push(f.id);
             }
         }
-        let changed_ids: Vec<i64> = updates.iter().map(|(id, _)| *id).collect();
 
         // Jobs to reset, in the order of precedence of their reason.
         let mut seeds: std::collections::BTreeMap<i64, (String, i64, &'static str)> =
@@ -799,9 +924,12 @@ where
         if dry_run {
             return Ok(UpdateFileStatsResponse::SuccessfulResponse(response));
         }
-        for (id, st_mtime) in &updates {
-            sqlx::query("UPDATE file SET st_mtime = ? WHERE id = ?")
+        let update_sql = format!("UPDATE file SET {} WHERE id = ?4", file_stat_set_sql("0"));
+        for (id, st_mtime, size, sha256) in &updates {
+            sqlx::query(sqlx::AssertSqlSafe(update_sql.as_str()))
                 .bind(st_mtime)
+                .bind(size)
+                .bind(sha256)
                 .bind(id)
                 .execute(&mut *tx)
                 .await
@@ -821,11 +949,11 @@ where
         tx.commit()
             .await
             .map_err(|e| database_lock_aware_error(e, "Failed to commit transaction"))?;
-        if !updates.is_empty() || !response.reset_jobs.is_empty() {
+        if !changed_ids.is_empty() || !response.reset_jobs.is_empty() {
             info!(
                 "File stats applied workflow_id={} changed_files={} reset_jobs={}",
                 workflow_id,
-                updates.len(),
+                changed_ids.len(),
                 response.reset_jobs.len()
             );
         }
@@ -859,25 +987,40 @@ where
             }
         };
 
-        // Update the file record using COALESCE to only update non-null fields
-        // Exception: st_mtime should always be updated, even if null
-        let result = match sqlx::query!(
-            r#"
-            UPDATE file
-            SET
-                name = COALESCE($1, name),
-                path = COALESCE($2, path),
-                st_mtime = $3
-            WHERE id = $4 AND workflow_id = $5
-            "#,
-            body.name,
-            body.path,
+        if let Err(msg) = validate_size_sha256(
+            Some(id),
+            &body.name,
             body.st_mtime,
-            id,
-            body.workflow_id,
-        )
-        .execute(self.context.pool.as_ref())
-        .await
+            body.size,
+            body.sha256.as_deref(),
+            false,
+        ) {
+            return Ok(UpdateFileResponse::UnprocessableContentErrorResponse(
+                message_error_response(msg),
+            ));
+        }
+
+        // One statement, so the stat rules see the row it writes. name and path update only
+        // when set. st_mtime is always written, even if null, together with size and sha256
+        // (see file_stat_set_sql); a new path also clears a stored size and hash.
+        let update_sql = format!(
+            "UPDATE file SET {}, name = COALESCE(?4, name), path = COALESCE(?5, path) \
+             WHERE id = ?6 AND workflow_id = ?7",
+            file_stat_set_sql("?5 IS NOT NULL AND ?5 != path")
+        );
+        let mut tx = begin_immediate(&self.context.pool)
+            .await
+            .map_err(|e| database_lock_aware_error(e, "Failed to begin transaction"))?;
+        let result = match sqlx::query(sqlx::AssertSqlSafe(update_sql.as_str()))
+            .bind(body.st_mtime)
+            .bind(body.size)
+            .bind(&body.sha256)
+            .bind(&body.name)
+            .bind(&body.path)
+            .bind(id)
+            .bind(body.workflow_id)
+            .execute(&mut *tx)
+            .await
         {
             Ok(result) => result,
             Err(e) => {
@@ -886,6 +1029,7 @@ where
         };
 
         if result.rows_affected() == 0 {
+            drop(tx);
             let pool = self.context.pool.as_ref();
             return Ok(if super::workflow_id_mismatch(pool, "file", id).await? {
                 UpdateFileResponse::UnprocessableContentErrorResponse(
@@ -895,6 +1039,9 @@ where
                 UpdateFileResponse::NotFoundErrorResponse(resource_not_found_response("File", id))
             });
         }
+        tx.commit()
+            .await
+            .map_err(|e| database_lock_aware_error(e, "Failed to commit transaction"))?;
 
         // Return the updated file by fetching it again
         let updated_file = match self.get_file(id, context).await? {

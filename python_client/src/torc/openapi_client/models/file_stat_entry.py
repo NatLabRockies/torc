@@ -17,7 +17,7 @@ import pprint
 import re  # noqa: F401
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictFloat, StrictInt
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictFloat, StrictInt, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional, Union
 from typing import Optional, Set
 from typing_extensions import Self
@@ -28,8 +28,10 @@ class FileStatEntry(BaseModel):
     """ # noqa: E501
     exists: StrictBool = Field(description="Whether the file exists.")
     id: StrictInt = Field(description="File ID. Must belong to the workflow in the request path.")
+    sha256: Optional[StrictStr] = Field(default=None, description="SHA-256 of the contents (lowercase hex). Sent only for workflows with `enable_ro_crate`.")
+    size: Optional[StrictInt] = Field(default=None, description="Size in bytes. Sent only for workflows with `enable_ro_crate`, together with `sha256`.")
     st_mtime: Optional[Union[StrictFloat, StrictInt]] = Field(default=None, description="Modification time in seconds since the Unix epoch. Required when `exists` is true.")
-    __properties: ClassVar[List[str]] = ["exists", "id", "st_mtime"]
+    __properties: ClassVar[List[str]] = ["exists", "id", "sha256", "size", "st_mtime"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -70,6 +72,16 @@ class FileStatEntry(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # set to None if sha256 (nullable) is None
+        # and model_fields_set contains the field
+        if self.sha256 is None and "sha256" in self.model_fields_set:
+            _dict['sha256'] = None
+
+        # set to None if size (nullable) is None
+        # and model_fields_set contains the field
+        if self.size is None and "size" in self.model_fields_set:
+            _dict['size'] = None
+
         # set to None if st_mtime (nullable) is None
         # and model_fields_set contains the field
         if self.st_mtime is None and "st_mtime" in self.model_fields_set:
@@ -89,6 +101,8 @@ class FileStatEntry(BaseModel):
         _obj = cls.model_validate({
             "exists": obj.get("exists"),
             "id": obj.get("id"),
+            "sha256": obj.get("sha256"),
+            "size": obj.get("size"),
             "st_mtime": obj.get("st_mtime")
         })
         return _obj

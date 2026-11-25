@@ -227,7 +227,12 @@ fn entry_with_payload(
         output_files: Some(
             output_files
                 .into_iter()
-                .map(|(file_id, st_mtime)| models::OutputFileStat { file_id, st_mtime })
+                .map(|(file_id, st_mtime)| models::OutputFileStat {
+                    file_id,
+                    st_mtime,
+                    size: None,
+                    sha256: None,
+                })
                 .collect(),
         ),
         slurm_stats: Some(stats),
@@ -368,4 +373,306 @@ fn test_batch_complete_jobs_applies_output_mtimes_and_slurm_stats() {
     assert!(response.completed.is_empty());
     assert_eq!(mtime(out2), Some(333.0));
     assert_eq!(stats_for(job2).len(), 1);
+}
+
+/// For an RO-Crate workflow, an accepted completion stores each output's size and SHA-256
+/// and creates the output File and CreateAction entities in the same transaction. A rejected
+/// completion writes none of them. `update_file` and `update_file_stats` clear a stored size
+/// and hash when `st_mtime` (or the path) changes without a new pair, and reject a size
+/// without a hash, as do `create_file` and `create_files`.
+#[test]
+#[serial(batch_complete_inmem)]
+fn test_batch_complete_jobs_stores_hashes_and_ro_crate_entities() {
+    let server = start_in_memory_server();
+    let config = &server.config;
+
+    let mut workflow = models::WorkflowModel::new(
+        "batch_complete_ro_crate".to_string(),
+        "test_user".to_string(),
+    );
+    workflow.enable_ro_crate = Some(true);
+    let workflow = apis::workflows_api::create_workflow(config, workflow).unwrap();
+    let workflow_id = workflow.id.unwrap();
+    let new_file = |name: &str| {
+        apis::files_api::create_file(
+            config,
+            models::FileModel::new(workflow_id, name.to_string(), format!("/tmp/{name}.txt")),
+        )
+        .unwrap()
+        .id
+        .unwrap()
+    };
+    let input = new_file("in");
+    let out1 = new_file("out1");
+    let out2 = new_file("out2");
+    let new_job = |name: &str, output: i64| {
+        let mut job = models::JobModel::new(workflow_id, name.into(), "true".into());
+        job.input_file_ids = Some(vec![input]);
+        job.output_file_ids = Some(vec![output]);
+        apis::jobs_api::create_job(config, job).unwrap().id.unwrap()
+    };
+    let job1 = new_job("job1", out1);
+    let job2 = new_job("job2", out2);
+    WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    )
+    .initialize(true)
+    .expect("Failed to initialize workflow");
+    let run_id = apis::workflows_api::get_workflow(config, workflow_id)
+        .unwrap()
+        .run_id
+        .unwrap();
+    let compute_node_id = create_test_compute_node(config, workflow_id).id.unwrap();
+
+    let hash = "ab".repeat(32);
+    let entry = |run_id: i64, job_id: i64, file_id: i64, size: Option<i64>, sha: Option<&str>| {
+        let mut entry = entry_with_payload(workflow_id, run_id, compute_node_id, job_id, vec![]);
+        entry.output_files = Some(vec![models::OutputFileStat {
+            file_id,
+            st_mtime: 500.0,
+            size,
+            sha256: sha.map(str::to_string),
+        }]);
+        entry
+    };
+    let complete = |entry: models::JobCompletionEntry| {
+        apis::workflows_api::batch_complete_jobs(
+            config,
+            workflow_id,
+            models::BatchCompleteJobsRequest {
+                completions: vec![entry],
+            },
+        )
+        .unwrap()
+    };
+    let file = |file_id| apis::files_api::get_file(config, file_id).unwrap();
+    let entities = || {
+        apis::ro_crate_api::list_ro_crate_entities(
+            config,
+            workflow_id,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap()
+        .items
+    };
+    let action_id = format!("#job-{}-attempt-1", job1);
+
+    // Rejected (stale run): no stats, no entities.
+    let response = complete(entry(run_id + 1, job1, out1, Some(7), Some(&hash)));
+    assert!(response.completed.is_empty());
+    let f = file(out1);
+    assert_eq!((f.st_mtime, f.size, f.sha256), (None, None, None));
+    assert!(
+        !entities()
+            .iter()
+            .any(|e| e.file_id == Some(out1) || e.entity_id == action_id)
+    );
+
+    // Accepted: stats and entities written together.
+    let response = complete(entry(run_id, job1, out1, Some(7), Some(&hash)));
+    assert_eq!(response.completed, vec![job1], "{:?}", response.errors);
+    let f = file(out1);
+    assert_eq!(
+        (f.st_mtime, f.size, f.sha256.as_deref()),
+        (Some(500.0), Some(7), Some(hash.as_str()))
+    );
+    let all = entities();
+    let file_entity = all.iter().find(|e| e.file_id == Some(out1)).unwrap();
+    assert_eq!(file_entity.entity_id, "/tmp/out1.txt");
+    assert_eq!(file_entity.metadata["contentSize"], 7);
+    assert_eq!(file_entity.metadata["sha256"], hash.as_str());
+    assert_eq!(
+        file_entity.metadata["prov:wasGeneratedBy"]["@id"],
+        action_id
+    );
+    assert_eq!(
+        file_entity.metadata["prov:wasDerivedFrom"]["@id"],
+        "/tmp/in.txt"
+    );
+    let action = all.iter().find(|e| e.entity_id == action_id).unwrap();
+    assert_eq!(action.metadata["name"], "job1");
+    assert_eq!(action.metadata["object"]["@id"], "/tmp/in.txt");
+    assert_eq!(action.metadata["result"][0]["@id"], "/tmp/out1.txt");
+
+    // A size without a hash is ignored, but the mtime, the completion, and the entities still
+    // apply.
+    let response = complete(entry(run_id, job2, out2, Some(7), None));
+    assert_eq!(response.completed, vec![job2], "{:?}", response.errors);
+    let f = file(out2);
+    assert_eq!((f.st_mtime, f.size, f.sha256), (Some(500.0), None, None));
+    let all = entities();
+    let out2_entity = all.iter().find(|e| e.file_id == Some(out2)).unwrap();
+    assert!(!out2_entity.metadata.contains_key("sha256"));
+    let action2 = format!("#job-{}-attempt-1", job2);
+    let action2 = all.iter().find(|e| e.entity_id == action2).unwrap();
+    assert_eq!(action2.metadata["result"][0]["@id"], "/tmp/out2.txt");
+
+    // create_file and create_files reject a size without a hash, or a pair without an mtime.
+    let mut bad = models::FileModel::new(workflow_id, "bad".into(), "/tmp/bad".into());
+    bad.size = Some(1);
+    assert!(apis::files_api::create_file(config, bad.clone()).is_err());
+    bad.sha256 = Some(hash.clone());
+    assert!(apis::files_api::create_file(config, bad.clone()).is_err());
+    assert!(
+        apis::files_api::create_files(
+            config,
+            models::FilesModel {
+                files: vec![bad.clone()]
+            }
+        )
+        .is_err()
+    );
+    bad.st_mtime = Some(1.0);
+    assert!(apis::files_api::create_file(config, bad).is_ok());
+
+    // update_file: the same mtime keeps the stored hash; a new mtime alone clears it, even
+    // one only 5 ms later; a new mtime with a new pair stores it; a new path clears it; a size
+    // alone is rejected.
+    let mut update = file(out1);
+    update.size = None;
+    update.sha256 = None;
+    let f = apis::files_api::update_file(config, out1, update.clone()).unwrap();
+    assert_eq!(f.sha256.as_deref(), Some(hash.as_str()));
+    update.st_mtime = Some(500.005);
+    let f = apis::files_api::update_file(config, out1, update.clone()).unwrap();
+    assert_eq!((f.st_mtime, f.size, f.sha256), (Some(500.005), None, None));
+    update.size = Some(8);
+    update.sha256 = Some("cd".repeat(32));
+    let f = apis::files_api::update_file(config, out1, update.clone()).unwrap();
+    assert_eq!((f.st_mtime, f.size), (Some(500.005), Some(8)));
+    update.size = None;
+    update.sha256 = None;
+    update.path = "/tmp/out1_moved.txt".into();
+    let f = apis::files_api::update_file(config, out1, update.clone()).unwrap();
+    assert_eq!((f.st_mtime, f.size, f.sha256), (Some(500.005), None, None));
+    update.size = Some(9);
+    assert!(
+        apis::files_api::update_file(config, out1, update.clone()).is_err(),
+        "size without sha256"
+    );
+    update.size = Some(8);
+    update.sha256 = Some("cd".repeat(32));
+    apis::files_api::update_file(config, out1, update).unwrap();
+
+    // update_file_stats follows the same rule: a new mtime alone clears the stored pair.
+    let stat = |exists: bool, st_mtime: Option<f64>, sha: Option<String>| {
+        apis::files_api::update_file_stats(
+            config,
+            workflow_id,
+            models::FileStatsRequest {
+                files: vec![models::FileStatEntry {
+                    id: out1,
+                    exists,
+                    st_mtime,
+                    size: sha.as_ref().map(|_| 10),
+                    sha256: sha,
+                }],
+            },
+            Some(false),
+        )
+        .is_ok()
+    };
+    assert!(stat(true, Some(700.0), None));
+    let f = file(out1);
+    assert_eq!((f.st_mtime, f.size, f.sha256), (Some(700.0), None, None));
+    assert!(stat(true, Some(800.0), Some("ef".repeat(32))));
+    let f = file(out1);
+    assert_eq!((f.st_mtime, f.size), (Some(800.0), Some(10)));
+    assert!(stat(false, None, None));
+    let f = file(out1);
+    assert_eq!((f.st_mtime, f.size, f.sha256), (None, None, None));
+}
+
+/// A user entity that happens to use a job's CreateAction ID (here a Dataset) is not a
+/// CreateAction, so completion leaves it untouched instead of merging run metadata into it.
+#[test]
+#[serial(batch_complete_inmem)]
+fn test_batch_complete_jobs_skips_non_action_entity_with_action_id() {
+    let server = start_in_memory_server();
+    let config = &server.config;
+
+    let mut workflow =
+        models::WorkflowModel::new("batch_complete_collision".to_string(), "u".to_string());
+    workflow.enable_ro_crate = Some(true);
+    let workflow = apis::workflows_api::create_workflow(config, workflow).unwrap();
+    let workflow_id = workflow.id.unwrap();
+    let output = apis::files_api::create_file(
+        config,
+        models::FileModel::new(workflow_id, "out".into(), "/tmp/out.txt".into()),
+    )
+    .unwrap()
+    .id
+    .unwrap();
+    let mut job = models::JobModel::new(workflow_id, "job".into(), "true".into());
+    job.output_file_ids = Some(vec![output]);
+    let job_id = apis::jobs_api::create_job(config, job).unwrap().id.unwrap();
+    WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    )
+    .initialize(true)
+    .expect("Failed to initialize workflow");
+    let run_id = apis::workflows_api::get_workflow(config, workflow_id)
+        .unwrap()
+        .run_id
+        .unwrap();
+    let compute_node_id = create_test_compute_node(config, workflow_id).id.unwrap();
+
+    let action_id = format!("#job-{}-attempt-1", job_id);
+    let metadata = serde_json::json!({ "@id": action_id, "@type": "Dataset", "name": "mine" });
+    let dataset = apis::ro_crate_entities_api::create_ro_crate_entity(
+        config,
+        models::RoCrateEntityModel {
+            id: None,
+            workflow_id,
+            file_id: None,
+            entity_id: action_id.clone(),
+            entity_type: "Dataset".into(),
+            metadata: serde_json::from_value(metadata).unwrap(),
+        },
+    )
+    .unwrap();
+
+    let response = apis::workflows_api::batch_complete_jobs(
+        config,
+        workflow_id,
+        models::BatchCompleteJobsRequest {
+            completions: vec![entry_with_payload(
+                workflow_id,
+                run_id,
+                compute_node_id,
+                job_id,
+                vec![(output, 500.0)],
+            )],
+        },
+    )
+    .unwrap();
+    assert_eq!(response.completed, vec![job_id]);
+
+    let entities = apis::ro_crate_api::list_ro_crate_entities(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap()
+    .items;
+    let after = entities
+        .iter()
+        .find(|e| e.entity_id == action_id)
+        .expect("Dataset entity");
+    assert_eq!(after.entity_type, "Dataset");
+    assert_eq!(after.metadata, dataset.metadata);
 }
