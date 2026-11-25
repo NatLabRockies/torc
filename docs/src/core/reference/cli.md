@@ -1667,6 +1667,12 @@ Schedule compute nodes using Slurm
 - `-p`, `--poll-interval <POLL_INTERVAL>` — Poll interval in seconds. Default: `60`
 - `--scheduler-config-id <SCHEDULER_CONFIG_ID>` — Scheduler config ID
 - `--start-one-worker-per-node` — Start one worker per node. Default: `false`
+- `--suppress-actions` — Suppress the workflow's pending `schedule_nodes` actions before submitting,
+  so the workers started here do not also fire them. Default: `false`
+- `--suppress-all` — Suppress every `schedule_nodes` action that has not executed, including later
+  stages' actions that are not pending yet. Implies `--suppress-actions`. Default: `false`
+- `--no-prompts` — Do not prompt about pending `schedule_nodes` actions; let the workers fire them
+  unless a suppress option is given. Default: `false`
 
 ## `torc slurm parse-logs`
 

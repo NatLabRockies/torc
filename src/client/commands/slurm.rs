@@ -453,6 +453,16 @@ EXAMPLES:
         /// "suppress" answer, so no prompt is shown.
         #[arg(long, default_value = "false")]
         suppress_actions: bool,
+        /// Suppress every `schedule_nodes` action that has not executed, including later stages'
+        /// actions that are not pending yet, before submitting.
+        ///
+        /// Use this when you take over allocation for the rest of a re-run. `--suppress-actions`
+        /// only covers actions that would fire now; a later stage's re-armed action still fires at
+        /// its full `num_allocations` once its jobs become ready. Schedule later stages yourself
+        /// with further `schedule-nodes` calls (or `torc watch --auto-schedule`). Re-arm an action
+        /// with `torc workflows reset-action`. Implies `--suppress-actions`.
+        #[arg(long, default_value = "false")]
+        suppress_all: bool,
         /// Do not prompt about pending `schedule_nodes` actions; proceed and let the worker(s) fire
         /// them (unless `--suppress-actions` is also given). Use for non-interactive/scripted runs.
         #[arg(long, default_value = "false")]
@@ -1357,6 +1367,7 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
             claim_backoff_max_secs,
             scheduler_config_id,
             suppress_actions,
+            suppress_all,
             no_prompts,
         } => {
             let user_name = get_env_user_name();
@@ -1425,13 +1436,18 @@ pub fn handle_slurm_commands(config: &Configuration, command: &SlurmCommands, fo
             // here. Detect that and let the user decide: suppress those actions, proceed anyway, or
             // cancel. `--suppress-actions` answers "suppress"; `--no-prompts` (or a non-interactive
             // stdin) answers "proceed" unless `--suppress-actions` is set.
-            if let Err(e) = handle_pending_schedule_actions(
-                config,
-                wf_id,
-                *num_hpc_jobs,
-                *suppress_actions,
-                *no_prompts,
-            ) {
+            let result = if *suppress_all {
+                suppress_all_schedule_actions(config, wf_id)
+            } else {
+                handle_pending_schedule_actions(
+                    config,
+                    wf_id,
+                    *num_hpc_jobs,
+                    *suppress_actions,
+                    *no_prompts,
+                )
+            };
+            if let Err(e) = result {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
@@ -1773,6 +1789,26 @@ pub fn handle_pending_schedule_actions(
                 persistent_skipped
             );
         }
+    }
+    Ok(())
+}
+
+/// `--suppress-all`: suppress every unexecuted `schedule_nodes` action so only allocations the
+/// user requests are submitted for the rest of the run.
+fn suppress_all_schedule_actions(config: &Configuration, workflow_id: i64) -> Result<(), String> {
+    let (suppressed, persistent_skipped) =
+        crate::client::commands::recover::suppress_all_schedule_actions(config, workflow_id)?;
+    eprintln!(
+        "Suppressed {} schedule_nodes action(s); later stages will not be scheduled automatically. \
+         Re-arm one with: torc workflows reset-action {} <action_id>",
+        suppressed, workflow_id
+    );
+    if persistent_skipped > 0 {
+        eprintln!(
+            "  Note: {} persistent action(s) cannot be suppressed by this server (API < 1.1.0) \
+             and will still fire, submitting their own allocations.",
+            persistent_skipped
+        );
     }
     Ok(())
 }

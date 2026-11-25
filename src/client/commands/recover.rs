@@ -2519,18 +2519,39 @@ pub fn suppress_satisfied_schedule_actions(
     config: &Configuration,
     workflow_id: i64,
 ) -> Result<usize, String> {
+    suppress_schedule_actions(config, workflow_id, schedule_action_already_satisfied)
+        .map(|(_, persistent_skipped)| persistent_skipped)
+}
+
+/// Suppress every non-recovery `schedule_nodes` action that has not executed, whether or not its
+/// trigger is satisfied yet. Used by `torc slurm schedule-nodes --suppress-all` when the user takes
+/// over allocation for the rest of the run, so later stages' re-armed actions don't fire at their
+/// full spec size either. Returns `(suppressed, persistent_skipped)`.
+pub fn suppress_all_schedule_actions(
+    config: &Configuration,
+    workflow_id: i64,
+) -> Result<(usize, usize), String> {
+    suppress_schedule_actions(config, workflow_id, |a| {
+        a.action_type == "schedule_nodes" && !a.is_recovery && !a.executed
+    })
+}
+
+/// Suppress the workflow actions matching `filter`. Returns `(suppressed, persistent_skipped)`.
+fn suppress_schedule_actions(
+    config: &Configuration,
+    workflow_id: i64,
+    filter: impl Fn(&crate::models::WorkflowActionModel) -> bool,
+) -> Result<(usize, usize), String> {
     let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
         .map_err(|e| format!("Failed to list workflow actions: {}", e))?;
-    let satisfied: Vec<_> = actions
-        .into_iter()
-        .filter(schedule_action_already_satisfied)
-        .collect();
+    let satisfied: Vec<_> = actions.into_iter().filter(|a| filter(a)).collect();
     if satisfied.is_empty() {
-        return Ok(0);
+        return Ok((0, 0));
     }
     let use_suppress =
         crate::client::version_check::check_version(config).server_supports_action_outcomes();
 
+    let mut suppressed = 0;
     let mut persistent_skipped = 0;
     for action in satisfied {
         let Some(action_id) = action.id else {
@@ -2558,9 +2579,10 @@ pub fn suppress_satisfied_schedule_actions(
             WAIT_FOR_HEALTHY_DATABASE_MINUTES,
         ) {
             Ok(true) => {
+                suppressed += 1;
                 info!(
-                    "Suppressed already-satisfied {} schedule_nodes action {} to avoid duplicate allocations",
-                    action.trigger_type, action_id
+                    "Suppressed {} schedule_nodes action_id={} workflow_id={} to avoid duplicate allocations",
+                    action.trigger_type, action_id, workflow_id
                 );
             }
             Ok(false) => {
@@ -2575,7 +2597,7 @@ pub fn suppress_satisfied_schedule_actions(
         }
     }
 
-    Ok(persistent_skipped)
+    Ok((suppressed, persistent_skipped))
 }
 
 /// Submit allocations using an existing scheduler config via `torc slurm schedule-nodes`.

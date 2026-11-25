@@ -902,6 +902,65 @@ fn test_suppress_satisfied_schedule_actions(start_server: &ServerProcess) {
     );
 }
 
+/// `schedule-nodes --suppress-all` suppresses every unexecuted non-recovery `schedule_nodes`
+/// action, including a later stage's action whose gate is not satisfied yet (which
+/// `suppress_satisfied_schedule_actions` leaves armed). `run_commands` and recovery actions are
+/// left alone.
+#[rstest]
+fn test_suppress_all_schedule_actions(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "suppress_all_schedule_workflow");
+    let workflow_id = workflow.id.unwrap();
+    let schedule_config =
+        json!({"scheduler_type": "slurm", "scheduler_id": 1, "num_allocations": 5});
+    let create = |trigger: &str, action_type: &str, cfg: serde_json::Value, recovery: bool| {
+        let job_ids = (trigger != "on_workflow_start").then(|| vec![1]);
+        let mut body = workflow_action(workflow_id, trigger, action_type, cfg, job_ids);
+        body.is_recovery = recovery;
+        apis::workflow_actions_api::create_workflow_action(config, workflow_id, body)
+            .expect("Failed to create action")
+            .id
+            .unwrap()
+    };
+
+    let start = create(
+        "on_workflow_start",
+        "schedule_nodes",
+        schedule_config.clone(),
+        false,
+    );
+    // trigger_count 0 < required_triggers 1: not satisfied yet.
+    let later_stage = create(
+        "on_jobs_ready",
+        "schedule_nodes",
+        schedule_config.clone(),
+        false,
+    );
+    let run_cmd = create(
+        "on_jobs_ready",
+        "run_commands",
+        json!({"commands": ["echo hi"]}),
+        false,
+    );
+    let recovery = create("on_jobs_ready", "schedule_nodes", schedule_config, true);
+
+    let (suppressed, persistent_skipped) =
+        torc::client::commands::recover::suppress_all_schedule_actions(config, workflow_id)
+            .expect("suppress_all_schedule_actions failed");
+    assert_eq!((suppressed, persistent_skipped), (2, 0));
+
+    let actions = apis::workflow_actions_api::get_workflow_actions(config, workflow_id)
+        .expect("Failed to get workflow actions");
+    let find = |id: i64| actions.iter().find(|a| a.id == Some(id)).unwrap();
+    for id in [start, later_stage] {
+        assert_eq!(find(id).state.as_deref(), Some("suppressed"));
+        assert!(find(id).executed);
+    }
+    for id in [run_cmd, recovery] {
+        assert!(!find(id).executed, "action {id} should be left untouched");
+    }
+}
+
 /// The `torc workflows update-action` CLI maps individual typed flags
 /// (`--num-allocations`, `--max-parallel-jobs`, `--start-one-worker-per-node`,
 /// ...) into the merge body. Updated fields change; untouched fields survive.
