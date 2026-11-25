@@ -3537,6 +3537,8 @@ fn stat_entry(file: &models::FileModel) -> models::FileStatEntry {
         id: file.id.unwrap(),
         exists: st_mtime.is_some(),
         st_mtime,
+        size: None,
+        sha256: None,
     }
 }
 
@@ -3734,6 +3736,8 @@ fn test_file_stats_endpoint_rejects_invalid_batches(start_server: &ServerProcess
         id,
         exists,
         st_mtime,
+        size: None,
+        sha256: None,
     };
     let fid = file.id.unwrap();
     for files in [

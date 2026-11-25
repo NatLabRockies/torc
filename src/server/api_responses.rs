@@ -46,6 +46,8 @@ pub enum CreateFileResponse {
     ForbiddenErrorResponse(models::ErrorResponse),
     /// Not found error response
     NotFoundErrorResponse(models::ErrorResponse),
+    /// Unprocessable content error response
+    UnprocessableContentErrorResponse(models::ErrorResponse),
     /// Default error response
     DefaultErrorResponse(models::ErrorResponse),
 }

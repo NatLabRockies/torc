@@ -1794,6 +1794,7 @@ pub async fn list_files(
         (status = 200, description = "Successful response", body = models::FileModel),
         (status = 403, description = "Forbidden", body = models::ErrorResponse),
         (status = 404, description = "Not found", body = models::ErrorResponse),
+        (status = 422, description = "Unprocessable content", body = models::ErrorResponse),
         (status = 500, description = "Internal server error", body = models::ErrorResponse)
     )
 )]

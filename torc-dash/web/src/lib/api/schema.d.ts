@@ -1795,6 +1795,15 @@ export interface components {
             id?: number | null;
             name: string;
             path: string;
+            /** @description SHA-256 of the contents (lowercase hex), recorded with `st_mtime`. Same rules as `size`. */
+            sha256?: string | null;
+            /**
+             * Format: int64
+             * @description Size in bytes, recorded with `st_mtime`. Set only for workflows with
+             *     `enable_ro_crate`. Set together with `sha256`. When `st_mtime` changes without a new
+             *     `size` and `sha256`, or the path changes, the server clears both.
+             */
+            size?: number | null;
             /** Format: double */
             st_mtime?: number | null;
             /** Format: int64 */
@@ -1816,6 +1825,13 @@ export interface components {
              * @description File ID. Must belong to the workflow in the request path.
              */
             id: number;
+            /** @description SHA-256 of the contents (lowercase hex). Sent only for workflows with `enable_ro_crate`. */
+            sha256?: string | null;
+            /**
+             * Format: int64
+             * @description Size in bytes. Sent only for workflows with `enable_ro_crate`, together with `sha256`.
+             */
+            size?: number | null;
             /**
              * Format: double
              * @description Modification time in seconds since the Unix epoch. Required when `exists` is true.
@@ -2314,6 +2330,13 @@ export interface components {
         OutputFileStat: {
             /** Format: int64 */
             file_id: number;
+            /** @description SHA-256 of the contents (lowercase hex). Sent only for workflows with `enable_ro_crate`. */
+            sha256?: string | null;
+            /**
+             * Format: int64
+             * @description Size in bytes. Sent only for workflows with `enable_ro_crate`, together with `sha256`.
+             */
+            size?: number | null;
             /** Format: double */
             st_mtime: number;
         };
@@ -4405,6 +4428,15 @@ export interface operations {
             };
             /** @description Not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable content */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

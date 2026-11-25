@@ -493,6 +493,10 @@ fn test_reconcile_resolves_relative_paths_and_retries_metadata() {
         .run_id
         .unwrap();
     let compute_node_id = create_test_compute_node(config, workflow_id).id.unwrap();
+    // A stale mtime left from a previous run must not count as restored.
+    let mut stale = apis::files_api::get_file(config, output_id).unwrap();
+    stale.st_mtime = Some(1.0);
+    apis::files_api::update_file(config, output_id, stale).unwrap();
     OfflineJournal::open_or_create(
         &base.path().join("torc_output"),
         workflow_id,
@@ -511,24 +515,25 @@ fn test_reconcile_resolves_relative_paths_and_retries_metadata() {
     // First reconcile: the completion is accepted, but the output is not visible yet.
     let summary = reconcile(config, workflow_id, run_id, base.path(), "table").expect("reconcile");
     assert_eq!(summary.accepted, 1);
-    assert!(
+    assert_eq!(
         apis::files_api::get_file(config, output_id)
             .unwrap()
-            .st_mtime
-            .is_none(),
-        "no mtime while the output is missing"
+            .st_mtime,
+        Some(1.0),
+        "the stale mtime stays while the output is missing"
     );
 
     // The output appears (relative to the submission directory); re-running retries it.
     std::fs::write(base.path().join("rel_out.txt"), "done").expect("write output");
     let summary = reconcile(config, workflow_id, run_id, base.path(), "table").expect("reconcile");
     assert_eq!(summary.accepted, 0, "the completion was already accepted");
+    let st_mtime = apis::files_api::get_file(config, output_id)
+        .unwrap()
+        .st_mtime
+        .unwrap();
     assert!(
-        apis::files_api::get_file(config, output_id)
-            .unwrap()
-            .st_mtime
-            .is_some(),
-        "re-running reconcile should restore the mtime"
+        st_mtime > 1.0,
+        "re-running reconcile should replace the stale mtime"
     );
 }
 
@@ -579,6 +584,8 @@ fn test_reconcile_applies_journaled_mtimes_and_slurm_stats() {
     entry.output_files = Some(vec![models::OutputFileStat {
         file_id: output_id,
         st_mtime: 1_700_000_000.25,
+        size: None,
+        sha256: None,
     }]);
     let mut stats = models::SlurmStatsModel::new(workflow_id, job_id, run_id, 1);
     stats.slurm_job_id = Some("12345".to_string());
@@ -617,4 +624,96 @@ fn test_reconcile_applies_journaled_mtimes_and_slurm_stats() {
     assert_eq!(stats.len(), 1);
     assert_eq!(stats[0].slurm_job_id.as_deref(), Some("12345"));
     assert_eq!(stats[0].max_rss_bytes, Some(1 << 20));
+}
+
+/// For an RO-Crate workflow, reconcile adds the on-disk stats (with size and SHA-256) for
+/// outputs a journal entry lacks, and the server stores them and creates the output File
+/// and CreateAction entities with the replayed completion, as for an online completion.
+#[test]
+#[serial(offline_reconcile)]
+fn test_reconcile_ro_crate_entities_from_replayed_completion() {
+    let server = start_server();
+    let config = &server.config;
+    let base = tempfile::tempdir().expect("tempdir");
+
+    let mut workflow =
+        models::WorkflowModel::new("offline_reconcile_ro_crate".to_string(), "u".to_string());
+    workflow.enable_ro_crate = Some(true);
+    let workflow = apis::workflows_api::create_workflow(config, workflow).unwrap();
+    let workflow_id = workflow.id.unwrap();
+    let output_path = base.path().join("out.txt");
+    let output_id = apis::files_api::create_file(
+        config,
+        models::FileModel::new(
+            workflow_id,
+            "out".to_string(),
+            output_path.to_string_lossy().to_string(),
+        ),
+    )
+    .unwrap()
+    .id
+    .unwrap();
+    let mut job = models::JobModel::new(workflow_id, "producer".into(), "true".into());
+    job.output_file_ids = Some(vec![output_id]);
+    let job_id = apis::jobs_api::create_job(config, job).unwrap().id.unwrap();
+    WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    )
+    .initialize(true)
+    .expect("Failed to initialize");
+    let run_id = apis::workflows_api::get_workflow(config, workflow_id)
+        .unwrap()
+        .run_id
+        .unwrap();
+    let compute_node_id = create_test_compute_node(config, workflow_id).id.unwrap();
+    OfflineJournal::open_or_create(
+        &base.path().join("torc_output"),
+        workflow_id,
+        run_id,
+        "node",
+    )
+    .unwrap()
+    .append(&completion_entry(
+        workflow_id,
+        run_id,
+        compute_node_id,
+        job_id,
+    ))
+    .unwrap();
+    std::fs::write(&output_path, "done").unwrap();
+
+    let summary = reconcile(config, workflow_id, run_id, base.path(), "table").expect("reconcile");
+    assert_eq!(summary.accepted, 1);
+
+    let expected_sha256 =
+        torc::client::ro_crate_utils::compute_file_sha256(output_path.to_str().unwrap()).unwrap();
+    let file = apis::files_api::get_file(config, output_id).unwrap();
+    assert!(file.st_mtime.is_some());
+    assert_eq!(file.size, Some(4));
+    assert_eq!(file.sha256.as_deref(), Some(expected_sha256.as_str()));
+    let entities = apis::ro_crate_api::list_ro_crate_entities(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap()
+    .items;
+    let file_entity = entities
+        .iter()
+        .find(|e| e.file_id == Some(output_id))
+        .expect("output File entity");
+    assert_eq!(file_entity.metadata["sha256"], expected_sha256.as_str());
+    let action_id = format!("#job-{}-attempt-1", job_id);
+    assert_eq!(
+        file_entity.metadata["prov:wasGeneratedBy"]["@id"],
+        action_id
+    );
+    assert!(entities.iter().any(|e| e.entity_id == action_id));
 }

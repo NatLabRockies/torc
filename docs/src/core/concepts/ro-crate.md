@@ -76,6 +76,17 @@ Automatically generated File entities include:
 
 File entities include SHA256 hashes for integrity verification when the file is readable.
 
+For these workflows, Torc also stores each file's size and SHA256 on its file record, together with
+its modification time: the client records them for input files during initialization, and the job
+runner records them for output files when a job completes. The server builds the File entities from
+those values, in the same transaction as the job completion. Workflows without `enable_ro_crate`
+record only modification times, so they pay no hashing cost.
+
+A stored size and SHA256 describe the file at its stored modification time. When the modification
+time (or the path) changes without a new size and SHA256, for example because the file could not be
+read or the update came from an older client, the server clears them, so a stale hash is never
+stored next to a new modification time. The File entity is then built without them.
+
 Job provenance is captured as CreateAction entities:
 
 ```json

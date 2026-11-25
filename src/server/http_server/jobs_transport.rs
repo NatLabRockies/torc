@@ -1921,6 +1921,66 @@ where
         Ok(deactivated)
     }
 
+    /// Write one output file's `st_mtime`, `size`, and `sha256` for an accepted completion.
+    /// Returns the file ID if written. A file that is not an output of the job in its
+    /// workflow is skipped with a warning and never costs the completion. A size without a
+    /// hash (or the reverse) is ignored with a warning and the mtime is still written. Without
+    /// a size and hash, a stored pair is cleared when the mtime changes (see
+    /// `file_stat_set_sql`).
+    async fn apply_output_file_stat_tx(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+        workflow_id: i64,
+        job_id: i64,
+        file: &models::OutputFileStat,
+    ) -> Result<Option<i64>, sqlx::Error> {
+        // A bad size/hash pair is dropped, but the mtime is still written.
+        let (size, sha256) = match crate::server::api::files::validate_size_sha256(
+            Some(file.file_id),
+            "",
+            Some(file.st_mtime),
+            file.size,
+            file.sha256.as_deref(),
+            false,
+        ) {
+            Ok(()) => (file.size, file.sha256.as_deref()),
+            Err(msg) => {
+                log::warn!(
+                    "Ignoring output file size and sha256 workflow_id={} job_id={}: {}",
+                    workflow_id,
+                    job_id,
+                    msg
+                );
+                (None, None)
+            }
+        };
+        let sql = format!(
+            "UPDATE file SET {} WHERE id = ?4 AND workflow_id = ?5 \
+             AND EXISTS (SELECT 1 FROM job_output_file WHERE job_id = ?6 AND file_id = file.id)",
+            crate::server::api::files::file_stat_set_sql("0")
+        );
+        let updated = sqlx::query(sqlx::AssertSqlSafe(sql.as_str()))
+            .bind(file.st_mtime)
+            .bind(size)
+            .bind(sha256)
+            .bind(file.file_id)
+            .bind(workflow_id)
+            .bind(job_id)
+            .execute(&mut **tx)
+            .await?;
+        if updated.rows_affected() == 0 {
+            log::warn!(
+                "Skipping st_mtime for file_id={}: not an output file of the job \
+                 workflow_id={} job_id={}",
+                file.file_id,
+                workflow_id,
+                job_id
+            );
+            return Ok(None);
+        }
+        Ok(Some(file.file_id))
+    }
+
     async fn apply_job_completion_state_tx(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
@@ -2176,35 +2236,39 @@ where
         // Invalid metadata is skipped, never written, and never costs the completion: a
         // file_id must be an output of this job in its workflow (enforced by the WHERE
         // clause), and the stats must identify this job, run, and attempt.
+        let mut accepted_output_ids = Vec::new();
         for file in output_files.iter().flatten() {
-            let updated = sqlx::query!(
-                r#"
-                UPDATE file SET st_mtime = ?
-                WHERE id = ? AND workflow_id = ?
-                  AND EXISTS (SELECT 1 FROM job_output_file WHERE job_id = ? AND file_id = file.id)
-                "#,
-                file.st_mtime,
-                file.file_id,
+            if let Some(file_id) = self
+                .apply_output_file_stat_tx(tx, job_workflow_id, id, file)
+                .await
+                .map_err(|e| {
+                    CompletionMutationError::Transport(database_lock_aware_error(
+                        e,
+                        "Failed to update output file stats",
+                    ))
+                })?
+            {
+                accepted_output_ids.push(file_id);
+            }
+        }
+        // Provenance describes successful jobs only.
+        if status == models::JobStatus::Completed {
+            crate::server::api::ro_crate::create_output_entities_tx(
+                tx,
                 job_workflow_id,
-                id
+                run_id,
+                id,
+                &job_name,
+                attempt_id,
+                &accepted_output_ids,
             )
-            .execute(&mut **tx)
             .await
             .map_err(|e| {
                 CompletionMutationError::Transport(database_lock_aware_error(
                     e,
-                    "Failed to update output file st_mtime",
+                    "Failed to create RO-Crate output entities",
                 ))
             })?;
-            if updated.rows_affected() == 0 {
-                log::warn!(
-                    "Skipping st_mtime for file_id={}: not an output file of the job \
-                     workflow_id={} job_id={}",
-                    file.file_id,
-                    job_workflow_id,
-                    id
-                );
-            }
         }
         let slurm_stats = slurm_stats.filter(|stats| {
             let valid = stats.workflow_id == job_workflow_id

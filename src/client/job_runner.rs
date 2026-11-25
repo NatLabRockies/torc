@@ -1881,9 +1881,21 @@ impl JobRunner {
             .unwrap_or(0);
         let mut metadata_failures = 0usize;
         for chunk in entries.chunks(FLUSH_BATCH_SIZE) {
-            let request = BatchCompleteJobsRequest {
-                completions: chunk.to_vec(),
-            };
+            let mut completions = chunk.to_vec();
+            if self.server_stores_completion_metadata {
+                // The server writes the journaled output stats and creates the RO-Crate
+                // entities with each completion. Add stats for outputs the runner could not
+                // check while offline.
+                metadata_failures += crate::client::commands::reconcile::add_missing_output_stats(
+                    &self.config,
+                    self.workflow_id,
+                    &mut completions,
+                    current_run_id,
+                    None,
+                    self.workflow.enable_ro_crate == Some(true),
+                );
+            }
+            let request = BatchCompleteJobsRequest { completions };
             let response = self.send_with_retries(|| {
                 Self::box_retry_error(apis::workflows_api::batch_complete_jobs(
                     &self.config,
@@ -1897,27 +1909,15 @@ impl JobRunner {
                     self.workflow_id, err.job_id, err.message
                 );
             }
-            // The server applied the journaled output mtimes and Slurm stats with each
-            // completion. RO-Crate provenance (and mtimes of files the runner could not check
-            // offline) still need restoring before the journal is cleared.
-            // Include completions an earlier flush already delivered (now rejected as
-            // duplicates): if that flush failed partway, their metadata may still be missing.
-            let (completed, lookup_failures) =
-                crate::client::commands::reconcile::completions_to_restore(
-                    &self.config,
-                    chunk,
-                    &response.completed,
-                    current_run_id,
-                );
-            metadata_failures += lookup_failures;
-            metadata_failures +=
-                crate::client::commands::reconcile::restore_offline_output_metadata(
-                    &self.config,
-                    self.workflow_id,
-                    &completed,
-                    None,
-                    self.server_stores_completion_metadata,
-                );
+            metadata_failures += crate::client::commands::reconcile::restore_after_replay(
+                &self.config,
+                self.workflow_id,
+                chunk,
+                &response.completed,
+                current_run_id,
+                None,
+                self.server_stores_completion_metadata,
+            );
         }
         if metadata_failures > 0 {
             // Keep the journal: `torc workflows reconcile` retries metadata restoration for
@@ -2495,9 +2495,10 @@ impl JobRunner {
         Ok(())
     }
 
-    /// Validate that all expected output files exist and return their mtimes. The mtimes
-    /// are sent with the completion entry; the server records them only if it accepts the
-    /// completion.
+    /// Validate that all expected output files exist and return their mtimes, plus size and
+    /// SHA-256 when the workflow has `enable_ro_crate`. The stats are sent with the completion
+    /// entry; the server records them, and creates the RO-Crate entities, only if it accepts
+    /// the completion.
     fn validate_output_files(
         &mut self,
         job_id: i64,
@@ -2516,7 +2517,8 @@ impl JobRunner {
         );
 
         let mut missing_files = Vec::new();
-        let mut observed_mtimes = Vec::new();
+        let mut observed = Vec::new();
+        let ro_crate = self.workflow.enable_ro_crate == Some(true);
 
         // Fetch file models and check existence
         for file_id in output_file_ids {
@@ -2558,7 +2560,13 @@ impl JobRunner {
                                 "Output file '{}' exists with mtime {}",
                                 file_model.path, st_mtime
                             );
-                            observed_mtimes.push((*file_id, st_mtime));
+                            observed.push(output_file_stat(
+                                *file_id,
+                                st_mtime,
+                                &metadata,
+                                &file_model.path,
+                                ro_crate,
+                            ));
                         }
                         Err(e) => {
                             error!(
@@ -2567,7 +2575,13 @@ impl JobRunner {
                             );
                             // Use current time as fallback
                             let st_mtime = Utc::now().timestamp() as f64;
-                            observed_mtimes.push((*file_id, st_mtime));
+                            observed.push(output_file_stat(
+                                *file_id,
+                                st_mtime,
+                                &metadata,
+                                &file_model.path,
+                                ro_crate,
+                            ));
                         }
                     }
                 }
@@ -2593,10 +2607,7 @@ impl JobRunner {
             job_id
         );
 
-        Ok(observed_mtimes
-            .into_iter()
-            .map(|(file_id, st_mtime)| OutputFileStat { file_id, st_mtime })
-            .collect())
+        Ok(observed)
     }
 
     /// Write an accepted completion's output mtimes and Slurm stats with separate requests,
@@ -2620,6 +2631,8 @@ impl JobRunner {
                 }
             };
             file_model.st_mtime = Some(stat.st_mtime);
+            file_model.size = stat.size;
+            file_model.sha256 = stat.sha256.clone();
             match self.send_with_retries(|| {
                 Self::box_retry_error(apis::files_api::update_file(
                     &self.config,
@@ -2644,20 +2657,26 @@ impl JobRunner {
         }
     }
 
-    /// Mirror the output mtimes the server accepted into the file model cache, then create
-    /// RO-Crate entities for them (which read local file contents, so stay client-side).
+    /// Mirror the output stats the server accepted into the file model cache. A current
+    /// server created the RO-Crate entities in the completion transaction; for an older
+    /// server, create them here.
     fn apply_accepted_output_files(&mut self, job_id: i64, output_files: &[OutputFileStat]) {
         let mut updated_file_models = Vec::with_capacity(output_files.len());
         for stat in output_files {
             if let Some(file_model) = self.file_model_cache.get_mut(&stat.file_id) {
                 file_model.st_mtime = Some(stat.st_mtime);
+                file_model.size = stat.size;
+                file_model.sha256 = stat.sha256.clone();
                 updated_file_models.push(file_model.clone());
             }
         }
-        self.create_ro_crate_entities_for_output_files(job_id, &updated_file_models);
+        if !self.server_stores_completion_metadata {
+            self.create_ro_crate_entities_for_output_files(job_id, &updated_file_models);
+        }
     }
 
-    /// Create RO-Crate entities for output files if `enable_ro_crate` is enabled on the workflow.
+    /// Create RO-Crate entities for output files if `enable_ro_crate` is enabled on the
+    /// workflow. Only for servers older than HTTP API 1.1.0, which do not create them.
     ///
     /// Creates both File entities with provenance and a CreateAction entity for the job.
     /// This is a non-blocking operation - warnings are logged but errors don't fail the job.
@@ -4185,6 +4204,25 @@ fn expand_slurm_nodelist(compact: &str) -> Vec<String> {
             );
             vec![compact.to_string()]
         }
+    }
+}
+
+/// Build the completion stats for an existing output file. Size and SHA-256 are recorded
+/// only when `hash` is set (the workflow has `enable_ro_crate`); both are omitted if the file
+/// cannot be read, and the server then clears any stored pair.
+fn output_file_stat(
+    file_id: i64,
+    st_mtime: f64,
+    metadata: &fs::Metadata,
+    path: &str,
+    hash: bool,
+) -> OutputFileStat {
+    let (size, sha256) = crate::client::ro_crate_utils::file_size_and_sha256(metadata, path, hash);
+    OutputFileStat {
+        file_id,
+        st_mtime,
+        size,
+        sha256,
     }
 }
 

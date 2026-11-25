@@ -3910,6 +3910,8 @@ impl WorkflowSpec {
                 name: file_spec.name.clone(),
                 path: file_spec.path.clone(),
                 st_mtime,
+                size: None,
+                sha256: None,
             });
         }
 

@@ -8,26 +8,32 @@ A client&#39;s observation of one file on disk, sent to &#x60;update_file_stats&
     FileStatEntry(;
         exists=nothing,
         id=nothing,
+        sha256=nothing,
+        size=nothing,
         st_mtime=nothing,
     )
 
     - exists::Bool : Whether the file exists.
     - id::Int64 : File ID. Must belong to the workflow in the request path.
+    - sha256::String : SHA-256 of the contents (lowercase hex). Sent only for workflows with &#x60;enable_ro_crate&#x60;.
+    - size::Int64 : Size in bytes. Sent only for workflows with &#x60;enable_ro_crate&#x60;, together with &#x60;sha256&#x60;.
     - st_mtime::Float64 : Modification time in seconds since the Unix epoch. Required when &#x60;exists&#x60; is true.
 """
 Base.@kwdef mutable struct FileStatEntry <: OpenAPI.APIModel
     exists::Union{Nothing, Bool} = nothing
     id::Union{Nothing, Int64} = nothing
+    sha256::Union{Nothing, String} = nothing
+    size::Union{Nothing, Int64} = nothing
     st_mtime::Union{Nothing, Float64} = nothing
 
-    function FileStatEntry(exists, id, st_mtime, )
-        o = new(exists, id, st_mtime, )
+    function FileStatEntry(exists, id, sha256, size, st_mtime, )
+        o = new(exists, id, sha256, size, st_mtime, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type FileStatEntry
 
-const _property_types_FileStatEntry = Dict{Symbol,String}(Symbol("exists")=>"Bool", Symbol("id")=>"Int64", Symbol("st_mtime")=>"Float64", )
+const _property_types_FileStatEntry = Dict{Symbol,String}(Symbol("exists")=>"Bool", Symbol("id")=>"Int64", Symbol("sha256")=>"String", Symbol("size")=>"Int64", Symbol("st_mtime")=>"Float64", )
 OpenAPI.property_type(::Type{ FileStatEntry }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_FileStatEntry[name]))}
 
 function OpenAPI.check_required(o::FileStatEntry)
@@ -39,6 +45,8 @@ end
 function OpenAPI.validate_properties(o::FileStatEntry)
     OpenAPI.validate_property(FileStatEntry, Symbol("exists"), o.exists)
     OpenAPI.validate_property(FileStatEntry, Symbol("id"), o.id)
+    OpenAPI.validate_property(FileStatEntry, Symbol("sha256"), o.sha256)
+    OpenAPI.validate_property(FileStatEntry, Symbol("size"), o.size)
     OpenAPI.validate_property(FileStatEntry, Symbol("st_mtime"), o.st_mtime)
 end
 
@@ -46,6 +54,11 @@ function OpenAPI.validate_property(::Type{ FileStatEntry }, name::Symbol, val)
 
 
     if name === Symbol("id")
+        OpenAPI.validate_param(name, "FileStatEntry", :format, val, "int64")
+    end
+
+
+    if name === Symbol("size")
         OpenAPI.validate_param(name, "FileStatEntry", :format, val, "int64")
     end
 

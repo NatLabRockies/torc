@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id, workflow_id, name, path, st_mtime FROM file WHERE id = $1",
+  "query": "\n            SELECT id, workflow_id, name, path, st_mtime, size, sha256\n            FROM file\n            WHERE workflow_id = $1 AND st_mtime IS NOT NULL\n            ",
   "describe": {
     "columns": [
       {
@@ -57,6 +57,28 @@
             "name": "st_mtime"
           }
         }
+      },
+      {
+        "name": "size",
+        "ordinal": 5,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "file",
+            "name": "size"
+          }
+        }
+      },
+      {
+        "name": "sha256",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "file",
+            "name": "sha256"
+          }
+        }
       }
     ],
     "parameters": {
@@ -67,8 +89,10 @@
       false,
       false,
       false,
+      true,
+      true,
       true
     ]
   },
-  "hash": "b8453c6a01551c01ff4685cea9b71228a57d6df7553bcdfa535ed0971634c50d"
+  "hash": "6522d93b09f1e8ba33e71dfef9a41f9d493f101d3aa01ef7ff5f80b6925bb26a"
 }

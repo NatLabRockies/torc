@@ -526,6 +526,21 @@ fn test_auto_ro_crate_output_files_on_job_completion(start_server: &ServerProces
     );
     assert_eq!(metadata["prov:wasAttributedTo"]["@id"], "#torc-run-id-0");
 
+    // The runner recorded the output's size and SHA-256 on the file record with the
+    // completion, and the server built the entity from them.
+    let output_path = work_dir.join("output.json");
+    let expected_size = fs::metadata(&output_path).unwrap().len() as i64;
+    let expected_sha256 =
+        torc::client::ro_crate_utils::compute_file_sha256(output_path.to_str().unwrap()).unwrap();
+    let output_file = apis::files_api::get_file(config, output_file_id).unwrap();
+    assert_eq!(output_file.size, Some(expected_size));
+    assert_eq!(
+        output_file.sha256.as_deref(),
+        Some(expected_sha256.as_str())
+    );
+    assert_eq!(metadata["contentSize"], expected_size);
+    assert_eq!(metadata["sha256"], expected_sha256);
+
     let workflow_plan = items.iter().find(|e| e.entity_id == "#torc-workflow");
     assert!(
         workflow_plan.is_some(),
@@ -573,6 +588,64 @@ fn test_auto_ro_crate_output_files_on_job_completion(start_server: &ServerProces
     assert!(
         action_metadata["prov:hadPlan"].is_object(),
         "CreateAction should have prov:hadPlan"
+    );
+}
+
+/// Without `enable_ro_crate`, the runner records only the output's mtime: no size, no
+/// SHA-256, and no RO-Crate entities.
+#[rstest]
+fn test_auto_ro_crate_disabled_records_no_hash(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let work_dir = temp_dir.path();
+
+    let (workflow_id, _input_file_id, output_file_id, job_id) =
+        create_ro_crate_enabled_workflow(config, work_dir);
+    let mut workflow = apis::workflows_api::get_workflow(config, workflow_id).unwrap();
+    workflow.enable_ro_crate = Some(false);
+    apis::workflows_api::update_workflow(config, workflow_id, workflow).unwrap();
+    fs::write(work_dir.join("input.json"), r#"{"data": "input value"}"#).unwrap();
+    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false), None)
+        .expect("Failed to initialize jobs");
+
+    let workflow_id_str = workflow_id.to_string();
+    let cli_args = [
+        workflow_id_str.as_str(),
+        "--output-dir",
+        work_dir.to_str().unwrap(),
+        "--poll-interval",
+        "0.1",
+        "--max-parallel-jobs",
+        "1",
+    ];
+    run_jobs_cli_command(&cli_args, start_server).expect("Failed to run jobs");
+    assert_eq!(
+        apis::jobs_api::get_job(config, job_id).unwrap().status,
+        Some(models::JobStatus::Completed)
+    );
+
+    let output_file = apis::files_api::get_file(config, output_file_id).unwrap();
+    assert!(output_file.st_mtime.is_some());
+    assert_eq!(output_file.size, None);
+    assert_eq!(output_file.sha256, None);
+    let entities = apis::ro_crate_api::list_ro_crate_entities(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap()
+    .items;
+    assert!(
+        !entities
+            .iter()
+            .any(|e| e.file_id == Some(output_file_id) || is_job_create_action(e)),
+        "{:?}",
+        entities
     );
 }
 
@@ -1013,6 +1086,284 @@ fn test_auto_ro_crate_second_run_replaces_entities(start_server: &ServerProcess)
 
 /// Output files get st_mtime once their job completes. Re-initializing must not treat
 /// them as inputs (st_mtime is otherwise the server's input marker).
+/// A CreateAction pre-created by `ro-crate add-dataset -j` before the job runs must gain the
+/// job's tracked inputs and outputs at completion while keeping the dataset link.
+#[rstest]
+fn test_auto_ro_crate_completion_fills_precreated_create_action(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let work_dir = temp_dir.path();
+    let (workflow_id, _input_file_id, _output_file_id, job_id) =
+        create_ro_crate_enabled_workflow(config, work_dir);
+    fs::write(work_dir.join("input.json"), r#"{"data": "input"}"#).unwrap();
+    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false), None)
+        .expect("Failed to initialize jobs");
+
+    let dataset_dir = work_dir.join("ds");
+    fs::create_dir_all(&dataset_dir).unwrap();
+    fs::write(dataset_dir.join("part-0"), b"abc").unwrap();
+    let dataset_path = dataset_dir.to_string_lossy().to_string();
+    let workflow_id_str = workflow_id.to_string();
+    let job_id_str = job_id.to_string();
+    run_cli_command(
+        &[
+            "ro-crate",
+            "add-dataset",
+            &workflow_id_str,
+            "--name",
+            "ds",
+            "--path",
+            &dataset_path,
+            "-j",
+            &job_id_str,
+        ],
+        start_server,
+        None,
+    )
+    .expect("add-dataset failed");
+
+    run_jobs_cli_command(
+        &[
+            &workflow_id_str,
+            "--output-dir",
+            work_dir.to_str().unwrap(),
+            "--poll-interval",
+            "0.1",
+            "--max-parallel-jobs",
+            "1",
+        ],
+        start_server,
+    )
+    .expect("Failed to run jobs");
+
+    let action_id = format!("#job-{}-attempt-1", job_id);
+    let action = apis::ro_crate_api::list_ro_crate_entities(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap()
+    .items
+    .into_iter()
+    .find(|e| e.entity_id == action_id)
+    .expect("CreateAction");
+    let result = action.metadata["result"].as_array().expect("result array");
+    let has_ref = |id: &str| result.iter().any(|r| r["@id"] == id);
+    assert!(
+        has_ref(&format!("{dataset_path}/")),
+        "dataset link lost: {result:?}"
+    );
+    assert!(
+        result.iter().any(|r| r["@id"]
+            .as_str()
+            .is_some_and(|p| p.ends_with("output.json"))),
+        "tracked output missing: {result:?}"
+    );
+    assert!(action.metadata.contains_key("object"), "object missing");
+    assert!(
+        action.metadata.contains_key("prov:used"),
+        "prov:used missing"
+    );
+}
+
+/// Output provenance is written only by the completion transaction. Stats recorded later
+/// (update_file, update_file_stats) never change the output's File entity.
+#[rstest]
+fn test_auto_ro_crate_stats_updates_keep_output_entity(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let work_dir = temp_dir.path();
+    let (workflow_id, _input_file_id, output_file_id, job_id) =
+        create_ro_crate_enabled_workflow(config, work_dir);
+    fs::write(work_dir.join("input.json"), r#"{"data": "input"}"#).unwrap();
+    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false), None)
+        .expect("Failed to initialize jobs");
+    let workflow_id_str = workflow_id.to_string();
+    run_jobs_cli_command(
+        &[
+            &workflow_id_str,
+            "--output-dir",
+            work_dir.to_str().unwrap(),
+            "--poll-interval",
+            "0.1",
+            "--max-parallel-jobs",
+            "1",
+        ],
+        start_server,
+    )
+    .expect("Failed to run jobs");
+
+    let output_entity = || {
+        apis::ro_crate_api::list_ro_crate_entities(
+            config,
+            workflow_id,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap()
+        .items
+        .into_iter()
+        .find(|e| e.file_id == Some(output_file_id))
+        .expect("output entity")
+    };
+    let original = output_entity().metadata;
+    assert_eq!(
+        original["prov:wasGeneratedBy"]["@id"],
+        format!("#job-{}-attempt-1", job_id)
+    );
+
+    let mut output = apis::files_api::get_file(config, output_file_id).unwrap();
+    output.st_mtime = Some(output.st_mtime.unwrap() + 10.0);
+    output.size = Some(5);
+    output.sha256 = Some("cd".repeat(32));
+    apis::files_api::update_file(config, output_file_id, output.clone()).unwrap();
+    assert_eq!(output_entity().metadata, original);
+
+    // A malformed hash is rejected.
+    output.sha256 = Some("abc".to_string());
+    assert!(apis::files_api::update_file(config, output_file_id, output).is_err());
+
+    // Same for the bulk stats endpoint (initialize).
+    let st_mtime = apis::files_api::get_file(config, output_file_id)
+        .unwrap()
+        .st_mtime
+        .unwrap()
+        + 10.0;
+    let request = models::FileStatsRequest {
+        files: vec![models::FileStatEntry {
+            id: output_file_id,
+            exists: true,
+            st_mtime: Some(st_mtime),
+            size: Some(7),
+            sha256: Some("ef".repeat(32)),
+        }],
+    };
+    apis::files_api::update_file_stats(config, workflow_id, request, None).unwrap();
+    assert_eq!(output_entity().metadata, original);
+
+    // A path change clears the size and hash even when the client echoes the old pair back
+    // (as `torc files update --path` does).
+    let mut moved = apis::files_api::get_file(config, output_file_id).unwrap();
+    assert!(moved.sha256.is_some());
+    moved.path = "moved.json".to_string();
+    let moved = apis::files_api::update_file(config, output_file_id, moved).unwrap();
+    assert_eq!(moved.path, "moved.json");
+    assert_eq!(moved.size, None);
+    assert_eq!(moved.sha256, None);
+}
+
+/// A file can have only one producing job: creating a second producer is rejected, both
+/// singly and in a batch.
+#[rstest]
+fn test_second_producer_of_output_rejected(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let (workflow_id, _input_file_id, output_file_id, _job_id) =
+        create_ro_crate_enabled_workflow(config, temp_dir.path());
+    let mut second = models::JobModel::new(workflow_id, "rewrite".to_string(), "true".to_string());
+    second.output_file_ids = Some(vec![output_file_id]);
+    let err = apis::jobs_api::create_job(config, second.clone()).unwrap_err();
+    assert!(
+        format!("{err:?}").contains("only one job"),
+        "unexpected error: {err:?}"
+    );
+
+    // Two new jobs sharing a new output in one batch.
+    let file = apis::files_api::create_file(
+        config,
+        models::FileModel::new(workflow_id, "shared".to_string(), "shared.txt".to_string()),
+    )
+    .unwrap();
+    let job = |name: &str| {
+        let mut job = models::JobModel::new(workflow_id, name.to_string(), "true".to_string());
+        job.output_file_ids = Some(vec![file.id.unwrap()]);
+        job
+    };
+    let err = apis::jobs_api::create_jobs(config, models::JobsModel::new(vec![job("a"), job("b")]))
+        .unwrap_err();
+    assert!(
+        format!("{err:?}").contains("only one job"),
+        "unexpected error: {err:?}"
+    );
+}
+
+/// Reinitializing after an input's hash was cleared must drop the stale size/hash from its
+/// entity while keeping unrelated metadata.
+#[rstest]
+fn test_auto_ro_crate_reinit_drops_cleared_input_stats(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    let (workflow_id, input_file_id, _output_file_id, _job_id) =
+        create_ro_crate_enabled_workflow(config, temp_dir.path());
+    std::fs::write(temp_dir.path().join("input.json"), r#"{"data": "input"}"#).unwrap();
+
+    let input_entity = || {
+        apis::ro_crate_api::list_ro_crate_entities(
+            config,
+            workflow_id,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap()
+        .items
+        .into_iter()
+        .find(|e| e.file_id == Some(input_file_id))
+        .expect("input entity")
+    };
+
+    let mut input = apis::files_api::get_file(config, input_file_id).unwrap();
+    input.st_mtime = Some(1704153600.0);
+    input.size = Some(17);
+    input.sha256 = Some("ab".repeat(32));
+    apis::files_api::update_file(config, input_file_id, input).unwrap();
+    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false), None)
+        .expect("Failed to initialize jobs");
+    let mut entity = input_entity();
+    assert_eq!(entity.metadata["sha256"], "ab".repeat(32));
+    assert_eq!(entity.metadata["contentSize"], 17);
+
+    // Metadata added by another tool must survive the upsert.
+    entity
+        .metadata
+        .insert("keywords".to_string(), serde_json::json!("kept"));
+    apis::ro_crate_entities_api::update_ro_crate_entity(config, entity.id.unwrap(), entity)
+        .unwrap();
+
+    // An mtime-only update clears the stored size and hash.
+    let mut input = apis::files_api::get_file(config, input_file_id).unwrap();
+    input.st_mtime = Some(1704240000.0);
+    input.size = None;
+    input.sha256 = None;
+    apis::files_api::update_file(config, input_file_id, input).unwrap();
+    apis::workflows_api::initialize_jobs(config, workflow_id, Some(false), Some(false), None)
+        .expect("Failed to reinitialize jobs");
+
+    let metadata = input_entity().metadata;
+    assert!(
+        !metadata.contains_key("sha256"),
+        "stale sha256: {metadata:?}"
+    );
+    assert!(
+        !metadata.contains_key("contentSize"),
+        "stale size: {metadata:?}"
+    );
+    assert!(metadata["dateModified"].as_str().is_some());
+    assert_eq!(metadata["keywords"], "kept");
+}
+
 #[rstest]
 fn test_auto_ro_crate_initialize_skips_output_files_with_mtime(start_server: &ServerProcess) {
     let config = &start_server.config;

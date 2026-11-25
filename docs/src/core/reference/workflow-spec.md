@@ -147,6 +147,9 @@ When both workflow-level and job-level `env` maps are present, Torc merges them 
 created and stores the effective environment on the job. Job-level values win on key conflicts. Torc
 exports these variables before running the job's `invocation_script`, if any.
 
+A file can be an output of only one job. Creating a workflow where two jobs list the same file in
+`output_files` (or match it with `output_file_regexes`) fails.
+
 ## FileSpec
 
 Defines input/output file artifacts that establish implicit job dependencies.

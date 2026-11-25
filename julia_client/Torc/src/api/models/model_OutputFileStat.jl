@@ -7,24 +7,30 @@ An output file&#39;s modification time, as observed by the job runner at complet
 
     OutputFileStat(;
         file_id=nothing,
+        sha256=nothing,
+        size=nothing,
         st_mtime=nothing,
     )
 
     - file_id::Int64
+    - sha256::String : SHA-256 of the contents (lowercase hex). Sent only for workflows with &#x60;enable_ro_crate&#x60;.
+    - size::Int64 : Size in bytes. Sent only for workflows with &#x60;enable_ro_crate&#x60;, together with &#x60;sha256&#x60;.
     - st_mtime::Float64
 """
 Base.@kwdef mutable struct OutputFileStat <: OpenAPI.APIModel
     file_id::Union{Nothing, Int64} = nothing
+    sha256::Union{Nothing, String} = nothing
+    size::Union{Nothing, Int64} = nothing
     st_mtime::Union{Nothing, Float64} = nothing
 
-    function OutputFileStat(file_id, st_mtime, )
-        o = new(file_id, st_mtime, )
+    function OutputFileStat(file_id, sha256, size, st_mtime, )
+        o = new(file_id, sha256, size, st_mtime, )
         OpenAPI.validate_properties(o)
         return o
     end
 end # type OutputFileStat
 
-const _property_types_OutputFileStat = Dict{Symbol,String}(Symbol("file_id")=>"Int64", Symbol("st_mtime")=>"Float64", )
+const _property_types_OutputFileStat = Dict{Symbol,String}(Symbol("file_id")=>"Int64", Symbol("sha256")=>"String", Symbol("size")=>"Int64", Symbol("st_mtime")=>"Float64", )
 OpenAPI.property_type(::Type{ OutputFileStat }, name::Symbol) = Union{Nothing,eval(Base.Meta.parse(_property_types_OutputFileStat[name]))}
 
 function OpenAPI.check_required(o::OutputFileStat)
@@ -35,12 +41,19 @@ end
 
 function OpenAPI.validate_properties(o::OutputFileStat)
     OpenAPI.validate_property(OutputFileStat, Symbol("file_id"), o.file_id)
+    OpenAPI.validate_property(OutputFileStat, Symbol("sha256"), o.sha256)
+    OpenAPI.validate_property(OutputFileStat, Symbol("size"), o.size)
     OpenAPI.validate_property(OutputFileStat, Symbol("st_mtime"), o.st_mtime)
 end
 
 function OpenAPI.validate_property(::Type{ OutputFileStat }, name::Symbol, val)
 
     if name === Symbol("file_id")
+        OpenAPI.validate_param(name, "OutputFileStat", :format, val, "int64")
+    end
+
+
+    if name === Symbol("size")
         OpenAPI.validate_param(name, "OutputFileStat", :format, val, "int64")
     end
 

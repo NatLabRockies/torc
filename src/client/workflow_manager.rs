@@ -127,7 +127,7 @@ impl WorkflowManager {
     ///   - Ignore missing input files.
     pub fn initialize(&self, force: bool) -> Result<(), TorcError> {
         self.check_workflow()?;
-        let snapshot = self.snapshot_files(force)?;
+        let snapshot = self.snapshot_files(force, false)?;
         self.cleanup_output_files(false)?;
         match apis::workflows_api::reset_workflow_status(&self.config, self.workflow_id, None) {
             Ok(_) => {}
@@ -180,7 +180,7 @@ impl WorkflowManager {
             return Ok(active);
         }
         self.check_workflow()?;
-        let snapshot = self.snapshot_files(force)?;
+        let snapshot = self.snapshot_files(force, false)?;
         self.cleanup_output_files(false)?;
         match apis::workflows_api::reset_workflow_status(&self.config, self.workflow_id, None) {
             Ok(_) => {}
@@ -416,7 +416,7 @@ impl WorkflowManager {
     /// run_id) and runs the startup script.
     pub fn reinitialize(&self, force: bool, dry_run: bool) -> Result<(), TorcError> {
         self.check_workflow()?;
-        let snapshot = self.snapshot_files(force || dry_run)?;
+        let snapshot = self.snapshot_files(force, dry_run)?;
         if !dry_run {
             match apis::workflows_api::reset_workflow_status(&self.config, self.workflow_id, None) {
                 Ok(_) => {
@@ -459,7 +459,7 @@ impl WorkflowManager {
         }
 
         self.check_workflow()?;
-        let snapshot = self.snapshot_files(force || dry_run)?;
+        let snapshot = self.snapshot_files(force, dry_run)?;
         if dry_run {
             self.reinitialize_jobs_from(&snapshot, force, true)?;
             return Ok(None);
@@ -570,6 +570,8 @@ impl WorkflowManager {
                     if let Some(file_id) = file.id {
                         let mut updated_file = file.clone();
                         updated_file.st_mtime = None;
+                        updated_file.size = None;
+                        updated_file.sha256 = None;
 
                         match apis::files_api::update_file(&self.config, file_id, updated_file) {
                             Ok(_) => {
@@ -675,7 +677,7 @@ impl WorkflowManager {
                 );
 
                 // Create RO-Crate entities for input files if enabled
-                self.create_ro_crate_entities_for_input_files();
+                self.create_ro_crate_provenance_entities();
 
                 // Always create SoftwareApplication entities for torc binaries
                 match self.get_run_id() {
@@ -700,11 +702,11 @@ impl WorkflowManager {
         }
     }
 
-    /// Create RO-Crate entities for input files if `enable_ro_crate` is enabled on the workflow.
-    ///
-    /// Input files are identified as files with `st_mtime` set (they exist before the workflow runs).
+    /// Create the workflow plan and run RO-Crate entities if `enable_ro_crate` is enabled on
+    /// the workflow. The server creates the input file entities in `initialize_jobs`, from the
+    /// size and SHA-256 that `stat_files` recorded.
     /// This is a non-blocking operation - warnings are logged but errors don't fail initialization.
-    fn create_ro_crate_entities_for_input_files(&self) {
+    fn create_ro_crate_provenance_entities(&self) {
         // Fetch workflow to check enable_ro_crate flag
         let workflow = match apis::workflows_api::get_workflow(&self.config, self.workflow_id) {
             Ok(workflow) => workflow,
@@ -722,11 +724,6 @@ impl WorkflowManager {
             return;
         }
 
-        info!(
-            "Creating RO-Crate entities for input files in workflow {}",
-            self.workflow_id
-        );
-
         let run_id = match self.get_run_id() {
             Ok(run_id) => run_id,
             Err(e) => {
@@ -743,66 +740,12 @@ impl WorkflowManager {
             run_id,
             &workflow.name,
         );
-
-        // st_mtime is also set on output files once their job completes, so exclude any file
-        // a job produces; otherwise re-initializing after a run records outputs as inputs.
-        // A partial list would misclassify outputs, so skip input entities on any error.
-        let output_file_ids: std::collections::HashSet<i64> = match iter_files(
-            &self.config,
-            self.workflow_id,
-            FileListParams::new().with_is_output(true),
-        )
-        .collect::<Result<Vec<_>, _>>()
-        {
-            Ok(files) => files.into_iter().filter_map(|f| f.id).collect(),
-            Err(e) => {
-                warn!(
-                    "Skipping RO-Crate input entities for workflow {}: failed to list output files: {}",
-                    self.workflow_id, e
-                );
-                return;
-            }
-        };
-
-        // Collect all files with st_mtime set (input files)
-        let params = FileListParams::new();
-        let files_iterator = iter_files(&self.config, self.workflow_id, params);
-
-        let mut input_files: Vec<FileModel> = Vec::new();
-        for file_result in files_iterator {
-            match file_result {
-                Ok(file) => {
-                    // Input files have st_mtime set and are not produced by a job
-                    if file.st_mtime.is_some()
-                        && !file.id.is_some_and(|id| output_file_ids.contains(&id))
-                    {
-                        input_files.push(file);
-                    }
-                }
-                Err(e) => {
-                    warn!("Error iterating files for RO-Crate creation: {}", e);
-                }
-            }
-        }
-
-        // Create entities for input files
-        if !input_files.is_empty() {
-            debug!(
-                "Creating RO-Crate entities for {} input files",
-                input_files.len()
-            );
-            crate::client::ro_crate_utils::create_entities_for_input_files(
-                &self.config,
-                self.workflow_id,
-                &input_files,
-            );
-        }
     }
 
     /// Reinitialize jobs. Account for jobs that are new or have been reset.
     /// If force is false, return an error if required input files are missing.
     pub fn reinitialize_jobs(&self, force: bool, dry_run: bool) -> Result<(), TorcError> {
-        let snapshot = self.snapshot_files(force || dry_run)?;
+        let snapshot = self.snapshot_files(force, dry_run)?;
         self.reinitialize_jobs_from(&snapshot, force, dry_run)
     }
 
@@ -857,11 +800,12 @@ impl WorkflowManager {
         self.check_missing_required_files(&response, &snapshot.files, force)
     }
 
-    /// Stat the workflow's files before anything is changed. Unless force is true, fail early
-    /// if required input files are missing, using a dry run so the workflow is left untouched.
-    fn snapshot_files(&self, force: bool) -> Result<FileSnapshot, TorcError> {
-        let snapshot = self.stat_files()?;
-        if !force {
+    /// Stat the workflow's files before anything is changed. Unless force or dry_run is true,
+    /// fail early if required input files are missing, using a dry run so the workflow is left
+    /// untouched. A dry run skips hashing: the server detects changes by mtime only.
+    fn snapshot_files(&self, force: bool, dry_run: bool) -> Result<FileSnapshot, TorcError> {
+        let snapshot = self.stat_files(!dry_run)?;
+        if !force && !dry_run {
             let response = self.send_file_stats(&snapshot, true)?;
             self.check_missing_required_files(&response, &snapshot.files, false)?;
         }
@@ -906,13 +850,20 @@ impl WorkflowManager {
         &self,
         dry_run: bool,
     ) -> Result<(models::FileStatsResponse, HashMap<i64, FileModel>), TorcError> {
-        let snapshot = self.stat_files()?;
+        let snapshot = self.stat_files(!dry_run)?;
         let response = self.send_file_stats(&snapshot, dry_run)?;
         Ok((response, snapshot.files))
     }
 
-    /// List the workflow's files once and stat each path.
-    fn stat_files(&self) -> Result<FileSnapshot, TorcError> {
+    /// List the workflow's files once and stat each path. If `hash` is set and the workflow has
+    /// `enable_ro_crate`, also record the size and SHA-256 of each file that is new or
+    /// changed, or has none stored yet. Without them, the server clears a stored size and
+    /// hash when the mtime changes.
+    fn stat_files(&self, hash: bool) -> Result<FileSnapshot, TorcError> {
+        let ro_crate = apis::workflows_api::get_workflow(&self.config, self.workflow_id)
+            .map_err(|e| TorcError::ApiError(format!("Failed to get workflow: {}", e)))?
+            .enable_ro_crate
+            == Some(true);
         let mut files = HashMap::new();
         let mut entries = Vec::new();
         for file in iter_files(&self.config, self.workflow_id, FileListParams::new()) {
@@ -934,16 +885,29 @@ impl WorkflowManager {
                                 file.path
                             ))
                         })?;
+                    let st_mtime = mtime.as_secs_f64();
+                    let changed = file.sha256.is_none()
+                        || file
+                            .st_mtime
+                            .is_none_or(|old| (old - st_mtime).abs() > 0.01);
+                    let hash = hash && ro_crate && changed;
+                    let (size, sha256) = crate::client::ro_crate_utils::file_size_and_sha256(
+                        &metadata, &file.path, hash,
+                    );
                     models::FileStatEntry {
                         id,
                         exists: true,
-                        st_mtime: Some(mtime.as_secs_f64()),
+                        st_mtime: Some(st_mtime),
+                        size,
+                        sha256,
                     }
                 }
                 Err(_) => models::FileStatEntry {
                     id,
                     exists: false,
                     st_mtime: None,
+                    size: None,
+                    sha256: None,
                 },
             };
             entries.push(entry);
