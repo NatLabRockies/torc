@@ -1845,6 +1845,87 @@ fn test_on_jobs_ready_satisfied_schedule_action_not_rearmed_on_subset_reinitiali
     );
 }
 
+/// An on_jobs_ready schedule_nodes action that fired for a gate that is still Ready (its
+/// allocation has not started the job yet) must NOT be re-armed by a reinitialize that leaves the
+/// gate alone. The gate is not terminal, but it was not reset either: re-arming would submit a
+/// second allocation for the same job.
+#[rstest]
+fn test_on_jobs_ready_action_not_rearmed_when_ready_gate_untouched(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let workflow = create_test_workflow(config, "reinit_on_jobs_ready_ready_gate_untouched");
+    let workflow_id = workflow.id.unwrap();
+    let manager = WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    );
+
+    // Two independent roots: the gate (never runs) and another job that fails and is reset.
+    let gate_id = create_test_job(config, workflow_id, "gate")
+        .expect("create gate")
+        .id
+        .unwrap();
+    let other_id = create_test_job(config, workflow_id, "other")
+        .expect("create other")
+        .id
+        .unwrap();
+    let action_id = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            "on_jobs_ready",
+            "schedule_nodes",
+            schedule_nodes_config(),
+            Some(vec![gate_id]),
+        ),
+    )
+    .expect("create action")
+    .id
+    .unwrap();
+
+    manager.initialize(true).expect("initialize");
+    let run_id = manager.get_run_id().expect("run_id");
+    let compute_node_id = create_test_compute_node(config, workflow_id).expect("compute node");
+
+    wait_for_pending_action(config, workflow_id);
+    apis::workflow_actions_api::claim_action(
+        config,
+        workflow_id,
+        action_id,
+        ClaimActionRequest {
+            compute_node_id: Some(compute_node_id),
+        },
+    )
+    .expect("claim action");
+
+    run_job_to_status(
+        config,
+        workflow_id,
+        other_id,
+        run_id,
+        compute_node_id,
+        1,
+        JobStatus::Failed,
+    );
+    apis::workflows_api::reset_job_status(config, workflow_id, Some(true), None, None)
+        .expect("reset failed jobs");
+    manager.reinitialize(true, false).expect("reinitialize");
+
+    assert_eq!(
+        apis::jobs_api::get_job(config, gate_id)
+            .unwrap()
+            .status
+            .unwrap(),
+        JobStatus::Ready,
+        "gate should still be Ready (it never ran and was not reset)"
+    );
+    assert!(
+        fetch_action(config, workflow_id, action_id).executed,
+        "action for an untouched Ready gate must stay executed (no duplicate allocation)"
+    );
+}
+
 /// The keep-vs-re-arm decision is action-type-agnostic: a job-gated `run_commands` action whose
 /// gating job stays terminal across a *subset* re-run must NOT be re-armed, exactly like
 /// `schedule_nodes`. Re-running it would repeat its side effect (an archive, an upload, a

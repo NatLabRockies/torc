@@ -847,6 +847,25 @@ impl<C> Server<C> {
             }
         }
 
+        // Snapshot the action gate jobs that are not Ready before any status changes. A gate in this
+        // set that ends up Ready or Blocked was reset by this initialize, which is what re-arms its
+        // job-gated actions (see reset_actions_for_reinitialize).
+        let gates_not_ready_before =
+            match crate::server::api::workflow_actions::gate_job_ids_by_status(
+                &mut tx,
+                id,
+                &[models::JobStatus::Ready],
+                true,
+            )
+            .await
+            {
+                Ok(ids) => ids,
+                Err(e) => {
+                    let _ = tx.rollback().await;
+                    return Err(e);
+                }
+            };
+
         // Step 2: Uninitialize blocked jobs (only needed during reinitialization)
         // This is skipped during initial workflow start because Step 3 will set all job statuses anyway.
         // During reinitialization, this ensures jobs transitively blocked by reset jobs are also reset.
@@ -919,6 +938,38 @@ impl<C> Server<C> {
         // This endpoint currently accepts forward-compatible parameters that may be unused.
         let _ = clear_ephemeral_user_data;
 
+        // Reset workflow actions in the same transaction, so no client can see job statuses from
+        // the new run next to action state from the old one.
+        let reset_gates = match crate::server::api::workflow_actions::gate_job_ids_by_status(
+            &mut tx,
+            id,
+            &[models::JobStatus::Ready, models::JobStatus::Blocked],
+            false,
+        )
+        .await
+        {
+            Ok(after) => after
+                .intersection(&gates_not_ready_before)
+                .copied()
+                .collect(),
+            Err(e) => {
+                let _ = tx.rollback().await;
+                return Err(e);
+            }
+        };
+        if let Err(e) = self
+            .workflow_actions_api
+            .reset_actions_for_reinitialize(&mut tx, id, only_uninit, &reset_gates)
+            .await
+        {
+            error!(
+                "Failed to reset workflow actions for workflow_id={}: {}",
+                id, e
+            );
+            let _ = tx.rollback().await;
+            return Err(e);
+        }
+
         // Commit the transaction
         // Hash computation must happen AFTER this commit so that compute_job_input_hash
         // can see the job_depends_on relationships that were inserted in this transaction.
@@ -962,23 +1013,6 @@ impl<C> Server<C> {
             "Successfully initialized jobs for workflow {} with transaction",
             id
         );
-
-        // Reset workflow actions for reinitialization. Propagate on failure: a partial reset (some
-        // actions still executed, some with a stale trigger_count) must not be reported to the
-        // caller as a successful (re)initialize -- that is exactly the inconsistency the per-action
-        // error propagation in reset_actions_for_reinitialize guards against. The recompute is
-        // idempotent, so a failed (re)initialize can be safely retried.
-        if let Err(e) = self
-            .workflow_actions_api
-            .reset_actions_for_reinitialize(id, only_uninit)
-            .await
-        {
-            error!(
-                "Failed to reset workflow actions for workflow {}: {}",
-                id, e
-            );
-            return Err(e);
-        }
 
         // Activate on_workflow_start actions (workflow has started with initialization)
         if let Err(e) = self

@@ -4,6 +4,7 @@ use crate::server::transport_types::context_types::{ApiError, Has, XSpanIdString
 use async_trait::async_trait;
 use log::{debug, error, info, warn};
 use sqlx::Row;
+use std::collections::HashSet;
 
 use crate::server::api_responses::{
     ClaimActionResponse, CreateWorkflowActionResponse, DeleteWorkflowActionResponse,
@@ -1053,10 +1054,7 @@ impl WorkflowActionsApiImpl {
                                 overlap_count
                             } else {
                                 // No job_ids specified in the call, check current state of all action jobs
-                                if self
-                                    .check_jobs_state(workflow_id, &action_job_ids, trigger_type)
-                                    .await?
-                                {
+                                if self.check_jobs_state(&action_job_ids, trigger_type).await? {
                                     // All jobs are in the required state, increment by the total count
                                     action_job_ids.len() as i64
                                 } else {
@@ -1103,174 +1101,82 @@ impl WorkflowActionsApiImpl {
     /// Check if all jobs meet the required state for the trigger type
     async fn check_jobs_state(
         &self,
-        workflow_id: i64,
         job_ids: &[i64],
         trigger_type: &str,
     ) -> Result<bool, ApiError> {
-        Ok(self
-            .count_jobs_in_satisfied_state(workflow_id, job_ids, trigger_type)
-            .await?
-            == job_ids.len() as i64)
+        let job_ids_json = serde_json::to_string(job_ids).unwrap_or_else(|_| "[]".to_string());
+        Ok(
+            count_jobs_in_satisfied_state(self.context.pool.as_ref(), &job_ids_json, trigger_type)
+                .await?
+                == job_ids.len() as i64,
+        )
     }
 
-    /// Count how many jobs currently satisfy the condition for the trigger type.
-    /// This is used to properly set trigger_count after reinitialize, when some jobs
-    /// may already be in a satisfied state (e.g., job2 is already Completed when job1
-    /// transitions to Ready after reinitialize).
-    async fn count_jobs_in_satisfied_state(
-        &self,
-        workflow_id: i64,
-        job_ids: &[i64],
-        trigger_type: &str,
-    ) -> Result<i64, ApiError> {
-        let mut count = 0i64;
-
-        for job_id in job_ids {
-            let job_status =
-                match sqlx::query_scalar::<_, i64>("SELECT status FROM job WHERE id = ?")
-                    .bind(job_id)
-                    .fetch_optional(self.context.pool.as_ref())
-                    .await
-                {
-                    Ok(Some(status)) => status,
-                    Ok(None) => {
-                        debug!("job_id={} not found in workflow_id={}", job_id, workflow_id);
-                        continue;
-                    }
-                    Err(e) => {
-                        return Err(database_error_with_msg(e, "Failed to fetch job status"));
-                    }
-                };
-
-            // Check if job meets the required state
-            // For on_jobs_ready: job must be Ready OR have already completed (passed through ready)
-            // For on_jobs_complete: job must be in a terminal state
-            let meets_condition = match trigger_type {
-                "on_jobs_ready" => {
-                    job_status == JobStatus::Ready.to_int() as i64
-                        || job_status == JobStatus::Completed.to_int() as i64
-                        || job_status == JobStatus::Failed.to_int() as i64
-                        || job_status == JobStatus::Canceled.to_int() as i64
-                        || job_status == JobStatus::Terminated.to_int() as i64
-                }
-                "on_jobs_complete" => {
-                    job_status == JobStatus::Completed.to_int() as i64
-                        || job_status == JobStatus::Failed.to_int() as i64
-                        || job_status == JobStatus::Canceled.to_int() as i64
-                        || job_status == JobStatus::Terminated.to_int() as i64
-                }
-                _ => false,
-            };
-
-            if meets_condition {
-                count += 1;
-            }
-        }
-
-        Ok(count)
-    }
-
-    /// Reset workflow actions for reinitialization.
+    /// Reset workflow actions for reinitialization, inside the initialize transaction.
     ///
     /// First deletes any recovery actions (created by `torc slurm regenerate`), then, for each
-    /// remaining (non-recovery) action, recomputes `trigger_count` from current job states and
-    /// decides whether to **re-arm** the action (clear `executed`/`executed_by` so it can fire again
-    /// on the new run) or **keep** its `executed` flag (leave it suppressed). For on_jobs_ready and
-    /// on_jobs_complete actions, trigger_count is set to the number of jobs already in a satisfied
-    /// state (e.g., Completed jobs count toward on_jobs_ready); for other action types it is 0.
+    /// remaining action, recomputes `trigger_count` from current job states and decides whether to
+    /// **re-arm** it (clear `executed`/`state` so it can fire again in the new run) or **keep** its
+    /// `executed`/`state` (including `suppressed`). A never-fired action keeps `executed = 0` either
+    /// way.
     ///
-    /// The keep-vs-re-arm decision follows one rule, independent of `action_type`: **re-arm an
-    /// action iff its triggering condition will genuinely re-occur in the new run.** A user who
-    /// reinitializes after resetting a subset of jobs expects only those jobs to re-run; actions tied
-    /// to events that are not happening again must not re-fire (a re-fired action re-submits its
-    /// Slurm allocation or re-runs its commands — a duplicate side effect). Per trigger:
+    /// Per trigger:
     ///
-    /// - `on_workflow_start` → **keep**. The workflow starts exactly once in its lifetime; a
-    ///   reinitialize is not a new start. (A never-fired action keeps `executed = 0` and still fires,
-    ///   so first-time initialize is unaffected.) This is what stops plain `reinit` /
-    ///   `reset-status --reinit` from re-running start-time setup or re-submitting the original node
-    ///   count.
-    /// - `on_jobs_ready` / `on_jobs_complete` → **keep iff the gating jobs are still all terminal**
-    ///   (the *subset* re-run: gates untouched, the event already happened and is not recurring).
-    ///   Re-arm when any gate was reset (the *full* re-run: that job will run again, so its action
-    ///   should fire again). "Still terminal" is measured with the on_jobs_complete notion (terminal
-    ///   jobs only: completed/failed/canceled/terminated), NOT `trigger_count`: a reset
-    ///   `on_jobs_ready` gate returns to `Ready`, and `Ready` satisfies `on_jobs_ready`, so
-    ///   `trigger_count` cannot tell a freshly-reset gate from one that already completed — using it
-    ///   would wrongly suppress the action on a full re-run and stall the workflow.
-    /// - `on_workflow_complete`, `on_worker_start`, `on_worker_complete` → **re-arm**. These recur
-    ///   every run (the workflow will complete again; new workers start), so they should fire again.
-    ///
-    /// The keep logic above applies only to a **partial** reinitialize (`only_uninitialized = true`:
-    /// `reinit`, `reset-status --reinit`, `recover`, `regenerate`, `watch`), which is the case that
-    /// must not resurrect already-satisfied actions. A **full** initialize (`only_uninitialized =
-    /// false`, i.e. `torc workflows init`, which first resets every job to uninitialized) is a clean
-    /// slate: every action is re-armed, including `on_workflow_start`. Otherwise re-running
-    /// `workflows init` on a workflow that already ran would leave its `on_workflow_start` actions
-    /// suppressed forever.
+    /// - `on_jobs_ready` / `on_jobs_complete` → **re-arm iff this initialize reset at least one of
+    ///   the action's gate jobs** (`reset_gate_job_ids`, computed by the caller: gate jobs that were
+    ///   not `Ready` before the initialize and are `Ready` or `Blocked` after it, i.e. jobs that will
+    ///   become ready again in the new run). Gates left untouched — still complete, still `Ready`
+    ///   from before, disabled — mean the event is not recurring, and re-firing would duplicate its
+    ///   side effect (a second allocation, a re-run command). This holds for a full initialize too:
+    ///   `torc workflows init` resets every job first, so every gate shows up as reset.
+    /// - `on_workflow_start` → **keep** on a partial reinitialize (`only_uninitialized = true`): a
+    ///   reinitialize is not a new start. A full initialize re-arms it.
+    /// - `on_workflow_complete`, `on_worker_start`, `on_worker_complete` → **re-arm**; they recur
+    ///   every run.
     pub async fn reset_actions_for_reinitialize(
         &self,
+        conn: &mut sqlx::SqliteConnection,
         workflow_id: i64,
         only_uninitialized: bool,
+        reset_gate_job_ids: &HashSet<i64>,
     ) -> Result<(), ApiError> {
         debug!(
-            "reset_actions_for_reinitialize(workflow_id={}, only_uninitialized={})",
-            workflow_id, only_uninitialized
+            "reset_actions_for_reinitialize(workflow_id={}, only_uninitialized={}, reset_gates={})",
+            workflow_id,
+            only_uninitialized,
+            reset_gate_job_ids.len()
         );
 
-        // First, delete all recovery actions (ephemeral actions created during recovery)
-        match sqlx::query("DELETE FROM workflow_action WHERE workflow_id = ? AND is_recovery = 1")
-            .bind(workflow_id)
-            .execute(self.context.pool.as_ref())
-            .await
-        {
-            Ok(result) => {
-                let deleted = result.rows_affected();
-                if deleted > 0 {
-                    info!(
-                        "Deleted {} recovery action(s) for workflow {}",
-                        deleted, workflow_id
-                    );
-                }
-            }
-            Err(e) => {
-                return Err(database_error_with_msg(
-                    e,
-                    "Failed to delete recovery actions",
-                ));
-            }
+        let deleted =
+            sqlx::query("DELETE FROM workflow_action WHERE workflow_id = ? AND is_recovery = 1")
+                .bind(workflow_id)
+                .execute(&mut *conn)
+                .await
+                .map_err(|e| database_error_with_msg(e, "Failed to delete recovery actions"))?
+                .rows_affected();
+        if deleted > 0 {
+            info!(
+                "Deleted {} recovery action(s) for workflow_id={}",
+                deleted, workflow_id
+            );
         }
 
-        // Get all remaining (non-recovery) actions. We decide per-action whether to re-arm, so
-        // there is no blanket "clear executed" step: an already-satisfied job-gated schedule_nodes
-        // action must keep its executed flag.
-        let actions = match sqlx::query(
-            "SELECT id, trigger_type, action_type, job_ids, required_triggers FROM workflow_action WHERE workflow_id = ?",
+        let actions = sqlx::query(
+            "SELECT id, trigger_type, action_type, job_ids FROM workflow_action WHERE workflow_id = ?",
         )
         .bind(workflow_id)
-        .fetch_all(self.context.pool.as_ref())
+        .fetch_all(&mut *conn)
         .await
-        {
-            Ok(actions) => actions,
-            Err(e) => {
-                return Err(database_error_with_msg(
-                    e,
-                    "Failed to fetch workflow actions",
-                ));
-            }
-        };
+        .map_err(|e| database_error_with_msg(e, "Failed to fetch workflow actions"))?;
 
         for action_row in actions {
             let action_id: i64 = action_row.get("id");
             let trigger_type: String = action_row.get("trigger_type");
             let action_type: String = action_row.get("action_type");
             let job_ids_str: Option<String> = action_row.get("job_ids");
-            let required_triggers: i64 = action_row.get("required_triggers");
 
             let is_job_gated =
                 matches!(trigger_type.as_str(), "on_jobs_ready" | "on_jobs_complete");
-
-            // Parse the gating job_ids once (job-gated triggers only).
             let job_ids: Vec<i64> = match job_ids_str.as_deref() {
                 Some(s) if is_job_gated => serde_json::from_str(s).unwrap_or_else(|e| {
                     error!(
@@ -1279,114 +1185,120 @@ impl WorkflowActionsApiImpl {
                     );
                     vec![]
                 }),
-                // Other trigger types (on_workflow_start, etc.) have no gating jobs.
                 _ => vec![],
             };
 
-            // trigger_count drives whether the action becomes pending again on the new run. For
-            // on_jobs_ready a Ready gate counts; for on_jobs_complete only terminal gates count.
-            let trigger_count = if is_job_gated && !job_ids.is_empty() {
-                self.count_jobs_in_satisfied_state(workflow_id, &job_ids, &trigger_type)
-                    .await?
-            } else {
-                0
+            // For on_jobs_ready a Ready gate counts; for on_jobs_complete only terminal gates count.
+            let trigger_count = match job_ids_str.as_deref() {
+                Some(s) if is_job_gated && !job_ids.is_empty() => {
+                    count_jobs_in_satisfied_state(&mut *conn, s, &trigger_type).await?
+                }
+                _ => 0,
             };
 
-            // Decide whether to re-arm (clear `executed` so the action can fire again on the new
-            // run) or keep the `executed` flag (leave it suppressed). Guiding rule: re-arm an action
-            // iff its triggering condition will genuinely re-occur in the new run. "Keep" only
-            // preserves the flag -- a never-fired action keeps `executed = 0` and stays fireable. See
-            // the function doc comment for the full rationale and the per-trigger reasoning.
-            //
-            // A full initialize (only_uninitialized = false, e.g. `torc workflows init`) is a clean
-            // slate: it reset every job, so re-arm every action (never keep). The per-trigger keep
-            // logic below applies only to a partial reinitialize.
-            let keep_executed = only_uninitialized
-                && match trigger_type.as_str() {
-                    // The workflow starts exactly once per run-from-the-top; a *partial* reinitialize
-                    // is NOT a new start. Keep on_workflow_start actions suppressed so reinit never
-                    // re-runs start-time setup (run_commands) or re-submits start-time allocations
-                    // (schedule_nodes).
-                    "on_workflow_start" => true,
+            let keep_executed = match trigger_type.as_str() {
+                "on_workflow_start" => only_uninitialized,
+                "on_jobs_ready" | "on_jobs_complete" => {
+                    !job_ids.is_empty() && !job_ids.iter().any(|id| reset_gate_job_ids.contains(id))
+                }
+                _ => false,
+            };
 
-                    // Job-gated: the condition re-occurs iff the gating jobs will run again, i.e. they
-                    // are no longer all in a terminal state. Measured with the terminal-state
-                    // (on_jobs_complete) notion for BOTH triggers, NOT trigger_count: a reset
-                    // on_jobs_ready gate returns to Ready, and Ready would spuriously satisfy
-                    // on_jobs_ready and wrongly keep the action suppressed on a full re-run. This is
-                    // action-type-agnostic on purpose -- the hazard is a duplicate side effect (a
-                    // re-submitted allocation, a re-run command), not anything specific to
-                    // schedule_nodes.
-                    "on_jobs_ready" | "on_jobs_complete" => {
-                        if job_ids.is_empty() {
-                            false
-                        } else {
-                            let already_ran = self
-                                .count_jobs_in_satisfied_state(
-                                    workflow_id,
-                                    &job_ids,
-                                    "on_jobs_complete",
-                                )
-                                .await?;
-                            already_ran >= required_triggers
-                        }
-                    }
-
-                    // on_workflow_complete (the workflow will complete again once the re-run finishes)
-                    // and on_worker_start / on_worker_complete (new workers run in the new run)
-                    // genuinely recur each run, so they are always re-armed.
-                    _ => false,
-                };
-
-            let result = if keep_executed {
-                // Leave executed/executed_by intact; only refresh trigger_count.
+            let query = if keep_executed {
                 sqlx::query("UPDATE workflow_action SET trigger_count = ? WHERE id = ?")
-                    .bind(trigger_count)
-                    .bind(action_id)
-                    .execute(self.context.pool.as_ref())
-                    .await
             } else {
                 sqlx::query(
-                    "UPDATE workflow_action SET executed = 0, executed_by = NULL, state = NULL, error = NULL, \
-                     trigger_count = ? WHERE id = ?",
+                    "UPDATE workflow_action SET executed = 0, executed_by = NULL, state = NULL, \
+                     error = NULL, trigger_count = ? WHERE id = ?",
                 )
+            };
+            query
                 .bind(trigger_count)
                 .bind(action_id)
-                .execute(self.context.pool.as_ref())
+                .execute(&mut *conn)
                 .await
-            };
-
-            match result {
-                Ok(_) => {
-                    debug!(
-                        "Reinit action {} (trigger_type={}, action_type={}) in workflow {}: trigger_count={}, kept_executed={}",
-                        action_id,
-                        trigger_type,
-                        action_type,
-                        workflow_id,
-                        trigger_count,
-                        keep_executed
-                    );
-                }
-                Err(e) => {
-                    // Propagate rather than log-and-continue: a swallowed failure here would
-                    // leave the workflow partially reset (some actions still executed, some with a
-                    // stale trigger_count) while the caller believes reinitialize succeeded. The
-                    // recompute is idempotent, so a failed reinit can be safely retried. This
-                    // matches the DELETE/SELECT steps above and the executed-clear in the previous
-                    // implementation.
-                    error!(
-                        "Failed to update action {} during reinitialize: {}",
-                        action_id, e
-                    );
-                    return Err(database_error_with_msg(
+                .map_err(|e| {
+                    database_error_with_msg(
                         e,
                         "Failed to update workflow action during reinitialize",
-                    ));
-                }
-            }
+                    )
+                })?;
+            debug!(
+                "Reinit action {} (trigger_type={}, action_type={}) workflow_id={}: trigger_count={}, kept_executed={}",
+                action_id, trigger_type, action_type, workflow_id, trigger_count, keep_executed
+            );
         }
 
         Ok(())
     }
+}
+
+/// Count how many of the jobs in `job_ids_json` (a JSON array) currently satisfy `trigger_type`:
+/// for `on_jobs_ready` the job is Ready or terminal (it passed through ready); for
+/// `on_jobs_complete` it is terminal. Duplicate ids count once per occurrence.
+async fn count_jobs_in_satisfied_state<'e, E>(
+    executor: E,
+    job_ids_json: &str,
+    trigger_type: &str,
+) -> Result<i64, ApiError>
+where
+    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
+{
+    let terminal = [
+        JobStatus::Completed,
+        JobStatus::Failed,
+        JobStatus::Canceled,
+        JobStatus::Terminated,
+    ];
+    let statuses: Vec<String> = match trigger_type {
+        "on_jobs_ready" => std::iter::once(JobStatus::Ready)
+            .chain(terminal)
+            .map(|s| s.to_int().to_string())
+            .collect(),
+        "on_jobs_complete" => terminal.iter().map(|s| s.to_int().to_string()).collect(),
+        _ => return Ok(0),
+    };
+    let sql = format!(
+        "SELECT COUNT(*) FROM json_each(?) g JOIN job j ON j.id = g.value WHERE j.status IN ({})",
+        statuses.join(",")
+    );
+    // Only integer status constants are interpolated.
+    sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(sql))
+        .bind(job_ids_json)
+        .fetch_one(executor)
+        .await
+        .map_err(|e| database_error_with_msg(e, "Failed to count satisfied gate jobs"))
+}
+
+/// Ids of the gate jobs of this workflow's job-gated actions whose status is in `statuses`
+/// (or not in it, when `negate`). `initialize_jobs` calls this before and after resetting job
+/// statuses to work out which gates the initialize reset.
+pub async fn gate_job_ids_by_status(
+    conn: &mut sqlx::SqliteConnection,
+    workflow_id: i64,
+    statuses: &[JobStatus],
+    negate: bool,
+) -> Result<HashSet<i64>, ApiError> {
+    let list = statuses
+        .iter()
+        .map(|s| s.to_int().to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+    let sql = format!(
+        "SELECT DISTINCT j.id FROM workflow_action a \
+         JOIN json_each(a.job_ids) g \
+         JOIN job j ON j.id = g.value \
+         WHERE a.workflow_id = ? AND a.job_ids IS NOT NULL \
+         AND a.trigger_type IN ('on_jobs_ready', 'on_jobs_complete') \
+         AND j.status {} IN ({})",
+        if negate { "NOT" } else { "" },
+        list
+    );
+    // Only integer status constants are interpolated.
+    let ids = sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(sql))
+        .bind(workflow_id)
+        .fetch_all(conn)
+        .await
+        .map_err(|e| database_error_with_msg(e, "Failed to read action gate jobs"))?;
+    Ok(ids.into_iter().collect())
 }
