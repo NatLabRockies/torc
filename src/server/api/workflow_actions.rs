@@ -4,7 +4,7 @@ use crate::server::transport_types::context_types::{ApiError, Has, XSpanIdString
 use async_trait::async_trait;
 use log::{debug, error, info, warn};
 use sqlx::Row;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::server::api_responses::{
     ClaimActionResponse, CreateWorkflowActionResponse, DeleteWorkflowActionResponse,
@@ -1123,9 +1123,9 @@ impl WorkflowActionsApiImpl {
     /// Per trigger:
     ///
     /// - `on_jobs_ready` / `on_jobs_complete` → **re-arm iff this initialize reset at least one of
-    ///   the action's gate jobs** (`reset_gate_job_ids`, computed by the caller: gate jobs that were
-    ///   not `Ready` before the initialize and are `Ready` or `Blocked` after it, i.e. jobs that will
-    ///   become ready again in the new run). Gates left untouched — still complete, still `Ready`
+    ///   the action's gate jobs** (`reset_gate_job_ids`, computed by the caller with
+    ///   [`reset_gate_job_ids`]: gates the initialize touched that end `Ready` or `Blocked`, i.e.
+    ///   jobs that will become ready again in the new run). Gates left untouched — still complete, still `Ready`
     ///   from before, disabled — mean the event is not recurring, and re-firing would duplicate its
     ///   side effect (a second allocation, a re-run command). This holds for a full initialize too:
     ///   `torc workflows init` resets every job first, so every gate shows up as reset.
@@ -1270,35 +1270,47 @@ where
         .map_err(|e| database_error_with_msg(e, "Failed to count satisfied gate jobs"))
 }
 
-/// Ids of the gate jobs of this workflow's job-gated actions whose status is in `statuses`
-/// (or not in it, when `negate`). `initialize_jobs` calls this before and after resetting job
-/// statuses to work out which gates the initialize reset.
-pub async fn gate_job_ids_by_status(
+/// Current status of every gate job of this workflow's job-gated actions, keyed by job id.
+/// `initialize_jobs` reads this before and during its status changes to work out which gates the
+/// initialize reset.
+pub async fn gate_job_statuses(
     conn: &mut sqlx::SqliteConnection,
     workflow_id: i64,
-    statuses: &[JobStatus],
-    negate: bool,
-) -> Result<HashSet<i64>, ApiError> {
-    let list = statuses
-        .iter()
-        .map(|s| s.to_int().to_string())
-        .collect::<Vec<_>>()
-        .join(",");
-    let sql = format!(
-        "SELECT DISTINCT j.id FROM workflow_action a \
+) -> Result<HashMap<i64, i64>, ApiError> {
+    let rows = sqlx::query_as::<_, (i64, i64)>(
+        "SELECT DISTINCT j.id, j.status FROM workflow_action a \
          JOIN json_each(a.job_ids) g \
          JOIN job j ON j.id = g.value \
          WHERE a.workflow_id = ? AND a.job_ids IS NOT NULL \
-         AND a.trigger_type IN ('on_jobs_ready', 'on_jobs_complete') \
-         AND j.status {} IN ({})",
-        if negate { "NOT" } else { "" },
-        list
-    );
-    // Only integer status constants are interpolated.
-    let ids = sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(sql))
-        .bind(workflow_id)
-        .fetch_all(conn)
-        .await
-        .map_err(|e| database_error_with_msg(e, "Failed to read action gate jobs"))?;
-    Ok(ids.into_iter().collect())
+         AND a.trigger_type IN ('on_jobs_ready', 'on_jobs_complete')",
+    )
+    .bind(workflow_id)
+    .fetch_all(conn)
+    .await
+    .map_err(|e| database_error_with_msg(e, "Failed to read action gate jobs"))?;
+    Ok(rows.into_iter().collect())
+}
+
+/// Gate jobs this initialize reset: they end `Ready` or `Blocked` (they will become ready in the
+/// new run) and either the uninitialize step touched them (`uninitialized_mid`: gates that were
+/// `Uninitialized` after it, which includes transitive descendants of reset jobs) or their status
+/// changed (`before` vs `after`, e.g. a `Ready` gate pushed back to `Blocked`, or a running gate
+/// swept back to `Ready`). An untouched gate, whatever its status, is not reset.
+pub fn reset_gate_job_ids(
+    before: &HashMap<i64, i64>,
+    uninitialized_mid: &HashSet<i64>,
+    after: &HashMap<i64, i64>,
+) -> HashSet<i64> {
+    let runnable = [
+        JobStatus::Ready.to_int() as i64,
+        JobStatus::Blocked.to_int() as i64,
+    ];
+    after
+        .iter()
+        .filter(|(id, status)| {
+            runnable.contains(status)
+                && (uninitialized_mid.contains(id) || before.get(id) != Some(status))
+        })
+        .map(|(id, _)| *id)
+        .collect()
 }

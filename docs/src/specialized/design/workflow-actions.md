@@ -412,9 +412,9 @@ flowchart TD
     full -- Yes --> rearm
     full -- No --> keep
     trig -- "on_workflow_complete<br/>on_worker_start / on_worker_complete" --> rearm
-    trig -- "on_jobs_ready /<br/>on_jobs_complete" --> reset{Did this initialize<br/>reset any gate job?<br/>not Ready before,<br/>Ready or Blocked after}
+    trig -- "on_jobs_ready /<br/>on_jobs_complete" --> reset{Did this initialize<br/>reset any gate job?<br/>touched it and left it<br/>Ready or Blocked}
 
-    reset -- "No — gates untouched<br/>(complete, already Ready,<br/>disabled)" --> keep
+    reset -- "No — gates untouched<br/>(complete, untouched Ready<br/>or Blocked, disabled)" --> keep
     reset -- "Yes — a gate will<br/>become ready again" --> rearm
 
     rearm[Re-arm:<br/>executed = 0, state = NULL<br/>action can fire again]
@@ -431,10 +431,12 @@ flowchart TD
 Per trigger:
 
 - **`on_jobs_ready` / `on_jobs_complete` → re-arm iff this initialize reset at least one gate job.**
-  The server snapshots the gate jobs that are not `Ready` before it changes any job status; a gate
-  in that set that ends up `Ready` or `Blocked` was reset and will become ready again in the new
-  run. Gates the initialize did not touch keep the action as it is: a gate that is still complete, a
-  gate that was already `Ready` (its allocation may still be queued), or a disabled gate. A
+  A gate counts as reset when it ends `Ready` or `Blocked` and the initialize touched it: either it
+  was `Uninitialized` after the uninitialize step (reset directly, or a transitive descendant of a
+  reset job) or its status changed (for example a `Ready` gate pushed back to `Blocked` because its
+  upstream job was reset). Such a gate will become ready again in the new run. Gates the initialize
+  did not touch keep the action as it is: a gate that is still complete, an untouched `Ready` gate
+  (its allocation may still be queued), an untouched `Blocked` gate, or a disabled gate. A
   suppressed action is re-armed only when its own gates are reset. A full `torc workflows init`
   resets every job first, so every gate counts as reset there.
 - **`on_workflow_start` → keep on a partial reinitialize** (`reinit`, `reset-status --reinit`,

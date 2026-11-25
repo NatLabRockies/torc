@@ -847,19 +847,11 @@ impl<C> Server<C> {
             }
         }
 
-        // Snapshot the action gate jobs that are not Ready before any status changes. A gate in this
-        // set that ends up Ready or Blocked was reset by this initialize, which is what re-arms its
-        // job-gated actions (see reset_actions_for_reinitialize).
-        let gates_not_ready_before =
-            match crate::server::api::workflow_actions::gate_job_ids_by_status(
-                &mut tx,
-                id,
-                &[models::JobStatus::Ready],
-                true,
-            )
-            .await
-            {
-                Ok(ids) => ids,
+        // Snapshot action gate job statuses before any status changes, so the action reset below
+        // can tell which gates this initialize reset (see reset_gate_job_ids).
+        let gates_before =
+            match crate::server::api::workflow_actions::gate_job_statuses(&mut tx, id).await {
+                Ok(m) => m,
                 Err(e) => {
                     let _ = tx.rollback().await;
                     return Err(e);
@@ -875,6 +867,21 @@ impl<C> Server<C> {
             let _ = tx.rollback().await;
             return Err(e);
         }
+
+        // Gates that are Uninitialized now were reset by the client or by step 2.
+        let uninitialized = models::JobStatus::Uninitialized.to_int() as i64;
+        let gates_uninitialized: std::collections::HashSet<i64> =
+            match crate::server::api::workflow_actions::gate_job_statuses(&mut tx, id).await {
+                Ok(m) => m
+                    .into_iter()
+                    .filter(|(_, s)| *s == uninitialized)
+                    .map(|(job_id, _)| job_id)
+                    .collect(),
+                Err(e) => {
+                    let _ = tx.rollback().await;
+                    return Err(e);
+                }
+            };
 
         // Step 3: Initialize blocked jobs to blocked status
         if let Err(e) = self
@@ -940,23 +947,18 @@ impl<C> Server<C> {
 
         // Reset workflow actions in the same transaction, so no client can see job statuses from
         // the new run next to action state from the old one.
-        let reset_gates = match crate::server::api::workflow_actions::gate_job_ids_by_status(
-            &mut tx,
-            id,
-            &[models::JobStatus::Ready, models::JobStatus::Blocked],
-            false,
-        )
-        .await
-        {
-            Ok(after) => after
-                .intersection(&gates_not_ready_before)
-                .copied()
-                .collect(),
-            Err(e) => {
-                let _ = tx.rollback().await;
-                return Err(e);
-            }
-        };
+        let reset_gates =
+            match crate::server::api::workflow_actions::gate_job_statuses(&mut tx, id).await {
+                Ok(gates_after) => crate::server::api::workflow_actions::reset_gate_job_ids(
+                    &gates_before,
+                    &gates_uninitialized,
+                    &gates_after,
+                ),
+                Err(e) => {
+                    let _ = tx.rollback().await;
+                    return Err(e);
+                }
+            };
         if let Err(e) = self
             .workflow_actions_api
             .reset_actions_for_reinitialize(&mut tx, id, only_uninit, &reset_gates)
