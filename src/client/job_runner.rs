@@ -2748,16 +2748,14 @@ impl JobRunner {
 
         // Create File entities for each output file with provenance
         for file in output_files {
-            // Get file size if available
-            let content_size = std::fs::metadata(&file.path).ok().map(|m| m.len());
-
+            // Reuse the size and hash computed when the outputs were validated.
             crate::client::ro_crate_utils::create_ro_crate_entity_for_output_file(
                 &self.config,
                 self.workflow_id,
                 self.run_id,
                 file,
-                content_size,
-                None,
+                file.size.and_then(|s| u64::try_from(s).ok()),
+                file.sha256.clone(),
                 job_id,
                 attempt_id,
                 &input_file_paths,
