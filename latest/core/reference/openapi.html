@@ -401,6 +401,9 @@ curl -X POST http://localhost:8080/torc-service/v1/files \
   -d '{"files": [{"id": 1, "exists": true, "st_mtime": 1700000000.123}, {"id": 2, "exists": false}]}' \
   | jq '.reset_jobs'
 </code></pre>
+<p>For workflows with <code>enable_ro_crate</code>, each entry can also carry <code>size</code> and <code>sha256</code> (both or
+neither; a size without a hash is rejected with 422). An entry that changes a file's <code>st_mtime</code>
+without a new size and hash clears the stored pair.</p>
 <p><strong>Apply Scheduler Plan</strong> (<code>torc slurm regenerate</code>)</p>
 <pre><code class="language-bash">curl -X POST "http://localhost:8080/torc-service/v1/workflows/1/apply_scheduler_plan?dry_run=true" \
   -H "Content-Type: application/json" \

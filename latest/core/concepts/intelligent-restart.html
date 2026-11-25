@@ -250,10 +250,9 @@ torc workflows reinit &lt;workflow_id&gt; --force
 <h3 id="1-file-modification-times"><a class="header" href="#1-file-modification-times">1. File Modification Times</a></h3>
 <p>For files tracked in the workflow, the client checks each file on disk and sends the server a
 snapshot of whether it exists and its <code>st_mtime</code> (modification time), in batches of up to 100,000
-files. The server compares the snapshot with the stored values (with a 10 ms tolerance) and stores
-the new values. A file counts as changed if its modification time differs, if it appeared, or if it
-disappeared. Completed, failed, or canceled jobs that use a changed file as input are marked for
-re-execution.</p>
+files. The server compares the snapshot with the stored values and stores the new values. A file
+counts as changed if its modification time differs, if it appeared, or if it disappeared. Completed,
+failed, or canceled jobs that use a changed file as input are marked for re-execution.</p>
 <pre><code class="language-bash"># Modify an input file
 echo "new data" &gt; input.json
 

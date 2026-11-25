@@ -2756,10 +2756,9 @@ torc workflows reinit &lt;workflow_id&gt; --force
 <h3 id="1-file-modification-times"><a class="header" href="#1-file-modification-times">1. File Modification Times</a></h3>
 <p>For files tracked in the workflow, the client checks each file on disk and sends the server a
 snapshot of whether it exists and its <code>st_mtime</code> (modification time), in batches of up to 100,000
-files. The server compares the snapshot with the stored values (with a 10 ms tolerance) and stores
-the new values. A file counts as changed if its modification time differs, if it appeared, or if it
-disappeared. Completed, failed, or canceled jobs that use a changed file as input are marked for
-re-execution.</p>
+files. The server compares the snapshot with the stored values and stores the new values. A file
+counts as changed if its modification time differs, if it appeared, or if it disappeared. Completed,
+failed, or canceled jobs that use a changed file as input are marked for re-execution.</p>
 <pre><code class="language-bash"># Modify an input file
 echo "new data" &gt; input.json
 
@@ -2913,6 +2912,15 @@ provenance model.</p>
 }
 </code></pre>
 <p>File entities include SHA256 hashes for integrity verification when the file is readable.</p>
+<p>For these workflows, Torc also stores each file's size and SHA256 on its file record, together with
+its modification time: the client records them for input files during initialization, and the job
+runner records them for output files when a job completes. The server builds the File entities from
+those values, in the same transaction as the job completion. Workflows without <code>enable_ro_crate</code>
+record only modification times, so they pay no hashing cost.</p>
+<p>A stored size and SHA256 describe the file at its stored modification time. When the modification
+time (or the path) changes without a new size and SHA256, for example because the file could not be
+read or the update came from an older client, the server clears them, so a stale hash is never
+stored next to a new modification time. The File entity is then built without them.</p>
 <p>Job provenance is captured as CreateAction entities:</p>
 <pre><code class="language-json">{
   "@id": "#job-42-attempt-1",
@@ -11512,6 +11520,8 @@ ongoing-management API.</p>
 <p>When both workflow-level and job-level <code>env</code> maps are present, Torc merges them when the job is
 created and stores the effective environment on the job. Job-level values win on key conflicts. Torc
 exports these variables before running the job's <code>invocation_script</code>, if any.</p>
+<p>A file can be an output of only one job. Creating a workflow where two jobs list the same file in
+<code>output_files</code> (or match it with <code>output_file_regexes</code>) fails.</p>
 <h2 id="filespec"><a class="header" href="#filespec">FileSpec</a></h2>
 <p>Defines input/output file artifacts that establish implicit job dependencies.</p>
 <div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
@@ -13835,6 +13845,9 @@ curl -X POST http://localhost:8080/torc-service/v1/files \
   -d '{"files": [{"id": 1, "exists": true, "st_mtime": 1700000000.123}, {"id": 2, "exists": false}]}' \
   | jq '.reset_jobs'
 </code></pre>
+<p>For workflows with <code>enable_ro_crate</code>, each entry can also carry <code>size</code> and <code>sha256</code> (both or
+neither; a size without a hash is rejected with 422). An entry that changes a file's <code>st_mtime</code>
+without a new size and hash clears the stored pair.</p>
 <p><strong>Apply Scheduler Plan</strong> (<code>torc slurm regenerate</code>)</p>
 <pre><code class="language-bash">curl -X POST "http://localhost:8080/torc-service/v1/workflows/1/apply_scheduler_plan?dry_run=true" \
   -H "Content-Type: application/json" \
@@ -27352,12 +27365,11 @@ software and job execution entities accumulate across runs and attempts.</p>
     A --&gt; C[Server creates&lt;br/&gt;#software-torc-server-run-id-N]
     A --&gt; D[Client attempts to create&lt;br/&gt;#software-torc-run-id-N&lt;br/&gt;and optional&lt;br/&gt;#software-torc-slurm-job-runner-run-id-N]
 
-    B --&gt;|yes| E[Server upserts input File entities&lt;br/&gt;from DB rows with st_mtime]
+    B --&gt;|yes| G[Client records size and sha256&lt;br/&gt;with each file's st_mtime]
+    G --&gt; E[Server upserts input File entities&lt;br/&gt;from DB rows with st_mtime]
     B --&gt;|yes| F[Client creates or updates&lt;br/&gt;#torc-workflow and #torc-run-id-N]
-    B --&gt;|yes| G[Client creates or updates&lt;br/&gt;input File entities]
     B --&gt;|no| H[No automatic file provenance]
 
-    G --&gt; I[Workflow execution]
     E --&gt; I
     F --&gt; I
     C --&gt; I
@@ -27365,9 +27377,8 @@ software and job execution entities accumulate across runs and attempts.</p>
 
     I --&gt; J[Job completes successfully]
     J --&gt; J2{Job has output files?}
-    J2 --&gt;|yes| K[Client refreshes&lt;br/&gt;#torc-workflow and #torc-run-id-N]
-    J2 --&gt;|yes| L[Client creates&lt;br/&gt;#job-job_id-attempt-attempt_id]
-    J2 --&gt;|yes| M[Client creates or updates&lt;br/&gt;output File entity]
+    J2 --&gt;|yes| L[Server creates&lt;br/&gt;#job-job_id-attempt-attempt_id&lt;br/&gt;in the completion transaction]
+    J2 --&gt;|yes| M[Server creates or updates&lt;br/&gt;output File entity&lt;br/&gt;in the completion transaction]
     J2 --&gt;|no| P[No additional automatic&lt;br/&gt;RO-Crate entities for this job]
 
     L --&gt; N[Job CreateAction metadata]
@@ -27393,7 +27404,7 @@ software and job execution entities accumulate across runs and attempts.</p>
     class A,I,J init;
     class C,D software;
     class E,G input;
-    class F,K run;
+    class F run;
     class L,N,N1,N2,N3,N4,N5 job;
     class M,O,O1,O2,O3 output;
     class H,P disabled;
@@ -27410,8 +27421,9 @@ the current executable or on <code>PATH</code></li>
 </ul>
 <h3 id="jobs-1"><a class="header" href="#jobs-1">Jobs</a></h3>
 <ul>
-<li>The client creates one <code>CreateAction</code> per successful job completion <strong>that has at least one output
-file</strong></li>
+<li>The server creates one <code>CreateAction</code> per accepted successful job completion <strong>that has at least
+one output file</strong>, in the completion transaction. If the entity already exists for the same job
+attempt, it is kept</li>
 <li>The entity id is <code>#job-{job_id}-attempt-{attempt_id}</code></li>
 <li>Jobs with no output files currently do not emit an automatic <code>CreateAction</code></li>
 <li>When present, the job entity is the main join point between inputs, outputs, workflow run, and
@@ -27420,15 +27432,16 @@ software agents</li>
 <h3 id="input-files"><a class="header" href="#input-files">Input files</a></h3>
 <ul>
 <li>Input files are detected by <code>st_mtime IS NOT NULL</code></li>
-<li>During initialization, both the server and the client currently upsert the same input file entity</li>
+<li>Before <code>initialize_jobs()</code>, the client stats every file and sends the snapshot to
+<code>update_file_stats</code>. For RO-Crate workflows the snapshot carries the size and SHA-256 of each file
+that is new, changed, or not yet hashed</li>
+<li>During initialization, the server upserts the input file entity from the file record, including
+<code>contentSize</code> and <code>sha256</code>. It overlays the fields it builds on any stored metadata</li>
 <li>The entity is keyed by workflow and <code>file_id</code>, with <code>entity_id = file.path</code> by default</li>
 <li>When a <code>FileSpec</code> carries a user-supplied <code>identifier</code>, <code>create_files</code> pre-creates the entity row
 at workflow-creation time with <code>entity_id = identifier</code> and <code>metadata["@id"] = identifier</code>. The
-server's init-time upsert preserves the <code>entity_id</code> column even though it rewrites
-<code>metadata["@id"]</code> back to <code>file.path</code>. Export then uses <code>entity_id</code> as the authoritative <code>@id</code>
-(overwriting whatever ends up in <code>metadata["@id"]</code>), so the user identifier survives regardless of
-whether the client-side <code>create_ro_crate_entity_for_file</code> ran afterward — important because the
-async-init path returns before the client-side rebuild can re-write <code>metadata["@id"]</code>.</li>
+server's init-time upsert keeps an <code>entity_id</code> that differs from <code>file.path</code> as <code>metadata["@id"]</code>
+and records the path as <code>sameAs</code>. Export also uses <code>entity_id</code> as the authoritative <code>@id</code>.</li>
 <li>Export also builds a path → entity_id map from File entities' <code>sameAs</code> and rewrites nested
 <code>{ "@id": "&lt;path&gt;" }</code> references throughout the graph, so CreateAction <code>prov:used</code> / <code>object</code> and
 output <code>prov:wasDerivedFrom</code> link to the identifier rather than the path. The entity's own <code>@id</code>
@@ -27440,14 +27453,21 @@ being create-only; it is intentionally upsert-based</li>
 </ul>
 <h3 id="output-files"><a class="header" href="#output-files">Output files</a></h3>
 <ul>
-<li>Output file entities are created or replaced after a job succeeds and the file record has been
-refreshed</li>
+<li>The job runner sends each output's <code>st_mtime</code>, size, and SHA-256 in the completion entry. The
+server writes them to the file record and creates or replaces the output file entity in the same
+transaction, and only if it accepts the completion</li>
+<li>A server older than HTTP API 1.1.0 ignores those fields, so for it the runner still writes the
+file records and creates the entities itself after the completion</li>
 <li>If a file already had an entity from initialization or a prior run, the same DB row is updated
 rather than creating a new file entity for each run</li>
 <li>Run-specific provenance is recorded in the metadata relationships, not by giving the file entity a
 run-specific identity</li>
-<li>The same successful-job path also refreshes <code>#torc-workflow</code>, refreshes <code>#torc-run-id-{run_id}</code>,
-and creates the job <code>CreateAction</code>, but only when there is at least one output file to process</li>
+<li>The same completion also creates the job <code>CreateAction</code>, but only when there is at least one
+output file to process. <code>#torc-workflow</code> and <code>#torc-run-id-{run_id}</code> are created by the client at
+initialization and when a job runner starts</li>
+<li>Offline completions get the same treatment when they are replayed: the journal carries the stats
+recorded at completion, and <code>torc workflows reconcile</code> adds stats from disk for outputs the
+journal lacks</li>
 </ul>
 <h2 id="important-asymmetries"><a class="header" href="#important-asymmetries">Important Asymmetries</a></h2>
 <ul>

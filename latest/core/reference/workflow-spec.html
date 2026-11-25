@@ -311,6 +311,8 @@ ongoing-management API.</p>
 <p>When both workflow-level and job-level <code>env</code> maps are present, Torc merges them when the job is
 created and stores the effective environment on the job. Job-level values win on key conflicts. Torc
 exports these variables before running the job's <code>invocation_script</code>, if any.</p>
+<p>A file can be an output of only one job. Creating a workflow where two jobs list the same file in
+<code>output_files</code> (or match it with <code>output_file_regexes</code>) fails.</p>
 <h2 id="filespec"><a class="header" href="#filespec">FileSpec</a></h2>
 <p>Defines input/output file artifacts that establish implicit job dependencies.</p>
 <div class="table-wrapper"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
