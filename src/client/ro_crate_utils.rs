@@ -327,8 +327,10 @@ pub fn create_workflow_provenance_entities(
 /// already exists for this file (e.g., created during initialization), updates it
 /// to add the `prov:wasGeneratedBy` provenance field.
 ///
+/// `sha256` is the file's recorded hash; when `None` it is computed from disk.
+///
 /// This is a non-blocking operation - warnings are logged but errors don't fail
-/// the calling operation.
+/// the calling operation. Returns false if the entity could not be written.
 #[allow(clippy::too_many_arguments)]
 pub fn create_ro_crate_entity_for_output_file(
     config: &Configuration,
@@ -336,20 +338,20 @@ pub fn create_ro_crate_entity_for_output_file(
     run_id: i64,
     file: &FileModel,
     content_size: Option<u64>,
+    sha256: Option<String>,
     job_id: i64,
     attempt_id: i64,
     derived_from_paths: &[String],
-) {
+) -> bool {
     let file_id = match file.id {
         Some(id) => id,
         None => {
             warn!("Cannot create RO-Crate entity: file has no ID");
-            return;
+            return false;
         }
     };
 
-    // Compute SHA256 hash
-    let sha256 = compute_file_sha256(&file.path);
+    let sha256 = sha256.or_else(|| compute_file_sha256(&file.path));
 
     // Build the entity with provenance
     let entity = build_file_entity_with_provenance(
@@ -369,7 +371,7 @@ pub fn create_ro_crate_entity_for_output_file(
             Some(id) => id,
             None => {
                 warn!("Existing entity has no ID, cannot update");
-                return;
+                return false;
             }
         };
 
@@ -378,22 +380,26 @@ pub fn create_ro_crate_entity_for_output_file(
             ..entity
         };
 
-        match apis::ro_crate_entities_api::update_ro_crate_entity(config, entity_id, updated_entity)
-        {
+        return match apis::ro_crate_entities_api::update_ro_crate_entity(
+            config,
+            entity_id,
+            updated_entity,
+        ) {
             Ok(_) => {
                 debug!(
                     "Updated RO-Crate entity for output file '{}' with provenance (entity_id={})",
                     file.path, entity_id
                 );
+                true
             }
             Err(e) => {
                 warn!(
                     "Failed to update RO-Crate entity for output file '{}': {}",
                     file.path, e
                 );
+                false
             }
-        }
-        return;
+        };
     }
 
     // No existing entity - create a new one
@@ -405,12 +411,14 @@ pub fn create_ro_crate_entity_for_output_file(
                 file.path,
                 created.id.unwrap_or(0)
             );
+            true
         }
         Err(e) => {
             warn!(
                 "Failed to create RO-Crate entity for output file '{}': {}",
                 file.path, e
             );
+            false
         }
     }
 }

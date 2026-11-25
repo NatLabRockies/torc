@@ -464,6 +464,7 @@ fn test_reconcile_resolves_relative_paths_and_retries_metadata() {
         "test_user".to_string(),
     );
     workflow.submission_directory = Some(base.path().to_string_lossy().to_string());
+    workflow.enable_ro_crate = Some(true);
     let workflow = apis::workflows_api::create_workflow(config, workflow).expect("create workflow");
     let workflow_id = workflow.id.unwrap();
 
@@ -534,6 +535,35 @@ fn test_reconcile_resolves_relative_paths_and_retries_metadata() {
     assert!(
         st_mtime > 1.0,
         "re-running reconcile should replace the stale mtime"
+    );
+
+    // The output File entity, built when the completion was first accepted, is rebuilt from
+    // the repaired stats.
+    let expected_sha256 = torc::client::ro_crate_utils::compute_file_sha256(
+        base.path().join("rel_out.txt").to_str().unwrap(),
+    )
+    .unwrap();
+    let entities = apis::ro_crate_api::list_ro_crate_entities(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap()
+    .items;
+    let file_entity = entities
+        .iter()
+        .find(|e| e.file_id == Some(output_id))
+        .expect("output File entity");
+    assert_eq!(file_entity.metadata["sha256"], expected_sha256.as_str());
+    assert_eq!(file_entity.metadata["contentSize"], 4);
+    assert_eq!(
+        file_entity.metadata["prov:wasGeneratedBy"]["@id"],
+        format!("#job-{}-attempt-1", job_id)
     );
 }
 

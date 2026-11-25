@@ -103,7 +103,7 @@ const FILE_COLUMNS: &[&str] = &["id", "workflow_id", "name", "path", "st_mtime",
 /// `SET` clause that writes a file's `st_mtime` (`?1`), `size` (`?2`), and `sha256` (`?3`)
 /// together, in one statement so no concurrent write can interleave. A stored size and hash
 /// describe the file at its stored mtime, so they are kept only when `st_mtime` is unchanged
-/// (within 10 ms) and no new pair is given. Otherwise they are replaced by the new pair, or
+/// and no new pair is given. Otherwise they are replaced by the new pair, or
 /// cleared without one: a stale hash is never stored next to a new mtime. Clearing `st_mtime`
 /// clears all three. `clear_if` is an extra SQL condition that clears them even when a new
 /// pair is given (for example a path change, where a client may echo back the old file's
@@ -113,7 +113,7 @@ pub(crate) fn file_stat_set_sql(clear_if: &str) -> String {
         format!(
             "{name} = CASE WHEN ?1 IS NULL OR ({clear_if}) THEN NULL \
              WHEN {param} IS NOT NULL THEN {param} \
-             WHEN st_mtime IS NULL OR ABS(st_mtime - ?1) > 0.01 THEN NULL \
+             WHEN st_mtime IS NULL OR st_mtime <> ?1 THEN NULL \
              ELSE {name} END"
         )
     };
@@ -124,14 +124,10 @@ pub(crate) fn file_stat_set_sql(clear_if: &str) -> String {
     )
 }
 
-/// True if two mtimes differ by more than filesystem timestamp precision (10 ms), or only
-/// one is set.
+/// True if two mtimes differ, or only one is set. Mtimes round-trip exactly as f64 through
+/// JSON and SQLite, so any difference is a real change.
 pub(crate) fn mtime_changed(old: Option<f64>, new: Option<f64>) -> bool {
-    match (old, new) {
-        (Some(old), Some(new)) => (old - new).abs() > 0.01,
-        (None, None) => false,
-        _ => true,
-    }
+    old != new
 }
 
 /// Check that a file's `size` and `sha256` are set together. `require_mtime` (for new
@@ -793,7 +789,7 @@ where
             ));
         }
 
-        // Same rules and 10 ms tolerance (filesystem timestamp precision) the client used.
+        // Same exact-mtime rules the client used.
         // `updates` holds (id, st_mtime, size, sha256) for every write; `changed_ids` only the
         // files whose mtime changed, which reset jobs.
         let mut updates: Vec<(i64, Option<f64>, Option<i64>, Option<&str>)> = Vec::new();

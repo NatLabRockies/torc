@@ -532,25 +532,26 @@ fn test_batch_complete_jobs_stores_hashes_and_ro_crate_entities() {
     bad.st_mtime = Some(1.0);
     assert!(apis::files_api::create_file(config, bad).is_ok());
 
-    // update_file: the same mtime keeps the stored hash; a new mtime alone clears it; a new
-    // mtime with a new pair stores it; a new path clears it; a size alone is rejected.
+    // update_file: the same mtime keeps the stored hash; a new mtime alone clears it, even
+    // one only 5 ms later; a new mtime with a new pair stores it; a new path clears it; a size
+    // alone is rejected.
     let mut update = file(out1);
     update.size = None;
     update.sha256 = None;
     let f = apis::files_api::update_file(config, out1, update.clone()).unwrap();
     assert_eq!(f.sha256.as_deref(), Some(hash.as_str()));
-    update.st_mtime = Some(600.0);
+    update.st_mtime = Some(500.005);
     let f = apis::files_api::update_file(config, out1, update.clone()).unwrap();
-    assert_eq!((f.st_mtime, f.size, f.sha256), (Some(600.0), None, None));
+    assert_eq!((f.st_mtime, f.size, f.sha256), (Some(500.005), None, None));
     update.size = Some(8);
     update.sha256 = Some("cd".repeat(32));
     let f = apis::files_api::update_file(config, out1, update.clone()).unwrap();
-    assert_eq!((f.st_mtime, f.size), (Some(600.0), Some(8)));
+    assert_eq!((f.st_mtime, f.size), (Some(500.005), Some(8)));
     update.size = None;
     update.sha256 = None;
     update.path = "/tmp/out1_moved.txt".into();
     let f = apis::files_api::update_file(config, out1, update.clone()).unwrap();
-    assert_eq!((f.st_mtime, f.size, f.sha256), (Some(600.0), None, None));
+    assert_eq!((f.st_mtime, f.size, f.sha256), (Some(500.005), None, None));
     update.size = Some(9);
     assert!(
         apis::files_api::update_file(config, out1, update.clone()).is_err(),
@@ -587,4 +588,91 @@ fn test_batch_complete_jobs_stores_hashes_and_ro_crate_entities() {
     assert!(stat(false, None, None));
     let f = file(out1);
     assert_eq!((f.st_mtime, f.size, f.sha256), (None, None, None));
+}
+
+/// A user entity that happens to use a job's CreateAction ID (here a Dataset) is not a
+/// CreateAction, so completion leaves it untouched instead of merging run metadata into it.
+#[test]
+#[serial(batch_complete_inmem)]
+fn test_batch_complete_jobs_skips_non_action_entity_with_action_id() {
+    let server = start_in_memory_server();
+    let config = &server.config;
+
+    let mut workflow =
+        models::WorkflowModel::new("batch_complete_collision".to_string(), "u".to_string());
+    workflow.enable_ro_crate = Some(true);
+    let workflow = apis::workflows_api::create_workflow(config, workflow).unwrap();
+    let workflow_id = workflow.id.unwrap();
+    let output = apis::files_api::create_file(
+        config,
+        models::FileModel::new(workflow_id, "out".into(), "/tmp/out.txt".into()),
+    )
+    .unwrap()
+    .id
+    .unwrap();
+    let mut job = models::JobModel::new(workflow_id, "job".into(), "true".into());
+    job.output_file_ids = Some(vec![output]);
+    let job_id = apis::jobs_api::create_job(config, job).unwrap().id.unwrap();
+    WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    )
+    .initialize(true)
+    .expect("Failed to initialize workflow");
+    let run_id = apis::workflows_api::get_workflow(config, workflow_id)
+        .unwrap()
+        .run_id
+        .unwrap();
+    let compute_node_id = create_test_compute_node(config, workflow_id).id.unwrap();
+
+    let action_id = format!("#job-{}-attempt-1", job_id);
+    let metadata = serde_json::json!({ "@id": action_id, "@type": "Dataset", "name": "mine" });
+    let dataset = apis::ro_crate_entities_api::create_ro_crate_entity(
+        config,
+        models::RoCrateEntityModel {
+            id: None,
+            workflow_id,
+            file_id: None,
+            entity_id: action_id.clone(),
+            entity_type: "Dataset".into(),
+            metadata: serde_json::from_value(metadata).unwrap(),
+        },
+    )
+    .unwrap();
+
+    let response = apis::workflows_api::batch_complete_jobs(
+        config,
+        workflow_id,
+        models::BatchCompleteJobsRequest {
+            completions: vec![entry_with_payload(
+                workflow_id,
+                run_id,
+                compute_node_id,
+                job_id,
+                vec![(output, 500.0)],
+            )],
+        },
+    )
+    .unwrap();
+    assert_eq!(response.completed, vec![job_id]);
+
+    let entities = apis::ro_crate_api::list_ro_crate_entities(
+        config,
+        workflow_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap()
+    .items;
+    let after = entities
+        .iter()
+        .find(|e| e.entity_id == action_id)
+        .expect("Dataset entity");
+    assert_eq!(after.entity_type, "Dataset");
+    assert_eq!(after.metadata, dataset.metadata);
 }

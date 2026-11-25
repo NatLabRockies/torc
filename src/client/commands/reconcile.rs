@@ -395,11 +395,7 @@ fn restore_offline_output_metadata(
                     continue;
                 }
             };
-            if server_stores_mtimes
-                && file
-                    .st_mtime
-                    .is_some_and(|stored| (stored - stat.st_mtime).abs() <= 0.01)
-            {
+            if server_stores_mtimes && file.st_mtime.is_some_and(|stored| stored == stat.st_mtime) {
                 continue;
             }
             if ro_crate && journaled.is_none() {
@@ -431,8 +427,20 @@ fn restore_offline_output_metadata(
                 }
             }
         }
-        if ro_crate && !server_stores_mtimes && !updated.is_empty() {
-            restore_output_provenance(config, workflow_id, entry, &updated, base_dir);
+        // A newer server built the entities when it accepted the completion, but from the
+        // stats it had then; outputs repaired here need their entities rebuilt to match.
+        if ro_crate
+            && !updated.is_empty()
+            && !restore_output_provenance(
+                config,
+                workflow_id,
+                entry,
+                &updated,
+                base_dir,
+                !server_stores_mtimes,
+            )
+        {
+            job_failed = true;
         }
         if job_failed {
             failures += 1;
@@ -483,15 +491,18 @@ pub(crate) fn completions_to_restore<'a>(
     (entries, lookup_failures)
 }
 
-/// Create the RO-Crate entities the runner would have created at completion, using the
-/// run and attempt recorded in the journal entry.
+/// Create the RO-Crate output File entities the runner would have created at completion,
+/// using the run and attempt recorded in the journal entry and each file's recorded size and
+/// hash. With `create_action`, also create the job's CreateAction (a newer server creates it
+/// with the completion). Returns false if a File entity could not be written.
 fn restore_output_provenance(
     config: &Configuration,
     workflow_id: i64,
     entry: &JobCompletionEntry,
     output_files: &[FileModel],
     base_dir: Option<&std::path::Path>,
-) {
+    create_action: bool,
+) -> bool {
     let job = match apis::jobs_api::get_job(config, entry.job_id) {
         Ok(job) => job,
         Err(e) => {
@@ -499,7 +510,7 @@ fn restore_output_provenance(
                 "Could not fetch job_id={} for RO-Crate provenance: {}",
                 entry.job_id, e
             );
-            return;
+            return false;
         }
     };
     let attempt_id = entry.result.attempt_id.unwrap_or(1);
@@ -510,28 +521,36 @@ fn restore_output_provenance(
         .filter_map(|id| apis::files_api::get_file(config, *id).ok())
         .map(|f| f.path)
         .collect();
-    let output_file_paths: Vec<String> = output_files.iter().map(|f| f.path.clone()).collect();
-    ro_crate_utils::create_create_action_entity(
-        config,
-        workflow_id,
-        entry.run_id,
-        &job,
-        attempt_id,
-        &input_file_paths,
-        &output_file_paths,
-    );
+    if create_action {
+        let output_file_paths: Vec<String> = output_files.iter().map(|f| f.path.clone()).collect();
+        ro_crate_utils::create_create_action_entity(
+            config,
+            workflow_id,
+            entry.run_id,
+            &job,
+            attempt_id,
+            &input_file_paths,
+            &output_file_paths,
+        );
+    }
+    let mut ok = true;
     for file in output_files {
-        let path = resolve_path(&file.path, base_dir);
-        let content_size = std::fs::metadata(&path).ok().map(|m| m.len());
-        ro_crate_utils::create_ro_crate_entity_for_output_file(
+        let content_size = file.size.and_then(|s| u64::try_from(s).ok()).or_else(|| {
+            std::fs::metadata(resolve_path(&file.path, base_dir))
+                .ok()
+                .map(|m| m.len())
+        });
+        ok &= ro_crate_utils::create_ro_crate_entity_for_output_file(
             config,
             workflow_id,
             entry.run_id,
             file,
             content_size,
+            file.sha256.clone(),
             entry.job_id,
             attempt_id,
             &input_file_paths,
         );
     }
+    ok
 }

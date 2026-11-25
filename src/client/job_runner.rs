@@ -2757,6 +2757,7 @@ impl JobRunner {
                 self.run_id,
                 file,
                 content_size,
+                None,
                 job_id,
                 attempt_id,
                 &input_file_paths,

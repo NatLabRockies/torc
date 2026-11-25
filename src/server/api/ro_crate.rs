@@ -238,9 +238,11 @@ pub(crate) async fn create_output_entities_tx(
     .await?;
     if inserted.rows_affected() == 0 {
         // An existing action (a replay, or one `ro-crate add-dataset -j` pre-created) gains
-        // the tracked references it lacks.
+        // the tracked references it lacks. Any other entity that happens to use this ID is
+        // left untouched.
         let existing: Option<(i64, String)> = sqlx::query_as(
-            "SELECT id, metadata FROM ro_crate_entity WHERE workflow_id = ? AND entity_id = ?",
+            "SELECT id, metadata FROM ro_crate_entity WHERE workflow_id = ? AND entity_id = ? \
+             AND file_id IS NULL AND entity_type = 'CreateAction'",
         )
         .bind(workflow_id)
         .bind(&action.entity_id)

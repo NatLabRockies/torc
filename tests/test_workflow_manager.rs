@@ -63,7 +63,7 @@ fn wait_for_task_completion(
     );
 }
 
-/// Move a file's mtime well past the 10 ms change-detection tolerance.
+/// Move a file's mtime well past its current value.
 fn bump_mtime(path: &str) {
     fs::File::options()
         .write(true)

@@ -886,10 +886,8 @@ impl WorkflowManager {
                             ))
                         })?;
                     let st_mtime = mtime.as_secs_f64();
-                    let changed = file.sha256.is_none()
-                        || file
-                            .st_mtime
-                            .is_none_or(|old| (old - st_mtime).abs() > 0.01);
+                    let changed =
+                        file.sha256.is_none() || file.st_mtime.is_none_or(|old| old != st_mtime);
                     let hash = hash && ro_crate && changed;
                     let (size, sha256) = crate::client::ro_crate_utils::file_size_and_sha256(
                         &metadata, &file.path, hash,
