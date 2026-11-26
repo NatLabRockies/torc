@@ -1,0 +1,286 @@
+/* Spec editor tab (ui/editor.rs). */
+
+.spec-page {
+  gap: 10px;
+}
+.spec-page .file {
+  font-size: 12.5px;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl; /* keep the file name visible when the path is long */
+  text-align: left;
+}
+.spec-page .spinner.small {
+  width: 12px;
+  height: 12px;
+}
+.btn-active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.spec-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 12px;
+}
+.spec-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.spec-wrap {
+  flex: 1;
+  min-height: 200px;
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+.spec-wrap:focus-within {
+  border-color: var(--accent);
+}
+.spec-wrap .gutter,
+.spec-wrap textarea {
+  margin: 0;
+  padding: 10px 8px;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.55;
+  tab-size: 2;
+}
+.spec-wrap .gutter {
+  min-width: 3.2em;
+  overflow: hidden;
+  text-align: right;
+  color: var(--text-faint);
+  background: var(--surface-2);
+  border-right: 1px solid var(--border);
+  user-select: none;
+  white-space: pre;
+}
+.spec-wrap textarea {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: var(--text);
+  white-space: pre;
+  overflow: auto;
+}
+.problems {
+  flex-shrink: 0;
+  max-height: 30%;
+  overflow: auto;
+  font-size: 12.5px;
+}
+.problems-ok {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--success);
+}
+.problems-ok.muted {
+  color: var(--text-muted);
+}
+.problem-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.problem-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+.problem-list li.error {
+  color: var(--danger);
+}
+.problem-list li.warning {
+  color: var(--warning);
+}
+.problem-list li > svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+.problem-link {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.problem-link:hover .msg {
+  text-decoration: underline;
+}
+.problem-link .ln,
+.vpanel .ln {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  opacity: 0.8;
+}
+.vpanel .problem-link {
+  display: inline;
+}
+.vpanel .problem-link .ln {
+  margin-right: 6px;
+}
+.problem-list .msg,
+.vpanel .msg {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.spec-aside {
+  display: none;
+  width: 320px;
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+}
+.spec-aside:has(#editor-report > *) {
+  display: flex;
+}
+.spec-aside.ai {
+  display: flex;
+  width: min(440px, 40%);
+  overflow: hidden;
+}
+.spec-report {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+  max-height: 40vh;
+  overflow: auto;
+}
+.spec-aside .assistant {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.spec-aside .assistant header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+#editor-chat {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.spec-page .tips {
+  margin: 0;
+  font-size: 12px;
+}
+.menu .section {
+  margin-left: auto;
+  padding-left: 12px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+
+/* Templates dialog */
+.templates {
+  display: grid;
+  grid-template-columns: minmax(260px, 360px) 1fr;
+  gap: 16px;
+  height: 100%;
+  min-height: 0;
+}
+.tpl-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-height: 0;
+  overflow: auto;
+}
+.tpl-list .group {
+  padding: 12px 10px 4px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.tpl-list .group:first-child {
+  padding-top: 0;
+}
+.tpl-list li button {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tpl-list li button:hover,
+.tpl-list li button:focus-visible {
+  background: var(--surface-hover);
+  outline: none;
+}
+.tpl-list li button.active {
+  background: var(--accent-soft);
+}
+.tpl-list strong {
+  font-family: var(--mono);
+  font-size: 13px;
+}
+.tpl-list .muted {
+  font-size: 12.5px;
+}
+.tpl-previews {
+  min-height: 0;
+  display: flex;
+}
+.tpl-previews .code-block {
+  flex: 1;
+  margin: 0;
+  min-height: 0;
+  overflow: auto;
+  white-space: pre;
+}
+@media (max-width: 800px) {
+  .spec-body {
+    flex-direction: column;
+  }
+  .spec-aside,
+  .spec-aside.ai {
+    width: auto;
+  }
+  .templates {
+    grid-template-columns: 1fr;
+  }
+}
