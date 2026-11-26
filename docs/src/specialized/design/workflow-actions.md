@@ -269,19 +269,12 @@ Dynamically allocate compute resources from a Slurm scheduler.
 - Cost optimization (allocate only when needed)
 - Separating workflow phases with different resource requirements
 
-**Recommended: tie `schedule_nodes` to jobs with `on_jobs_ready`.** Prefer `on_jobs_ready` (gated on
-the jobs the allocation will run) over `on_workflow_start` for scheduling — even for root jobs,
-which are `Ready` at init so the action fires at the same moment. The reason is re-run safety: when
-you reset a subset of jobs and reinitialize, a job-gated action whose jobs were reset is re-armed,
-so the next `torc submit` re-schedules exactly those jobs (see
-[Re-running on Slurm](#re-running-a-slurm-workflow)). An `on_workflow_start` action is kept
-(suppressed) on reinitialize and cannot be re-fired by `submit`, so the reset job would have no
-allocation. `torc slurm generate` now emits `on_jobs_ready[root_jobs]` for no-dependency jobs for
-this reason.
-
-`on_workflow_start` `schedule_nodes` is still valid when a single allocation serves the whole
-workflow (it can't be gated on jobs that aren't all ready at once), but that allocation is not
-selectively re-run-safe — re-run it with `torc recover` or a manual `torc slurm schedule-nodes`.
+**Restarts.** `schedule_nodes` actions suit a single run. On a partial restart an
+`on_workflow_start` action does not fire again, and a job-gated action re-arms at its full
+`num_allocations` when any of its gate jobs is reset. Prefer `on_jobs_ready` gated on the jobs the
+allocation runs (as `torc slurm generate` emits), and for a partial restart use `torc recover` or
+`torc slurm schedule-nodes --suppress-all`. See
+[Restarting a workflow](../hpc/slurm-workflows.md#restarting-a-workflow).
 
 ## Complete Examples
 
@@ -338,12 +331,13 @@ and submit their allocations. To retry by hand, fix the cause and run
 `torc workflows reset-action <workflow_id> <action_id>`; the action fires the next time a worker or
 `torc submit` looks for pending actions.
 
-Three places suppress actions instead of running them: disabling an action in the `torc submit`
+Four places suppress actions instead of running them: disabling an action in the `torc submit`
 re-submission review, `suppress_satisfied_schedule_actions` (used by `torc recover` and
-`torc slurm schedule-nodes --suppress-actions`), and the `apply_scheduler_plan` transaction behind
-`torc slurm regenerate`. All three suppress persistent `schedule_nodes` actions too. Against a
-server older than API 1.1.0 the client falls back to claiming, which cannot stop a persistent
-action, and skips outcome reporting.
+`torc slurm schedule-nodes --suppress-actions`), `suppress_all_schedule_actions` (used by
+`torc slurm schedule-nodes --suppress-all`, which also covers actions whose trigger is not satisfied
+yet), and the `apply_scheduler_plan` transaction behind `torc slurm regenerate`. All four suppress
+persistent `schedule_nodes` actions too. Against a server older than API 1.1.0 the client falls back
+to claiming, which cannot stop a persistent action, and skips outcome reporting.
 
 A client older than API 1.1.0 claims actions but never reports a result, so its claims stay
 `claimed`, and `torc status` reports them as stuck after 30 minutes.
@@ -451,7 +445,7 @@ Per trigger:
 already `Ready` look the same, and so do an untouched `Blocked` gate and one that was just reset.
 Only the before/after comparison tells them apart. If an action was claimed for a gate that is still
 `Ready` and its allocation was later cancelled, re-arm it with
-`POST /workflows/{id}/actions/{action_id}/reset`.
+`torc workflows reset-action <workflow_id> <action_id>`.
 
 **Example — subset re-run vs. full re-run**:
 
@@ -491,35 +485,16 @@ reset-`on_jobs_ready` case is the one it still handles.
 
 `torc submit` fires **every pending Slurm `schedule_nodes` action**, regardless of trigger type
 (`on_workflow_start` to bootstrap, plus `on_jobs_ready`/`on_jobs_complete` whose gating jobs are
-ready). Combined with the re-arm logic above, this gives a clean selective re-run:
-
-```bash
-torc jobs reset-status <id1> <id2> ... --reinit   # reset the jobs to re-run + reinitialize
-torc submit <workflow_id>                          # re-schedule exactly those jobs
-```
-
-Because reinitialize re-arms only the job-gated actions whose jobs were reset (untouched stages stay
-suppressed), the re-armed actions for the reset jobs become pending and `submit` schedules just
-their allocations — nothing for the stages that did not change. Worked example: a workflow with
-separate `on_jobs_ready` `schedule_nodes` actions for regular, big-memory, and GPU job classes;
-reset only the GPU and big-memory jobs and reinitialize, and `submit` re-schedules only the GPU and
-big-memory allocations. Downstream actions (e.g. a postprocess gated on all classes) are not yet
-pending — they fire later, from a running worker, once their jobs become ready
+ready). After `torc jobs reset-status <ids> --reinit`, the pending actions are the job-gated actions
+whose gate jobs were reset, so `submit` schedules their allocations and nothing for stages that did
+not change. Downstream actions that are not pending yet fire later from a running worker
 (`job_runner::check_and_execute_actions`).
 
-This is why job-gated scheduling is recommended over `on_workflow_start` (which `submit` cannot
-re-fire once kept). `submit` itself is one-shot: it submits the currently-pending allocations and
-returns. For an unattended multi-stage re-run, follow it with `torc watch` so that if every worker
-exits (e.g. Slurm walltime) before a later stage's action fires, the stranded action is picked up
-(`torc watch --auto-schedule`).
-
-`submit` re-fires each action's `num_allocations` **verbatim** — it does not right-size the re-run.
-So the re-run granularity is the action granularity: per-stage/per-class actions reschedule only the
-affected subset, but a single large fan-in action (e.g. one `on_jobs_ready` gating 100k jobs with
-`num_allocations: 500`) re-arms as a whole when any subset is reset, and `submit` re-submits its
-full count even if only a handful of jobs need to re-run. For a right-sized partial re-run of such a
-stage, use `torc recover`, which regenerates `schedule_nodes` actions sized to the actually-pending
-jobs (and suppresses the spec's full-size action via `suppress_satisfied_schedule_actions`).
+`submit` uses each action's `num_allocations` as written; it does not size the allocation to the
+jobs being re-run. A re-armed action whose gates were only partly reset therefore over-allocates.
+The user-facing guidance, including when to use `torc recover` or
+`torc slurm schedule-nodes --suppress-all` instead, is in
+[Restarting a workflow](../hpc/slurm-workflows.md#restarting-a-workflow).
 
 ## Limitations
 

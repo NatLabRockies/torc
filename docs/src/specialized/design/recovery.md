@@ -18,8 +18,9 @@ Simply creating new Slurm schedulers and submitting allocations isn't enough bec
 
 1. **Orphaned jobs block recovery**: Jobs stuck in "running" status prevent the workflow from being
    considered complete, blocking recovery precondition checks
-2. **Duplicate allocations**: If the workflow had `on_workflow_start` actions to schedule nodes,
-   those actions would fire again when the workflow is reinitialized, creating duplicate allocations
+2. **Duplicate allocations**: Reinitializing re-arms the `schedule_nodes` actions whose gate jobs
+   were reset, and each fires at its full `num_allocations`, on top of the allocations recovery
+   submits itself
 3. **Missing allocations for blocked jobs**: Blocked jobs will eventually become ready, but there's
    no mechanism to schedule new allocations for them
 
