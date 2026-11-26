@@ -1671,10 +1671,9 @@ where
             response.scheduler_ids.push(id);
         }
 
-        // Recovery actions, armed from the jobs' statuses as of this transaction. Of the pending
-        // statuses only ready satisfies on_jobs_ready; later transitions to ready increment
-        // trigger_count through check_and_trigger_actions. Every gate job of a kept action is
-        // pending (checked above).
+        // Recovery actions. Their trigger is evaluated from job state when read; `pending` in the
+        // response reports it as of this transaction. Every gate job of a kept action is pending
+        // (checked above), and of the pending statuses only ready satisfies on_jobs_ready.
         let ready = models::JobStatus::Ready.to_int() as i64;
         for (action, keep) in body.recovery_actions.iter().zip(keep_action) {
             if !keep {
@@ -1683,7 +1682,7 @@ where
             let job_ids = &action.job_ids;
             let scheduler_id = response.scheduler_ids[action.scheduler_index as usize];
             let required = job_ids.len() as i64;
-            let trigger_count = job_ids.iter().filter(|id| statuses[id] == ready).count() as i64;
+            let ready_count = job_ids.iter().filter(|id| statuses[id] == ready).count() as i64;
             let config = serde_json::json!({
                 "scheduler_type": "slurm",
                 "scheduler_id": scheduler_id,
@@ -1693,12 +1692,11 @@ where
                 "INSERT INTO workflow_action (workflow_id, trigger_type, action_type, \
                  action_config, job_ids, trigger_count, required_triggers, executed, persistent, \
                  is_recovery) \
-                 VALUES (?, 'on_jobs_ready', 'schedule_nodes', ?, ?, ?, ?, 0, 0, 1) RETURNING id",
+                 VALUES (?, 'on_jobs_ready', 'schedule_nodes', ?, ?, 0, ?, 0, 0, 1) RETURNING id",
             )
             .bind(workflow_id)
             .bind(config.to_string())
             .bind(to_json(job_ids))
-            .bind(trigger_count)
             .bind(required)
             .fetch_one(&mut *tx)
             .await
@@ -1707,7 +1705,7 @@ where
                 id,
                 scheduler_id,
                 num_allocations: action.num_allocations,
-                pending: trigger_count >= required,
+                pending: ready_count >= required,
             });
         }
 
