@@ -276,7 +276,6 @@ async fn stream(State(st): State<Arc<AppState>>, Sig(sig): Sig<Value>) -> Respon
 
 /// The sidebar's Events badge, which also runs the app-wide watcher. The shell renders it in
 /// place of an empty `span#events-badge`.
-#[allow(dead_code)] // ponytail: drop once the shell renders it.
 pub fn badge() -> Markup {
     // The Settings tab's "Notify me when a workflow finishes" checkbox owns this key; read it
     // before every poll so the server only checks workflows when notifications are on.

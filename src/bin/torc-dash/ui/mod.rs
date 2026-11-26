@@ -204,7 +204,7 @@ async fn shell(st: &Arc<AppState>) -> Markup {
                                 li { a href=(format!("#/{id}")) data-class:active=(format!("$tab === '{id}'")) {
                                     (icon(ic, 16))
                                     span.grow { (label) }
-                                    @if id == "events" { span #events-badge {} }
+                                    @if id == "events" { (events::badge()) }
                                 } }
                             }
                         }
