@@ -1,0 +1,66 @@
+/* Events tab */
+.events-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+}
+.events-body .table-host {
+  flex: 1;
+  min-height: 0;
+}
+.stream {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.stream .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+.stream.live {
+  color: var(--success);
+}
+.stream.live .dot {
+  background: var(--success);
+  animation: events-pulse 1.6s ease-in-out infinite;
+}
+.stream.waiting .dot {
+  background: var(--warning);
+}
+@keyframes events-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+.events-body .link {
+  display: inline-flex;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+.events-body .link:hover .job-name {
+  text-decoration: underline;
+}
+.events-body .job-name,
+.events-body .details {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.events-body .details {
+  display: block;
+  color: var(--text-muted);
+}

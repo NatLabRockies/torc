@@ -1,0 +1,179 @@
+/* Graph tab */
+.dag-card {
+  position: relative;
+  flex: 1;
+  min-height: 320px;
+  overflow: hidden;
+}
+.dag-card .overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+.dag-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.dag-svg:active {
+  cursor: grabbing;
+}
+.dag-svg .e {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 1.5;
+}
+.dag-svg .e.output {
+  stroke: var(--accent);
+}
+.dag-svg .e.input {
+  stroke: var(--success);
+  stroke-dasharray: 5 4;
+}
+.dag-svg marker path {
+  fill: var(--border-strong);
+}
+.dag-svg marker.output path {
+  fill: var(--accent);
+}
+.dag-svg marker.input path {
+  fill: var(--success);
+}
+.dag-svg .n rect,
+.dag-svg .n polygon {
+  stroke-width: 2;
+  stroke: var(--c, var(--border-strong));
+  fill: color-mix(in srgb, var(--c, var(--surface)) 14%, var(--surface));
+}
+.dag-svg .n text {
+  font-size: 11px;
+  font-family: var(--font);
+  fill: var(--text);
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+}
+.dag-svg .n.job,
+.dag-svg .n.file {
+  cursor: pointer;
+}
+.dag-svg .n:hover rect,
+.dag-svg .n:hover polygon {
+  stroke-width: 3;
+}
+.dag-svg .n.file {
+  --c: var(--info);
+}
+.dag-svg .n.ud {
+  --c: var(--text-muted);
+}
+.dag-svg .n.file polygon,
+.dag-svg .n.ud polygon {
+  stroke-dasharray: 4 3;
+  fill: var(--surface);
+}
+.dag-svg .n.file text,
+.dag-svg .n.ud text {
+  fill: var(--text-muted);
+}
+.dag-svg .s-uninitialized {
+  --c: var(--text-faint);
+}
+.dag-svg .s-blocked {
+  --c: var(--text-muted);
+}
+.dag-svg .s-ready {
+  --c: var(--info);
+}
+.dag-svg .s-pending,
+.dag-svg .s-running {
+  --c: var(--accent);
+}
+.dag-svg .s-completed {
+  --c: var(--success);
+}
+.dag-svg .s-failed,
+.dag-svg .s-terminated {
+  --c: var(--danger);
+}
+.dag-svg .s-canceled,
+.dag-svg .s-pending_failed {
+  --c: var(--warning);
+}
+.dag-svg .s-disabled {
+  --c: var(--border-strong);
+}
+.dag-card .controls {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  gap: 4px;
+}
+.dag-card .info {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  max-width: calc(100% - 160px);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 12.5px;
+  pointer-events: none;
+}
+.dag-card .info strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dag-card .legend {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  width: fit-content;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 12px;
+  text-transform: capitalize;
+}
+.dag-card .legend .item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.dag-card .swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 2px solid var(--c);
+  background: color-mix(in srgb, var(--c) 14%, transparent);
+}
+.dag-card .swatch.file {
+  border: 2px dashed var(--info);
+  transform: skewX(-15deg);
+}
+.dag-card .swatch.ud {
+  border: 2px dashed var(--text-muted);
+}
+.dag-card .line {
+  width: 18px;
+  border-top: 2px solid var(--accent);
+}
+.dag-card .line.dashed {
+  border-top: 2px dashed var(--success);
+}
