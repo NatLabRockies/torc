@@ -196,10 +196,10 @@ request, `POST /workflows/{id}/apply_scheduler_plan`, and the server applies it 
    included, are set to `suppressed` (and `executed`), so they cannot fire again and create
    duplicate allocations.
 3. **Create.** The schedulers are created and their jobs are assigned with one bulk update.
-4. **Arm.** Each recovery action's `trigger_count` is set from its gating jobs' statuses inside the
-   transaction. An action whose jobs are all ready is Pending and is submitted by `--submit`. The
-   others wait for their jobs to become ready. A gate job that completes between planning and
-   applying is therefore counted.
+4. **Report.** Recovery actions are `on_jobs_ready` actions, evaluated from their gating jobs'
+   statuses like any other job-gated action. The response marks an action Pending when its jobs are
+   all ready as of the transaction; `--submit` submits those. The others fire when their jobs become
+   ready.
 
 Any error from the endpoint fails the command. The request is not idempotent, so the client retries
 it only when it cannot have been applied: the connection was refused, or the server reported lock

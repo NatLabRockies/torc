@@ -19,6 +19,109 @@ use super::{
     ApiContext, database_error_with_msg, message_error_response, resource_not_found_response,
 };
 
+// Trigger conditions for job-gated actions. Each action's gate jobs are rows in
+// workflow_action_job, and workflow_action_gate.unsatisfied_count is the number of gates that do
+// not satisfy the trigger. The `job_status_updates_action_gates` SQL trigger (migration
+// 20261126000000_add_workflow_action_job) keeps it current on every job status change, in the
+// same transaction, so a poll only compares it with 0.
+//
+// Status ints are pinned by `test_status_ints_match_sql`: 0 uninitialized, 1 blocked,
+// 5 completed, 6 failed, 7 canceled, 8 terminated, 9 disabled.
+//
+// - on_jobs_ready: the gate has reached ready in this run, i.e. anything but uninitialized or
+//   blocked (ready, pending, running, pending_failed, terminal, disabled).
+// - on_jobs_complete: the gate is terminal or disabled. pending_failed is not complete: the action
+//   waits for AI classification to settle the job.
+//
+// Event triggers (on_workflow_start, on_workflow_complete, on_worker_*) have no job state; for them
+// `trigger_count >= required_triggers` is an armed flag set by `arm_event_actions`.
+macro_rules! gate_satisfied {
+    () => {
+        "CASE a.trigger_type WHEN 'on_jobs_ready' THEN j.status NOT IN (0, 1) \
+         ELSE j.status IN (5, 6, 7, 8, 9) END"
+    };
+}
+
+macro_rules! is_job_gated {
+    () => {
+        "a.trigger_type IN ('on_jobs_ready', 'on_jobs_complete')"
+    };
+}
+
+/// True when the action's trigger condition holds now.
+macro_rules! action_triggered {
+    () => {
+        concat!(
+            "(CASE WHEN ",
+            is_job_gated!(),
+            " THEN (SELECT ag.unsatisfied_count FROM workflow_action_gate ag WHERE ag.action_id = a.id) = 0 \
+             ELSE a.trigger_count >= a.required_triggers END)"
+        )
+    };
+}
+
+/// Columns for `action_from_row`. For job-gated actions `trigger_count` is the number of gate
+/// jobs satisfying the trigger now, so clients comparing it with `required_triggers` see the
+/// same condition the server uses.
+macro_rules! action_columns {
+    () => {
+        concat!(
+            "a.id, a.workflow_id, a.trigger_type, a.action_type, a.action_config, a.job_ids, \
+             CASE WHEN ",
+            is_job_gated!(),
+            " THEN MAX(a.required_triggers - COALESCE((SELECT ag.unsatisfied_count \
+             FROM workflow_action_gate ag WHERE ag.action_id = a.id), a.required_triggers), 0) \
+             ELSE a.trigger_count END AS trigger_count, \
+             a.required_triggers, a.executed, a.executed_at, a.executed_by, a.persistent, \
+             a.is_recovery, a.state, a.error"
+        )
+    };
+}
+
+/// Record a job-gated action's gate jobs in `workflow_action_job` and its
+/// `workflow_action_gate.unsatisfied_count` from their current statuses. Gate ids that do not exist count as
+/// unsatisfied, and an action with no gates gets 1, so neither triggers. Call it in the
+/// transaction that inserts the action: later status changes are applied by the SQL trigger.
+pub async fn link_action_gates(
+    conn: &mut sqlx::SqliteConnection,
+    action_id: i64,
+) -> Result<(), ApiError> {
+    sqlx::query(concat!(
+        "INSERT OR IGNORE INTO workflow_action_job (action_id, job_id) \
+         SELECT a.id, j.id FROM workflow_action a \
+         JOIN json_each(a.job_ids) g \
+         JOIN job j ON j.id = g.value \
+         WHERE a.id = ? AND ",
+        is_job_gated!()
+    ))
+    .bind(action_id)
+    .execute(&mut *conn)
+    .await
+    .map_err(|e| database_error_with_msg(e, "Failed to record action gate jobs"))?;
+    sqlx::query(concat!(
+        "INSERT OR REPLACE INTO workflow_action_gate (action_id, trigger_type, unsatisfied_count) \
+         SELECT a.id, a.trigger_type, MAX(\
+         COALESCE((SELECT COUNT(DISTINCT g.value) FROM json_each(a.job_ids) g), 0), 1) \
+         - (SELECT COUNT(*) FROM workflow_action_job l JOIN job j ON j.id = l.job_id \
+            WHERE l.action_id = a.id AND ",
+        gate_satisfied!(),
+        ") FROM workflow_action a WHERE a.id = ? AND ",
+        is_job_gated!()
+    ))
+    .bind(action_id)
+    .execute(&mut *conn)
+    .await
+    .map_err(|e| database_error_with_msg(e, "Failed to count unsatisfied action gates"))?;
+    Ok(())
+}
+
+/// `SELECT <action columns> <rest>` as a static string.
+macro_rules! concat_select {
+    ($rest:literal) => {
+        concat!("SELECT ", action_columns!(), " ", $rest)
+    };
+}
+
 /// Build a [`models::WorkflowActionModel`] from a `workflow_action` row that selected every column.
 fn action_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<models::WorkflowActionModel, String> {
     let action_config_str: String = row.get("action_config");
@@ -294,6 +397,12 @@ where
             .as_ref()
             .map(|ids| serde_json::to_string(ids).expect("Failed to serialize job_ids"));
 
+        let mut tx = self
+            .context
+            .pool
+            .begin()
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to begin transaction"))?;
         let result = sqlx::query(
             "INSERT INTO workflow_action (workflow_id, trigger_type, action_type, action_config, job_ids, trigger_count, required_triggers, executed, persistent, is_recovery)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
@@ -308,12 +417,16 @@ where
         .bind(if body.executed { 1 } else { 0 })
         .bind(if body.persistent { 1 } else { 0 })
         .bind(if body.is_recovery { 1 } else { 0 })
-        .execute(self.context.pool.as_ref())
+        .execute(&mut *tx)
         .await;
 
         match result {
             Ok(result) => {
                 let id = result.last_insert_rowid();
+                link_action_gates(&mut tx, id).await?;
+                tx.commit()
+                    .await
+                    .map_err(|e| database_error_with_msg(e, "Failed to commit workflow action"))?;
                 debug!("Created workflow action with id={}", id);
 
                 body.id = Some(id);
@@ -341,12 +454,9 @@ where
             context.get().0.clone()
         );
 
-        let rows = sqlx::query(
-            "SELECT id, workflow_id, trigger_type, action_type, action_config, job_ids, trigger_count, required_triggers, executed, executed_at, executed_by, persistent, is_recovery, state, error
-             FROM workflow_action
-             WHERE workflow_id = ?
-             ORDER BY id"
-        )
+        let rows = sqlx::query(concat_select!(
+            "FROM workflow_action a WHERE a.workflow_id = ? ORDER BY a.id"
+        ))
         .bind(workflow_id)
         .fetch_all(self.context.pool.as_ref())
         .await;
@@ -392,48 +502,34 @@ where
             context.get().0.clone()
         );
 
-        // Build query with optional trigger_type filter
-        let (_query_str, rows) = if let Some(ref types) = trigger_types {
-            if types.is_empty() {
-                // If empty list provided, return no results
-                (String::new(), Ok(Vec::new()))
-            } else {
-                // Build IN clause with placeholders
+        let pending_sql = concat!(
+            "SELECT ",
+            action_columns!(),
+            " FROM workflow_action a WHERE a.workflow_id = ? AND a.executed = 0 AND ",
+            action_triggered!()
+        );
+        let rows = match trigger_types {
+            Some(ref types) if types.is_empty() => Ok(Vec::new()),
+            Some(ref types) => {
                 let placeholders = types.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
                 let query_str = format!(
-                    "SELECT id, workflow_id, trigger_type, action_type, action_config, job_ids, trigger_count, required_triggers, executed, executed_at, executed_by, persistent, is_recovery, state, error
-                     FROM workflow_action
-                     WHERE workflow_id = ? AND trigger_count >= required_triggers AND executed = 0 AND trigger_type IN ({})
-                     ORDER BY id",
-                    placeholders
+                    "{} AND a.trigger_type IN ({}) ORDER BY a.id",
+                    pending_sql, placeholders
                 );
-
                 let mut query = sqlx::query(sqlx::AssertSqlSafe(&*query_str)).bind(workflow_id);
                 for trigger_type in types {
                     query = query.bind(trigger_type);
                 }
-
-                (
-                    query_str.clone(),
-                    query.fetch_all(self.context.pool.as_ref()).await,
-                )
+                query.fetch_all(self.context.pool.as_ref()).await
             }
-        } else {
-            // No filter - get all pending actions
-            let query_str = "SELECT id, workflow_id, trigger_type, action_type, action_config, job_ids, trigger_count, required_triggers, executed, executed_at, executed_by, persistent, is_recovery, state, error
-                 FROM workflow_action
-                 WHERE workflow_id = ? AND trigger_count >= required_triggers AND executed = 0
-                 ORDER BY id".to_string();
-            (
-                query_str.clone(),
+            None => {
+                let query_str = format!("{} ORDER BY a.id", pending_sql);
                 sqlx::query(sqlx::AssertSqlSafe(&*query_str))
                     .bind(workflow_id)
                     .fetch_all(self.context.pool.as_ref())
-                    .await,
-            )
+                    .await
+            }
         };
-
-        let rows = rows;
 
         match rows {
             Ok(rows) => {
@@ -529,28 +625,32 @@ where
 
         // For persistent actions, don't mark as executed so other workers can claim it
         // For non-persistent actions, mark as executed
-        // Both statements require executed = 0, so a concurrent suppress wins or loses atomically.
+        // Both statements require executed = 0 and the trigger condition, so a concurrent suppress
+        // wins or loses atomically, and a client holding a stale pending list cannot claim an
+        // action whose condition no longer holds.
         let result = if is_persistent {
             // For persistent actions, record the claim but keep executed=0 so other workers can
             // claim it. state/error hold the latest claim's outcome.
             // Note: This simple implementation doesn't track which compute nodes have claimed it
             // A more robust implementation would use a separate workflow_action_claims table
-            sqlx::query(
-                "UPDATE workflow_action
-                 SET executed_at = ?, state = 'claimed', error = NULL
-                 WHERE id = ? AND executed = 0",
-            )
+            sqlx::query(concat!(
+                "UPDATE workflow_action AS a \
+                 SET executed_at = ?, state = 'claimed', error = NULL \
+                 WHERE a.id = ? AND a.executed = 0 AND ",
+                action_triggered!()
+            ))
             .bind(&now)
             .bind(action_id)
             .execute(self.context.pool.as_ref())
             .await
         } else {
-            sqlx::query(
-                "UPDATE workflow_action
-                 SET executed = 1, executed_at = ?, executed_by = ?, state = 'claimed',
-                     error = NULL
-                 WHERE id = ? AND executed = 0",
-            )
+            sqlx::query(concat!(
+                "UPDATE workflow_action AS a \
+                 SET executed = 1, executed_at = ?, executed_by = ?, state = 'claimed', \
+                     error = NULL \
+                 WHERE a.id = ? AND a.executed = 0 AND ",
+                action_triggered!()
+            ))
             .bind(&now)
             .bind(compute_node_id)
             .bind(action_id)
@@ -569,15 +669,13 @@ where
                     let response = serde_json::json!({"claimed": true, "action_id": action_id});
                     Ok(ClaimActionResponse::SuccessfulResponse(response))
                 } else {
-                    // Race condition: action was claimed or suppressed between check and update
-                    let state = self
-                        .fetch_action(workflow_id, action_id)
-                        .await?
-                        .and_then(|a| a.state);
-                    Ok(ClaimActionResponse::ConflictResponse(claim_conflict(
-                        action_id,
-                        state.as_deref(),
-                    )))
+                    // Claimed or suppressed since the check above, or not triggered.
+                    let action = self.fetch_action(workflow_id, action_id).await?;
+                    let body = match action {
+                        Some(a) if !a.executed => not_triggered_conflict(action_id),
+                        a => claim_conflict(action_id, a.and_then(|a| a.state).as_deref()),
+                    };
+                    Ok(ClaimActionResponse::ConflictResponse(body))
                 }
             }
             Err(e) => {
@@ -783,12 +881,9 @@ where
 
         // Fetch the existing action (the full row so we can return the updated model
         // without an extra round trip).
-        let existing = sqlx::query(
-            "SELECT id, workflow_id, trigger_type, action_type, action_config, job_ids, \
-             trigger_count, required_triggers, executed, executed_at, executed_by, \
-             persistent, is_recovery, state, error \
-             FROM workflow_action WHERE id = ? AND workflow_id = ?",
-        )
+        let existing = sqlx::query(concat_select!(
+            "FROM workflow_action a WHERE a.id = ? AND a.workflow_id = ?"
+        ))
         .bind(action_id)
         .bind(workflow_id)
         .fetch_optional(self.context.pool.as_ref())
@@ -939,6 +1034,16 @@ fn claim_conflict(action_id: i64, state: Option<&str>) -> models::ErrorResponse 
     }))
 }
 
+/// 409 body for a claim of an action whose trigger condition does not hold (e.g. a client with a
+/// stale pending list after a gate job was reset).
+fn not_triggered_conflict(action_id: i64) -> models::ErrorResponse {
+    models::ErrorResponse::new(serde_json::json!({
+        "message": format!("Action {} is not triggered", action_id),
+        "claimed": false,
+        "state": "not_triggered",
+    }))
+}
+
 /// Helper methods for workflow actions (not part of the trait)
 impl WorkflowActionsApiImpl {
     /// Fetch one action of a workflow, or None if it does not exist in that workflow.
@@ -947,12 +1052,9 @@ impl WorkflowActionsApiImpl {
         workflow_id: i64,
         action_id: i64,
     ) -> Result<Option<models::WorkflowActionModel>, ApiError> {
-        let row = sqlx::query(
-            "SELECT id, workflow_id, trigger_type, action_type, action_config, job_ids, \
-             trigger_count, required_triggers, executed, executed_at, executed_by, \
-             persistent, is_recovery, state, error \
-             FROM workflow_action WHERE id = ? AND workflow_id = ?",
-        )
+        let row = sqlx::query(concat_select!(
+            "FROM workflow_action a WHERE a.id = ? AND a.workflow_id = ?"
+        ))
         .bind(action_id)
         .bind(workflow_id)
         .fetch_optional(self.context.pool.as_ref())
@@ -963,160 +1065,41 @@ impl WorkflowActionsApiImpl {
             .map_err(ApiError)
     }
 
-    /// Check and trigger workflow actions based on trigger type and job state changes
-    /// This is called by other API endpoints when state changes occur
-    ///
-    /// `max_action_id` limits the check to actions with `id <= max_action_id`. Callers that commit
-    /// a state change before calling this pass the highest action id seen inside that transaction:
-    /// an action created after the commit (ids are AUTOINCREMENT, so it has a larger id) was armed
-    /// from the committed state and must not count the change again.
-    pub async fn check_and_trigger_actions(
+    /// Arm this workflow's actions of an event trigger type (`on_workflow_start`,
+    /// `on_workflow_complete`, `on_worker_start`, `on_worker_complete`) by setting
+    /// `trigger_count = required_triggers`. Idempotent, so two callers observing the same event
+    /// (e.g. both completion paths seeing the workflow complete) cannot double count. Job-gated
+    /// triggers are not armed here: they are evaluated from job state when actions are read.
+    pub async fn arm_event_actions(
         &self,
         workflow_id: i64,
         trigger_type: &str,
-        job_ids: Option<Vec<i64>>,
-        max_action_id: Option<i64>,
     ) -> Result<(), ApiError> {
-        debug!(
-            "check_and_trigger_actions(workflow_id={}, trigger_type={}, job_ids={:?})",
-            workflow_id, trigger_type, job_ids
-        );
-
-        // Get all actions of this trigger type for this workflow that haven't reached required triggers yet
-        let actions = match sqlx::query(
-            "SELECT id, job_ids, trigger_count, required_triggers FROM workflow_action
-             WHERE workflow_id = ? AND trigger_type = ? AND trigger_count < required_triggers
-             AND (? IS NULL OR id <= ?)",
+        let result = sqlx::query(
+            "UPDATE workflow_action SET trigger_count = required_triggers \
+             WHERE workflow_id = ? AND trigger_type = ? AND trigger_count < required_triggers",
         )
         .bind(workflow_id)
         .bind(trigger_type)
-        .bind(max_action_id)
-        .bind(max_action_id)
-        .fetch_all(self.context.pool.as_ref())
+        .execute(self.context.pool.as_ref())
         .await
-        {
-            Ok(actions) => actions,
-            Err(e) => {
-                return Err(database_error_with_msg(
-                    e,
-                    "Failed to fetch untriggered actions",
-                ));
-            }
-        };
-
-        for action_row in actions {
-            let action_id: i64 = action_row.get("id");
-            let action_job_ids_str: Option<String> = action_row.get("job_ids");
-
-            // For trigger types that require job_ids, check if conditions are met
-            // Returns the number of triggers to increment (usually 1, but can be > 1 for job-based triggers)
-            let trigger_increment = match trigger_type {
-                "on_workflow_start"
-                | "on_workflow_complete"
-                | "on_worker_start"
-                | "on_worker_complete" => {
-                    // These triggers fire based on workflow/worker state, not individual jobs
-                    1
-                }
-                "on_jobs_ready" | "on_jobs_complete" => {
-                    // Check if the action has job_ids specified
-                    if let Some(action_job_ids_str) = action_job_ids_str {
-                        // Deserialize the JSON array of job IDs from database
-                        let action_job_ids: Vec<i64> =
-                            match serde_json::from_str(&action_job_ids_str) {
-                                Ok(ids) => ids,
-                                Err(e) => {
-                                    error!(
-                                        "Failed to parse job_ids JSON '{}': {}",
-                                        action_job_ids_str, e
-                                    );
-                                    vec![]
-                                }
-                            };
-
-                        if action_job_ids.is_empty() {
-                            0
-                        } else {
-                            // Check if any of the changed job_ids are in this action's job_ids
-                            if let Some(ref changed_job_ids) = job_ids {
-                                // Count how many of the changed jobs are in the action's job_ids
-                                let overlap_count = action_job_ids
-                                    .iter()
-                                    .filter(|id| changed_job_ids.contains(id))
-                                    .count()
-                                    as i64;
-
-                                if overlap_count == 0 {
-                                    // None of the changed jobs are relevant to this action
-                                    continue;
-                                }
-                                // Increment by the number of jobs that transitioned
-                                overlap_count
-                            } else {
-                                // No job_ids specified in the call, check current state of all action jobs
-                                if self.check_jobs_state(&action_job_ids, trigger_type).await? {
-                                    // All jobs are in the required state, increment by the total count
-                                    action_job_ids.len() as i64
-                                } else {
-                                    0
-                                }
-                            }
-                        }
-                    } else {
-                        0
-                    }
-                }
-                _ => 0,
-            };
-
-            if trigger_increment > 0 {
-                // Increment trigger_count by the calculated amount
-                match sqlx::query(
-                    "UPDATE workflow_action SET trigger_count = trigger_count + ? WHERE id = ?",
-                )
-                .bind(trigger_increment)
-                .bind(action_id)
-                .execute(self.context.pool.as_ref())
-                .await
-                {
-                    Ok(_) => {
-                        info!(
-                            "Incremented trigger_count by {} for action {} (trigger_type={}) for workflow {}",
-                            trigger_increment, action_id, trigger_type, workflow_id
-                        );
-                    }
-                    Err(e) => {
-                        error!(
-                            "Failed to increment trigger_count for action {}: {}",
-                            action_id, e
-                        );
-                    }
-                }
-            }
+        .map_err(|e| database_error_with_msg(e, "Failed to arm workflow actions"))?;
+        if result.rows_affected() > 0 {
+            info!(
+                "Armed {} {} action(s) workflow_id={}",
+                result.rows_affected(),
+                trigger_type,
+                workflow_id
+            );
         }
-
         Ok(())
-    }
-
-    /// Check if all jobs meet the required state for the trigger type
-    async fn check_jobs_state(
-        &self,
-        job_ids: &[i64],
-        trigger_type: &str,
-    ) -> Result<bool, ApiError> {
-        let job_ids_json = serde_json::to_string(job_ids).unwrap_or_else(|_| "[]".to_string());
-        Ok(
-            count_jobs_in_satisfied_state(self.context.pool.as_ref(), &job_ids_json, trigger_type)
-                .await?
-                == job_ids.len() as i64,
-        )
     }
 
     /// Reset workflow actions for reinitialization, inside the initialize transaction.
     ///
     /// First deletes any recovery actions (created by `torc slurm regenerate`), then, for each
-    /// remaining action, recomputes `trigger_count` from current job states and decides whether to
-    /// **re-arm** it (clear `executed`/`state` so it can fire again in the new run) or **keep** its
+    /// remaining action, clears the event-trigger armed flag (`trigger_count = 0`; initialize arms
+    /// `on_workflow_start` / `on_worker_*` again) and decides whether to **re-arm** it (clear `executed`/`state` so it can fire again in the new run) or **keep** its
     /// `executed`/`state` (including `suppressed`). A never-fired action keeps `executed = 0` either
     /// way.
     ///
@@ -1188,14 +1171,6 @@ impl WorkflowActionsApiImpl {
                 _ => vec![],
             };
 
-            // For on_jobs_ready a Ready gate counts; for on_jobs_complete only terminal gates count.
-            let trigger_count = match job_ids_str.as_deref() {
-                Some(s) if is_job_gated && !job_ids.is_empty() => {
-                    count_jobs_in_satisfied_state(&mut *conn, s, &trigger_type).await?
-                }
-                _ => 0,
-            };
-
             let keep_executed = match trigger_type.as_str() {
                 "on_workflow_start" => only_uninitialized,
                 "on_jobs_ready" | "on_jobs_complete" => {
@@ -1205,15 +1180,14 @@ impl WorkflowActionsApiImpl {
             };
 
             let query = if keep_executed {
-                sqlx::query("UPDATE workflow_action SET trigger_count = ? WHERE id = ?")
+                sqlx::query("UPDATE workflow_action SET trigger_count = 0 WHERE id = ?")
             } else {
                 sqlx::query(
                     "UPDATE workflow_action SET executed = 0, executed_at = NULL, executed_by = NULL, \
-                     state = NULL, error = NULL, trigger_count = ? WHERE id = ?",
+                     state = NULL, error = NULL, trigger_count = 0 WHERE id = ?",
                 )
             };
             query
-                .bind(trigger_count)
                 .bind(action_id)
                 .execute(&mut *conn)
                 .await
@@ -1224,50 +1198,13 @@ impl WorkflowActionsApiImpl {
                     )
                 })?;
             debug!(
-                "Reinit workflow_id={} action_id={} (trigger_type={}, action_type={}): trigger_count={}, kept_executed={}",
-                workflow_id, action_id, trigger_type, action_type, trigger_count, keep_executed
+                "Reinit workflow_id={} action_id={} (trigger_type={}, action_type={}): kept_executed={}",
+                workflow_id, action_id, trigger_type, action_type, keep_executed
             );
         }
 
         Ok(())
     }
-}
-
-/// Count how many of the jobs in `job_ids_json` (a JSON array) currently satisfy `trigger_type`:
-/// for `on_jobs_ready` the job is Ready or terminal (it passed through ready); for
-/// `on_jobs_complete` it is terminal. Duplicate ids count once per occurrence.
-async fn count_jobs_in_satisfied_state<'e, E>(
-    executor: E,
-    job_ids_json: &str,
-    trigger_type: &str,
-) -> Result<i64, ApiError>
-where
-    E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
-{
-    let terminal = [
-        JobStatus::Completed,
-        JobStatus::Failed,
-        JobStatus::Canceled,
-        JobStatus::Terminated,
-    ];
-    let statuses: Vec<String> = match trigger_type {
-        "on_jobs_ready" => std::iter::once(JobStatus::Ready)
-            .chain(terminal)
-            .map(|s| s.to_int().to_string())
-            .collect(),
-        "on_jobs_complete" => terminal.iter().map(|s| s.to_int().to_string()).collect(),
-        _ => return Ok(0),
-    };
-    let sql = format!(
-        "SELECT COUNT(*) FROM json_each(?) g JOIN job j ON j.id = g.value WHERE j.status IN ({})",
-        statuses.join(",")
-    );
-    // Only integer status constants are interpolated.
-    sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(sql))
-        .bind(job_ids_json)
-        .fetch_one(executor)
-        .await
-        .map_err(|e| database_error_with_msg(e, "Failed to count satisfied gate jobs"))
 }
 
 /// Current status of every gate job of this workflow's job-gated actions, keyed by job id.
@@ -1279,10 +1216,9 @@ pub async fn gate_job_statuses(
 ) -> Result<HashMap<i64, i64>, ApiError> {
     let rows = sqlx::query_as::<_, (i64, i64)>(
         "SELECT DISTINCT j.id, j.status FROM workflow_action a \
-         JOIN json_each(a.job_ids) g \
-         JOIN job j ON j.id = g.value \
-         WHERE a.workflow_id = ? AND a.job_ids IS NOT NULL \
-         AND a.trigger_type IN ('on_jobs_ready', 'on_jobs_complete')",
+         JOIN workflow_action_job l ON l.action_id = a.id \
+         JOIN job j ON j.id = l.job_id \
+         WHERE a.workflow_id = ?",
     )
     .bind(workflow_id)
     .fetch_all(conn)
@@ -1313,4 +1249,34 @@ pub fn reset_gate_job_ids(
         })
         .map(|(id, _)| *id)
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The trigger SQL hard-codes job status ints; fail if `JobStatus` renumbers them.
+    #[test]
+    fn test_status_ints_match_sql() {
+        let ints = [
+            (JobStatus::Uninitialized, 0),
+            (JobStatus::Blocked, 1),
+            (JobStatus::Completed, 5),
+            (JobStatus::Failed, 6),
+            (JobStatus::Canceled, 7),
+            (JobStatus::Terminated, 8),
+            (JobStatus::Disabled, 9),
+        ];
+        for (status, n) in ints {
+            assert_eq!(status.to_int(), n, "{status:?}");
+        }
+        assert!(gate_satisfied!().contains("NOT IN (0, 1)"));
+        assert!(gate_satisfied!().contains("IN (5, 6, 7, 8, 9)"));
+        // The SQL trigger that maintains unsatisfied_count must use the same status sets.
+        let migration = include_str!(
+            "../../../torc-server/migrations/20261126000000_add_workflow_action_job.up.sql"
+        );
+        assert!(migration.contains("NEW.status IN (0, 1)"));
+        assert!(migration.contains("NEW.status NOT IN (5, 6, 7, 8, 9)"));
+    }
 }

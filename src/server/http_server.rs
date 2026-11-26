@@ -1016,53 +1016,19 @@ impl<C> Server<C> {
             id
         );
 
-        // Activate on_workflow_start actions (workflow has started with initialization)
-        if let Err(e) = self
-            .workflow_actions_api
-            .check_and_trigger_actions(id, "on_workflow_start", None, None)
-            .await
-        {
-            error!(
-                "Failed to check_and_trigger_actions for on_workflow_start: {}",
-                e
-            );
-        }
-
-        // Activate on_worker_start and on_worker_complete actions immediately
-        for trigger_type in &["on_worker_start", "on_worker_complete"] {
-            match sqlx::query(
-                "UPDATE workflow_action SET trigger_count = required_triggers WHERE workflow_id = ? AND trigger_type = ?"
-            )
-            .bind(id)
-            .bind(trigger_type)
-            .execute(self.pool.as_ref())
-            .await
+        // Arm event-triggered actions: the workflow has started, and workers may start now.
+        // Job-gated actions need no arming: they are evaluated from job state when read.
+        for trigger_type in ["on_workflow_start", "on_worker_start", "on_worker_complete"] {
+            if let Err(e) = self
+                .workflow_actions_api
+                .arm_event_actions(id, trigger_type)
+                .await
             {
-                Ok(result) => {
-                    let count = result.rows_affected();
-                    if count > 0 {
-                        debug!("Activated {} {} actions for workflow {}", count, trigger_type, id);
-                    }
-                }
-                Err(e) => {
-                    error!(
-                        "Failed to activate {} actions for workflow {}: {}",
-                        trigger_type, id, e
-                    );
-                }
+                error!(
+                    "Failed to arm {} actions for workflow_id={}: {}",
+                    trigger_type, id, e
+                );
             }
-        }
-
-        // Check if any on_jobs_ready actions should be triggered based on job states
-        if let Err(e) = self
-            .workflow_actions_api
-            .check_and_trigger_actions(id, "on_jobs_ready", None, None)
-            .await
-        {
-            error!(
-                "Failed to check_and_trigger_actions for on_jobs_ready: {}",
-                e
-            );
         }
 
         // Broadcast SSE event for workflow initialization

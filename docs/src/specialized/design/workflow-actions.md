@@ -75,10 +75,11 @@ Executes once when all jobs reach terminal states (completed, failed, or cancele
 
 #### `on_jobs_ready`
 
-Executes when **all** specified jobs transition to the "ready" state.
+Executes when **all** specified jobs have reached the "ready" state in the current run.
 
-**When it fires**: When the last specified job becomes ready to execute (all dependencies
-satisfied).
+**When it fires**: When no specified job is still `uninitialized` or `blocked`. A job that has moved
+past ready (pending, running, `pending_failed`, finished) still counts, so an action created mid-run
+fires for jobs that are already running.
 
 **Typical use cases**:
 
@@ -101,9 +102,12 @@ each job becomes ready.
 
 #### `on_jobs_complete`
 
-Executes when **all** specified jobs reach terminal states (completed, failed, or canceled).
+Executes when **all** specified jobs reach terminal states (completed, failed, canceled, or
+terminated).
 
-**When it fires**: When the last specified job finishes execution.
+**When it fires**: When the last specified job finishes execution. A job awaiting AI classification
+(`pending_failed`) is not finished yet, and a failed job that is retried goes back to ready, so the
+action waits for the retry.
 
 **Typical use cases**:
 
@@ -295,8 +299,15 @@ Refer to this
 1. **Atomic Claiming**: Actions are claimed atomically by workers to prevent duplicate execution
 2. **Non-Persistent Actions**: Execute once per workflow (first worker to claim executes)
 3. **Persistent Actions**: Can be claimed and executed by multiple workers
-4. **Trigger Counting**: Job-based triggers increment a counter as jobs transition; action becomes
-   pending when count reaches threshold
+4. **Trigger Evaluation**: Each job-based action stores how many of its gate jobs do not yet satisfy
+   its trigger. A database trigger on `job.status` adjusts that number from each job's old and new
+   status, in the same transaction as the status change, so it cannot drift: a retried job, a reset,
+   or a `pending_failed` job is accounted for like any other status change, and polls only check
+   whether the number is zero. A claim re-checks the condition in the same statement, so a client
+   holding an out-of-date pending list cannot claim an action that is no longer triggered (409,
+   `state: not_triggered`). `trigger_count` in the API is the number of gate jobs satisfying the
+   trigger now. Event triggers (`on_workflow_start`, `on_workflow_complete`, `on_worker_*`) are
+   armed once when the event happens.
 5. **Immediate Availability**: Worker lifecycle actions are immediately available after workflow
    initialization
 
@@ -358,7 +369,7 @@ A client older than API 1.1.0 claims actions but never reports a result, so its 
 ├─→ on_workflow_start actions become pending
 ├─→ on_worker_start actions become pending (persistent)
 ├─→ on_worker_complete actions become pending (persistent)
-└─→ on_jobs_ready actions wait for job transitions
+└─→ on_jobs_ready actions become pending once all their jobs have reached ready
     ↓
 [Worker Claims and Executes Actions]
     ↓
@@ -387,9 +398,8 @@ A client older than API 1.1.0 claims actions but never reports a result, so its 
 Every reinitialize entry point — `torc workflows reinit`, `torc jobs reset-status --reinit`,
 `torc recover`, and the Slurm `regenerate`/`watch` paths — funnels through the single server routine
 `reset_actions_for_reinitialize`, which runs inside the `initialize_jobs` transaction. For each
-action it recomputes `trigger_count` from the current job states and then decides whether to
-**re-arm** the action (clear `executed`/`executed_by`/`state` so it can fire again on the new run)
-or **keep** its executed state (including `suppressed`).
+action it decides whether to **re-arm** the action (clear `executed`/`executed_by`/`state` so it can
+fire again on the new run) or **keep** its executed state (including `suppressed`).
 
 The decision follows one rule, independent of `action_type`:
 
@@ -405,8 +415,7 @@ is "duplicate side effect," not "duplicate allocation."
 
 ```mermaid
 flowchart TD
-    start([For each non-recovery action<br/>during reinitialize]) --> recompute[Recompute trigger_count<br/>from current job states]
-    recompute --> trig{Trigger type?}
+    start([For each non-recovery action<br/>during reinitialize]) --> trig{Trigger type?}
 
     trig -- on_workflow_start --> full{Full initialize?}
     full -- Yes --> rearm
@@ -420,8 +429,6 @@ flowchart TD
     rearm[Re-arm:<br/>executed = 0, state = NULL<br/>action can fire again]
     keep[Keep:<br/>executed / state unchanged<br/>no duplicate side effect]
 
-    rearm --> done([Write trigger_count])
-    keep --> done
 
     style keep fill:#d4edda,stroke:#28a745,color:#155724
     style rearm fill:#fff3cd,stroke:#ffc107,color:#856404

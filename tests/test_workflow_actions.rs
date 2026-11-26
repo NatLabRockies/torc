@@ -748,6 +748,32 @@ fn test_suppress_satisfied_schedule_actions(start_server: &ServerProcess) {
     let config = &start_server.config;
     let workflow = create_test_workflow(config, "mark_satisfied_schedule_workflow");
     let workflow_id = workflow.id.unwrap();
+    let manager = WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    );
+    // done_job completes before the actions exist; waiting_job stays Ready.
+    let done_job_id = create_test_job(config, workflow_id, "done")
+        .expect("create done job")
+        .id
+        .unwrap();
+    let waiting_job_id = create_test_job(config, workflow_id, "waiting")
+        .expect("create waiting job")
+        .id
+        .unwrap();
+    manager.initialize(true).expect("initialize");
+    let run_id = manager.get_run_id().expect("run_id");
+    let compute_node_id = create_test_compute_node(config, workflow_id).expect("compute node");
+    run_job_to_status(
+        config,
+        workflow_id,
+        done_job_id,
+        run_id,
+        compute_node_id,
+        0,
+        JobStatus::Completed,
+    );
 
     let schedule_config = json!({
         "scheduler_type": "slurm",
@@ -770,16 +796,15 @@ fn test_suppress_satisfied_schedule_actions(start_server: &ServerProcess) {
     .expect("Failed to create target action");
     let target_id = target.id.unwrap();
 
-    // Target 2: on_jobs_complete + schedule_nodes whose gating jobs already completed
-    // (trigger_count >= required_triggers) — this is the reported bug; must be marked executed.
-    let mut satisfied_body = workflow_action(
+    // Target 2: on_jobs_complete + schedule_nodes whose gating job already completed — this is
+    // the reported bug; must be marked executed.
+    let satisfied_body = workflow_action(
         workflow_id,
         "on_jobs_complete",
         "schedule_nodes",
         schedule_config.clone(),
-        Some(vec![1]), // required_triggers becomes 1 (one gating job)
+        Some(vec![done_job_id]),
     );
-    satisfied_body.trigger_count = 1; // already satisfied: trigger_count >= required_triggers
     let satisfied =
         apis::workflow_actions_api::create_workflow_action(config, workflow_id, satisfied_body)
             .expect("Failed to create satisfied on_jobs_complete action");
@@ -826,7 +851,7 @@ fn test_suppress_satisfied_schedule_actions(start_server: &ServerProcess) {
             "on_jobs_complete",
             "schedule_nodes",
             schedule_config.clone(),
-            Some(vec![2]), // required_triggers=1, trigger_count defaults to 0 → unsatisfied
+            Some(vec![waiting_job_id]), // still Ready → unsatisfied
         ),
     )
     .expect("Failed to create unsatisfied on_jobs_complete action");
@@ -4779,4 +4804,156 @@ fn test_older_client_without_result_reporting(start_server: &ServerProcess) {
     let later = now + chrono::Duration::minutes(STUCK_ACTION_CLAIM_MINUTES + 1);
     let (_, stuck) = problem_actions(std::slice::from_ref(&action), later);
     assert_eq!(stuck.len(), 1);
+}
+
+// ---------------------------------------------------------------------------
+// Job-gated triggers are evaluated from current job state, not from a stored counter.
+// ---------------------------------------------------------------------------
+
+/// Create a workflow with root jobs `names` and one action gated on all of them; initialize it.
+/// Returns (manager, workflow_id, job ids, action_id, run_id, compute_node_id).
+fn gated_workflow(
+    config: &torc::client::Configuration,
+    name: &str,
+    trigger_type: &str,
+    names: &[&str],
+) -> (WorkflowManager, i64, Vec<i64>, i64, i64, i64) {
+    let workflow = create_test_workflow(config, name);
+    let workflow_id = workflow.id.unwrap();
+    let manager = WorkflowManager::new(
+        config.clone(),
+        TorcConfig::load().unwrap_or_default(),
+        workflow,
+    );
+    let job_ids: Vec<i64> = names
+        .iter()
+        .map(|n| create_test_job(config, workflow_id, n).unwrap().id.unwrap())
+        .collect();
+    let action_id = apis::workflow_actions_api::create_workflow_action(
+        config,
+        workflow_id,
+        workflow_action(
+            workflow_id,
+            trigger_type,
+            "schedule_nodes",
+            schedule_nodes_config(),
+            Some(job_ids.clone()),
+        ),
+    )
+    .expect("create action")
+    .id
+    .unwrap();
+    manager.initialize(true).expect("initialize");
+    let run_id = manager.get_run_id().expect("run_id");
+    let compute_node_id = create_test_compute_node(config, workflow_id).expect("compute node");
+    (
+        manager,
+        workflow_id,
+        job_ids,
+        action_id,
+        run_id,
+        compute_node_id,
+    )
+}
+
+/// A failed gate that is retried is no longer complete: the action must not fire when the other
+/// gate completes (the old counter counted the failure and kept it after the retry).
+#[rstest]
+fn test_on_jobs_complete_waits_for_retried_gate(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (_m, workflow_id, jobs, action_id, run_id, cn) = gated_workflow(
+        config,
+        "derived_retried_gate",
+        "on_jobs_complete",
+        &["a", "b"],
+    );
+
+    run_job_to_status(
+        config,
+        workflow_id,
+        jobs[0],
+        run_id,
+        cn,
+        1,
+        JobStatus::Failed,
+    );
+    apis::jobs_api::retry_job(config, jobs[0], run_id, Some(3)).expect("retry a");
+    run_job_to_status(
+        config,
+        workflow_id,
+        jobs[1],
+        run_id,
+        cn,
+        0,
+        JobStatus::Completed,
+    );
+
+    assert!(
+        !action_is_pending(config, workflow_id, action_id),
+        "action must wait while gate a is being retried"
+    );
+    assert_eq!(
+        fetch_action(config, workflow_id, action_id).trigger_count,
+        1
+    );
+}
+
+/// `pending_failed` (awaiting AI classification) is not complete.
+#[rstest]
+fn test_on_jobs_complete_waits_for_pending_failed_gate(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (_m, workflow_id, jobs, action_id, run_id, cn) = gated_workflow(
+        config,
+        "derived_pending_failed_gate",
+        "on_jobs_complete",
+        &["a"],
+    );
+
+    run_job_to_status(
+        config,
+        workflow_id,
+        jobs[0],
+        run_id,
+        cn,
+        1,
+        JobStatus::PendingFailed,
+    );
+    assert!(!action_is_pending(config, workflow_id, action_id));
+}
+
+/// A claim re-checks the trigger: a client holding a pending list from before the gate was reset
+/// cannot claim the action.
+#[rstest]
+fn test_claim_rejects_action_no_longer_triggered(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (_m, workflow_id, jobs, action_id, run_id, cn) =
+        gated_workflow(config, "derived_stale_claim", "on_jobs_ready", &["a"]);
+
+    assert!(action_is_pending(config, workflow_id, action_id));
+    apis::jobs_api::manage_status_change(config, jobs[0], JobStatus::Uninitialized, run_id)
+        .expect("reset gate");
+
+    let claim = apis::workflow_actions_api::claim_action(
+        config,
+        workflow_id,
+        action_id,
+        ClaimActionRequest {
+            compute_node_id: Some(cn),
+        },
+    );
+    assert!(claim.is_err(), "claim of an untriggered action must fail");
+    assert!(!fetch_action(config, workflow_id, action_id).executed);
+}
+
+/// on_jobs_ready counts a gate that already moved past ready (running), so an action created
+/// mid-run still fires.
+#[rstest]
+fn test_on_jobs_ready_counts_running_gate(start_server: &ServerProcess) {
+    let config = &start_server.config;
+    let (_m, workflow_id, jobs, action_id, run_id, _cn) =
+        gated_workflow(config, "derived_running_gate", "on_jobs_ready", &["a"]);
+
+    apis::jobs_api::manage_status_change(config, jobs[0], JobStatus::Running, run_id)
+        .expect("set running");
+    assert!(action_is_pending(config, workflow_id, action_id));
 }

@@ -2379,7 +2379,6 @@ where
         }
         self.signal_job_completion();
 
-        let mut completed_job_ids = Vec::with_capacity(completions.len());
         for completion in completions {
             let event_type = format!("job_{}", completion.status.to_string().to_lowercase());
             let severity = match completion.status {
@@ -2409,23 +2408,6 @@ where
             debug!(
                 "complete_job: successfully completed job_id={} with status={}, result_id={}",
                 completion.job_id, completion.status, completion.result_id
-            );
-            completed_job_ids.push(completion.job_id);
-        }
-
-        if let Err(e) = self
-            .workflow_actions_api
-            .check_and_trigger_actions(
-                workflow_id,
-                "on_jobs_complete",
-                Some(completed_job_ids.clone()),
-                None,
-            )
-            .await
-        {
-            error!(
-                "Failed to check_and_trigger_actions for on_jobs_complete: {}",
-                e
             );
         }
 
@@ -3168,13 +3150,10 @@ impl<C> Server<C> {
                     );
                     if let Err(e) = self
                         .workflow_actions_api
-                        .check_and_trigger_actions(workflow_id, "on_workflow_complete", None, None)
+                        .arm_event_actions(workflow_id, "on_workflow_complete")
                         .await
                     {
-                        error!(
-                            "Failed to check_and_trigger_actions for on_workflow_complete: {}",
-                            e
-                        );
+                        error!("Failed to arm on_workflow_complete actions: {}", e);
                     }
                 }
             }

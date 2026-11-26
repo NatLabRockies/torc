@@ -254,7 +254,7 @@ narrower than "the workflow declares an action":
   now, so the runner stays alive to run it.
 - **Untriggered**: the action is gated on job completions that may be happening on other nodes. The
   runner honors it for only 60 seconds after its own last local job completion — the window in which
-  the server's background unblock task may not yet have bumped the trigger count — and then exits.
+  the server's background unblock task may not yet have made its gate jobs ready — and then exits.
 - **Already executed by this runner**: ignored. Persistent actions keep `executed = 0` on the server
   so that every worker gets a turn, so the server flag alone cannot tell a runner it is done.
 - **Missing an ID**: ignored. The runner cannot claim such an action, so it cannot be a reason to

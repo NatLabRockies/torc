@@ -2323,7 +2323,7 @@ impl WorkflowSpec {
 
     /// Recognized workflow action trigger types.
     ///
-    /// Kept in sync with the server's `check_and_trigger_actions` dispatch
+    /// Kept in sync with the server's trigger handling
     /// (`src/server/api/workflow_actions.rs`). An unknown trigger type silently never
     /// fires, so we reject it at creation rather than producing a confusing
     /// "0 allocations" failure at submit time.

@@ -1190,6 +1190,8 @@ fn test_apply_plan_suppresses_persistent_actions(start_server: &ServerProcess) {
             config_json.clone(),
         );
         body.persistent = persistent;
+        // Created after initialize, so arm it here (initialize arms on_worker_start actions).
+        body.trigger_count = body.required_triggers;
         apis::workflow_actions_api::create_workflow_action(config, workflow_id, body)
             .unwrap()
             .id
