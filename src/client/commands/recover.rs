@@ -2472,11 +2472,13 @@ fn prompt_scheduler_choice(
 /// trigger condition is *already satisfied* — i.e. it would fire immediately, without any further
 /// job progress, as soon as a compute node starts.
 ///
-/// `reinitialize_workflow` re-arms every action (the server clears `executed` and recomputes
-/// `trigger_count` from the current job state). An already-satisfied `schedule_nodes` action would
-/// then re-submit its own original allocation count when recovery reuses an existing scheduler and
-/// the user submits a chosen number of allocations directly — exactly the duplicate we want to
-/// suppress.
+/// `reinitialize_workflow` re-arms `on_worker_start` actions, `on_workflow_start` actions (unless
+/// only uninitialized jobs were reset), and job-gated actions whose gate jobs it reset; the server
+/// clears `executed` and recomputes `trigger_count` from the current job state. Job-gated actions
+/// with untouched gates stay executed and fail the `executed` check below. A re-armed action that
+/// is already satisfied would re-submit its own original allocation count when recovery reuses an
+/// existing scheduler and the user submits a chosen number of allocations directly, which is the
+/// duplicate we suppress.
 ///
 /// Job-gated triggers (`on_jobs_ready` / `on_jobs_complete`) count as satisfied only when their
 /// gating jobs already completed in a prior run (`trigger_count >= required_triggers`). A job-gated
