@@ -352,10 +352,6 @@
     "jobs": {
       "enabled": true,
       "granularity": "time_series"
-    },
-    "metrics": [
-      "cpu_percent",
-      "memory_bytes"
-    ]
+    }
   }
 }

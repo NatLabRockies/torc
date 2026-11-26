@@ -52,9 +52,6 @@ resource_monitor:
   jobs:
     enabled: true
     granularity: "time_series"
-  metrics:
-    - cpu_percent
-    - memory_bytes
 
 # Define input files created by setup job
 files:

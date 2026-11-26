@@ -519,6 +519,11 @@ mod tests {
         assert_eq!(d.len(), 1, "{d:?}");
         assert_eq!(&bad[d[0].0..d[0].1], "comand");
         assert!(lint(SPEC).is_empty(), "{:?}", lint(SPEC));
+
+        let monitor =
+            "name: w\nresource_monitor:\n  sample_interval_secs: 5\n  jobs:\n    enabld: true\n";
+        let d: Vec<_> = lint(monitor).iter().map(|x| &monitor[x.0..x.1]).collect();
+        assert_eq!(d, ["sample_interval_secs", "enabld"]);
     }
 
     #[test]

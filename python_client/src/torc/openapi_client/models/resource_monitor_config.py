@@ -37,6 +37,7 @@ class ResourceMonitorConfig(BaseModel):
     jobs: Optional[JobMonitorConfig] = None
     live_monitoring: Optional[StrictBool] = Field(default=False, description="Checkpoint the time-series database after every flush so readers on other hosts (e.g. torc-dash live plots over a shared filesystem) see new samples. Off by default: each checkpoint adds a small write and fsync to the main database file.")
     sample_interval_seconds: Optional[StrictInt] = 10
+    additional_properties: Dict[str, Any] = {}
     __properties: ClassVar[List[str]] = ["compute_node", "enabled", "flush_interval_seconds", "generate_plots", "granularity", "jobs", "live_monitoring", "sample_interval_seconds"]
 
     model_config = ConfigDict(
@@ -69,8 +70,10 @@ class ResourceMonitorConfig(BaseModel):
         * `None` is only added to the output dict for nullable fields that
           were set at model initialization. Other fields with value `None`
           are ignored.
+        * Fields in `self.additional_properties` are added to the output dict.
         """
         excluded_fields: Set[str] = set([
+            "additional_properties",
         ])
 
         _dict = self.model_dump(
@@ -84,6 +87,11 @@ class ResourceMonitorConfig(BaseModel):
         # override the default output from pydantic by calling `to_dict()` of jobs
         if self.jobs:
             _dict['jobs'] = self.jobs.to_dict()
+        # puts key-value pairs in additional_properties in the top level
+        if self.additional_properties is not None:
+            for _key, _value in self.additional_properties.items():
+                _dict[_key] = _value
+
         return _dict
 
     @classmethod
@@ -105,6 +113,11 @@ class ResourceMonitorConfig(BaseModel):
             "live_monitoring": obj.get("live_monitoring") if obj.get("live_monitoring") is not None else False,
             "sample_interval_seconds": obj.get("sample_interval_seconds") if obj.get("sample_interval_seconds") is not None else 10
         })
+        # store additional fields in additional_properties
+        for _key in obj.keys():
+            if _key not in cls.__properties:
+                _obj.additional_properties[_key] = obj.get(_key)
+
         return _obj
 
 

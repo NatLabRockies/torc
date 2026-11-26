@@ -939,7 +939,7 @@ pub enum MonitorGranularity {
 #[cfg_attr(feature = "client", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct JobMonitorConfig {
     pub enabled: bool,
     pub granularity: MonitorGranularity,
@@ -958,7 +958,7 @@ impl Default for JobMonitorConfig {
 #[cfg_attr(feature = "client", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct ComputeNodeMonitorConfig {
     pub enabled: bool,
     pub granularity: MonitorGranularity,
@@ -985,7 +985,7 @@ impl Default for ComputeNodeMonitorConfig {
 #[cfg_attr(feature = "client", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "openapi-codegen", derive(utoipa::ToSchema))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct ResourceMonitorConfig {
     /// Deprecated compatibility field. Use `jobs.enabled` for new workflow specs.
     pub enabled: bool,

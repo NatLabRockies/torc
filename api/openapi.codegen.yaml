@@ -6771,6 +6771,7 @@ components:
         memory:
           type: boolean
           default: true
+      additionalProperties: false
     ComputeNodeSchedule:
       type: object
       required:
@@ -7505,6 +7506,7 @@ components:
         granularity:
           $ref: '#/components/schemas/MonitorGranularity'
           default: summary
+      additionalProperties: false
     JobStatus:
       type: string
       enum:
@@ -8435,6 +8437,7 @@ components:
           type: integer
           format: int32
           default: 10
+      additionalProperties: false
     ResourceRequirementsModel:
       type: object
       required:

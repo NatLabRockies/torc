@@ -1419,6 +1419,18 @@ mod tests {
     }
 
     #[test]
+    fn unknown_fields_are_rejected() {
+        for json in [
+            r#"{"sample_interval_secs": 5}"#,
+            r#"{"jobs": {"enabld": true}}"#,
+            r#"{"compute_node": {"cpus": true}}"#,
+        ] {
+            let err = serde_json::from_str::<ResourceMonitorConfig>(json).unwrap_err();
+            assert!(err.to_string().contains("unknown field"), "{json}: {err}");
+        }
+    }
+
+    #[test]
     fn legacy_top_level_config_controls_jobs() {
         let json = r#"{
             "enabled": true,
