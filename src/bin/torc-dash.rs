@@ -71,6 +71,9 @@ struct McpClient {
     peer: rmcp::service::Peer<rmcp::service::RoleClient>,
     /// Cached tool definitions from the MCP server
     tools: Vec<rmcp::model::Tool>,
+    /// Keeps the session alive: dropping the running service cancels it and closes the
+    /// transport, so every later tool call would fail with "Transport closed".
+    _service: rmcp::service::RunningService<rmcp::service::RoleClient, ()>,
 }
 
 /// Application state shared across handlers
@@ -4574,7 +4577,7 @@ async fn ensure_mcp_client(
         .map_err(|e| anyhow::anyhow!("Failed to spawn torc-mcp-server: {}", e))?;
 
     // Connect as MCP client
-    let running_service: rmcp::service::RunningService<rmcp::service::RoleClient, _> = ()
+    let running_service: rmcp::service::RunningService<rmcp::service::RoleClient, ()> = ()
         .serve(child_process)
         .await
         .map_err(|e| anyhow::anyhow!("MCP handshake failed: {}", e))?;
@@ -4620,6 +4623,7 @@ async fn ensure_mcp_client(
     *guard = Some(McpClient {
         peer: peer.clone(),
         tools: tools.clone(),
+        _service: running_service,
     });
 
     Ok((peer, tools))
