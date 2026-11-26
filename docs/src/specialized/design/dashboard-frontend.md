@@ -58,7 +58,11 @@ sequenceDiagram
 - **Tabs are hash routes** (`#/details`). On a hash change the page sets `$tab` and calls
   `GET /ui/tab`, which runs the tab module's `view()` and patches the result into `#content`. The
   same call runs on Refresh, after actions (`Ui::refresh()`), and every `$refresh` seconds while the
-  page is visible (`Ctx::auto` tells a view it is an automatic refresh).
+  page is visible (`Ctx::auto` tells a view it is an automatic refresh). Interactions inside a tab
+  (sorting, paging, filters, sub-tabs) call `GET /ui/tab?content=1`, which patches only `#content`
+  and skips the top bar, the workflow list, and the ping. Tab switches add `?nav=1` to cross-fade
+  the new content in (`Ui::patch_animated`). The handler fetches the workflow list, the ping, and
+  the tab's data concurrently.
 - **Patches morph.** Datastar merges new HTML into elements with the same id, so re-rendering a
   whole tab keeps focus, typed text, scroll positions, and open `<details>`. Elements whose content
   the browser manages (log tails, the chat thread while streaming) are marked `data-ignore-morph`.

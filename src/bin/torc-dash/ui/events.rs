@@ -34,7 +34,7 @@ use super::Ctx;
 use super::kit::{self, Col, G, Sig, SortKey, Table, TableState, Tone, Ui, badge as tone_badge};
 use crate::AppState;
 
-const RELOAD: &str = "@get('/ui/tab')";
+const RELOAD: &str = "@get('/ui/tab?content=1')";
 /// Most events shown (and kept per live connection).
 const MAX: usize = 1000;
 /// Where the live-updates choice is remembered (as in the Svelte dashboard).

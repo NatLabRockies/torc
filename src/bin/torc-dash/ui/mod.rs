@@ -137,7 +137,7 @@ fn shell() -> Markup {
             body data-signals=(format!("Object.assign({defaults}, torcPrefs)"))
                 data-effect="torcTheme($theme, $palette); torcSave({wf: $wf, refresh: $refresh, allUsers: $allUsers, archived: $archived, group: $group, outputDir: $outputDir, theme: $theme, palette: $palette})"
                 data-init="$tab = torcTab(); @get('/ui/tab')"
-                data-on:hashchange__window="$tab = torcTab(); @get('/ui/tab')"
+                data-on:hashchange__window="$tab = torcTab(); @get('/ui/tab?nav=1')"
                 data-on:torc-refresh="@get('/ui/tab')"
                 data-on:torc-theme="$theme = ({system: 'light', light: 'dark', dark: 'system'})[$theme] || 'system'"
                 data-on:torc-create="@get('/ui/create/open')"
@@ -213,8 +213,26 @@ fn shortcuts_dialog() -> Markup {
 
 #[derive(serde::Deserialize)]
 struct TabQuery {
+    /// An automatic refresh (timer or table interaction): views may reuse cached rows.
     #[serde(default)]
     auto: Option<String>,
+    /// Re-render only `#content` (an interaction inside the tab): skip the top bar, the workflow
+    /// list, and the ping.
+    #[serde(default)]
+    content: Option<String>,
+    /// A tab switch: cross-fade the new content in.
+    #[serde(default)]
+    nav: Option<String>,
+}
+
+/// The workflow picker's list, newest first.
+async fn workflow_list(st: &AppState, g: &G) -> Vec<torc::models::WorkflowModel> {
+    let mut list: Vec<torc::models::WorkflowModel> =
+        kit::list_all(st, "/workflows", &g.workflow_query())
+            .await
+            .unwrap_or_default();
+    list.sort_by_key(|w| std::cmp::Reverse(w.id));
+    list
 }
 
 /// Render the current tab (`$tab`) into `#content`, plus the top bar and connection status.
@@ -230,55 +248,64 @@ async fn tab_handler(
         .map(|t| (t.0, t.1))
         .unwrap_or(("workflows", "Workflows"));
     let mut ui = Ui::new();
+    let workflow_tab = WORKFLOW_TABS.contains(&tab);
+    // Without a selected workflow the content depends on the list, so render the whole page.
+    let content_only = q.content.is_some() && !(workflow_tab && g.wf.is_none());
 
-    let picker = if WORKFLOW_TABS.contains(&tab) {
-        let list: Vec<torc::models::WorkflowModel> =
-            kit::list_all(&st, "/workflows", &g.workflow_query())
-                .await
-                .unwrap_or_default();
-        let mut list = list;
-        list.sort_by_key(|w| std::cmp::Reverse(w.id));
-        // Default to the newest workflow so workflow tabs never open empty.
-        if g.wf.is_none()
-            && let Some(id) = list.first().and_then(|w| w.id)
-        {
+    // Default to the newest workflow so workflow tabs never open empty. Only this case has to
+    // wait for the list before rendering the tab; otherwise everything below runs concurrently.
+    let mut list = None;
+    if workflow_tab && g.wf.is_none() {
+        let l = workflow_list(&st, &g).await;
+        if let Some(id) = l.first().and_then(|w| w.id) {
             g.wf = Some(id);
             ui = ui.signals(serde_json::json!({ "wf": id }));
         }
-        Some(workflow_picker(&list, g.wf))
-    } else {
-        None
-    };
-
-    let ping: Result<Value, String> = kit::get(&st, "/ping", &[]).await;
-    let conn = html! {
-        div #conn.status title=(ping.as_ref().err().cloned().unwrap_or_else(|| "Connected to torc-server".into())) {
-            span.dot.ok[ping.is_ok()].bad[ping.is_err()] {}
-            (if ping.is_ok() { "Connected" } else { "Disconnected" })
-        }
-    };
+        list = Some(l);
+    }
 
     let cx = Ctx {
         g,
         sig,
         auto: q.auto.is_some(),
     };
-    let content = match tab {
-        "details" => details::view(&st, &cx).await,
-        "dag" => dag::view(&st, &cx).await,
-        "events" => events::view(&st, &cx).await,
-        "debugging" => debugging::view(&st, &cx).await,
-        "resources" => resources::view(&st, &cx).await,
-        "editor" => editor::view(&st, &cx).await,
-        "chat" => chat::view(&st, &cx).await,
-        "config" => config::view(&st, &cx).await,
-        _ => workflows::view(&st, &cx).await,
+    let list_fut = async {
+        match list {
+            Some(l) => Some(l),
+            None if workflow_tab && !content_only => Some(workflow_list(&st, &cx.g).await),
+            None => None,
+        }
     };
+    let ping_fut = async {
+        if content_only {
+            None
+        } else {
+            Some(kit::get::<Value>(&st, "/ping", &[]).await)
+        }
+    };
+    let content_fut = async {
+        match tab {
+            "details" => details::view(&st, &cx).await,
+            "dag" => dag::view(&st, &cx).await,
+            "events" => events::view(&st, &cx).await,
+            "debugging" => debugging::view(&st, &cx).await,
+            "resources" => resources::view(&st, &cx).await,
+            "editor" => editor::view(&st, &cx).await,
+            "chat" => chat::view(&st, &cx).await,
+            "config" => config::view(&st, &cx).await,
+            _ => workflows::view(&st, &cx).await,
+        }
+    };
+    let (list, ping, content) = tokio::join!(list_fut, ping_fut, content_fut);
 
-    ui.patch(html! {
+    let content = html! { main #content.content data-tab=(tab) { (content) } };
+    if content_only {
+        return ui.patch(content);
+    }
+    let ui = ui.patch(html! {
         header #topbar.topbar {
             h1 { (label) }
-            @if let Some(p) = picker { (p) }
+            @if let Some(l) = &list { (workflow_picker(l, cx.g.wf)) }
             div.grow {}
             button.btn.btn-ghost.btn-sm title="Refresh (R)" data-on:click="@get('/ui/tab')" data-indicator="_loading" {
                 span.spinner.small data-show="$_loading" style="display:none" {}
@@ -286,9 +313,19 @@ async fn tab_handler(
                 " Refresh"
             }
         }
+    });
+    let ui = if q.nav.is_some() {
+        ui.patch_animated(content)
+    } else {
+        ui.patch(content)
+    };
+    let ping = ping.unwrap_or_else(|| Err(String::new()));
+    ui.patch(html! {
+        div #conn.status title=(ping.as_ref().err().cloned().unwrap_or_else(|| "Connected to torc-server".into())) {
+            span.dot.ok[ping.is_ok()].bad[ping.is_err()] {}
+            (if ping.is_ok() { "Connected" } else { "Disconnected" })
+        }
     })
-    .patch(html! { main #content.content data-tab=(tab) { (content) } })
-    .patch(conn)
 }
 
 fn workflow_picker(list: &[torc::models::WorkflowModel], selected: Option<i64>) -> Markup {

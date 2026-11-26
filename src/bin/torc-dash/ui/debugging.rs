@@ -26,7 +26,7 @@ use super::kit::{
 };
 use crate::AppState;
 
-const RELOAD: &str = "@get('/ui/tab')";
+const RELOAD: &str = "@get('/ui/tab?content=1')";
 /// Characters of live-tail output kept per pane.
 const TAIL_MAX_CHARS: usize = 512 * 1024;
 /// Find-in-log matches highlighted.
@@ -549,7 +549,7 @@ async fn tail_view(st: &Arc<AppState>, g: &G, id: i64, d: &Dbg, tailed: &[i64]) 
             }
             div.side {
                 // Re-render every 5s so a job's retry (a new attempt, a new file) gets its pane.
-                div.toolbar "data-on-interval__duration.5s"=[(n > 0).then_some("document.visibilityState === 'visible' && @get('/ui/tab?auto=1')")] {
+                div.toolbar "data-on-interval__duration.5s"=[(n > 0).then_some("document.visibilityState === 'visible' && @get('/ui/tab?auto=1&content=1')")] {
                     span.faint { (n) " job" (if n == 1 { "" } else { "s" }) " tailed" }
                     div.grow {}
                     button.btn.btn-sm disabled[n == 0] data-on:click="$debug.paused = !$debug.paused" {

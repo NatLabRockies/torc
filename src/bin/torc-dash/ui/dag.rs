@@ -19,7 +19,7 @@ use super::Ctx;
 use super::kit::{self, JOB_STATUSES, icon, js};
 use crate::AppState;
 
-const RELOAD: &str = "@get('/ui/tab')";
+const RELOAD: &str = "@get('/ui/tab?content=1')";
 /// Above this many nodes: lay out left-to-right straight away and draw straight edges.
 const LARGE: usize = 1000;
 /// Above this many nodes, ask before rendering (a multi-megabyte SVG is slow to lay out and draw).

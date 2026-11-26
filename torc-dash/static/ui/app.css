@@ -623,6 +623,18 @@ input[type="checkbox"] {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  /* Tab switches cross-fade only the content (Ui::patch_animated); the shell stays put. */
+  view-transition-name: content;
+}
+::view-transition-old(content),
+::view-transition-new(content) {
+  animation-duration: 120ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(content),
+  ::view-transition-new(content) {
+    animation: none;
+  }
 }
 .shortcuts {
   align-items: center;

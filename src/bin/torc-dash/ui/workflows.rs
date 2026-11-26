@@ -23,7 +23,7 @@ use super::kit::{
 };
 use crate::AppState;
 
-const RELOAD: &str = "@get('/ui/tab')";
+const RELOAD: &str = "@get('/ui/tab?content=1')";
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()

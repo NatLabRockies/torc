@@ -36,7 +36,7 @@ use super::kit::{
 use crate::AppState;
 
 /// Re-render after a table interaction; big tables reuse their cached rows (see [`rows_for`]).
-const RELOAD: &str = "@get('/ui/tab?auto=1')";
+const RELOAD: &str = "@get('/ui/tab?auto=1&content=1')";
 
 /// (id, label, list endpoint)
 const SUBTABS: [(&str, &str, &str); 11] = [
@@ -494,7 +494,7 @@ pub async fn view(st: &Arc<AppState>, cx: &Ctx) -> Markup {
                 .collect();
             html! {
                 (header)
-                (kit::seg_tabs("details.sub", sub, &tabs, "@get('/ui/tab')"))
+                (kit::seg_tabs("details.sub", sub, &tabs, "@get('/ui/tab?content=1')"))
                 (sub_tab(sub, wf, &state, &ns, rows))
             }
         }

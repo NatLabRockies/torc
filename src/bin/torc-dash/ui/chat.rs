@@ -297,7 +297,7 @@ pub async fn view(st: &Arc<AppState>, cx: &Ctx) -> Markup {
                 }
                 div.toolbar {
                     @if ok && !c.setup {
-                        button.btn.btn-sm.btn-ghost data-on:click="$chat.setup = true; @get('/ui/tab')" { "Provider" }
+                        button.btn.btn-sm.btn-ghost data-on:click="$chat.setup = true; @get('/ui/tab?content=1')" { "Provider" }
                     }
                     a.btn.btn-sm.btn-ghost href=(DOCS) target="_blank" rel="noopener" title="AI Chat documentation" {
                         (icon("external", 13)) " Docs"
@@ -854,7 +854,7 @@ fn setup_form(
     // Ids per provider, so switching providers doesn't carry typed values across.
     let fid = |k: &str| format!("chat-{n}-{provider}-{k}");
     let cancel = match p {
-        Panel::Tab => "$chat.setup = false; @get('/ui/tab')".to_string(),
+        Panel::Tab => "$chat.setup = false; @get('/ui/tab?content=1')".to_string(),
         Panel::Editor => "$chat.esetup = false; @get('/ui/chat/editor-panel')".to_string(),
     };
     html! {

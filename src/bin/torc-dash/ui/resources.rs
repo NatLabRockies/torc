@@ -17,7 +17,7 @@ use super::Ctx;
 use super::kit::{self, G, Sig, Ui, js, seg_tabs};
 use crate::AppState;
 
-const RELOAD: &str = "@get('/ui/tab')";
+const RELOAD: &str = "@get('/ui/tab?content=1')";
 const DEFAULT_DIR: &str = "torc_output/resource_utilization";
 const POLL_SECS: u32 = 5;
 const GIB: f64 = 1024.0 * 1024.0 * 1024.0;
@@ -568,7 +568,7 @@ async fn live_view(_st: &Arc<AppState>, s: &Scan, r: &Res) -> Markup {
         !n.system.timestamp.is_empty() || n.jobs.iter().any(|(_, s)| !s.timestamp.is_empty())
     });
     let now = chrono::Utc::now().timestamp() as f64;
-    let poll = "!$res.paused && document.visibilityState === 'visible' && @get('/ui/tab?auto=1')";
+    let poll = "!$res.paused && document.visibilityState === 'visible' && @get('/ui/tab?auto=1&content=1')";
     html! {
         div.live {
             div.toolbar.live-bar {

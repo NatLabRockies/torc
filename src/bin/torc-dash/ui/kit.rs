@@ -36,6 +36,10 @@ impl Ui {
 
     fn elements(mut self, selector: Option<&str>, mode: &str, html: &str) -> Self {
         self.0.push_str("event: datastar-patch-elements\n");
+        self.elements_body(selector, mode, html)
+    }
+
+    fn elements_body(mut self, selector: Option<&str>, mode: &str, html: &str) -> Self {
         if let Some(s) = selector {
             self.0.push_str(&format!("data: selector {s}\n"));
         }
@@ -54,6 +58,14 @@ impl Ui {
     /// Morph the top-level element(s) of `html` into the page elements with the same ids.
     pub fn patch(self, html: Markup) -> Self {
         self.elements(None, "outer", &html.into_string())
+    }
+
+    /// Like [`Ui::patch`], wrapped in the browser's View Transitions API (a short cross-fade; see
+    /// `::view-transition-*` in app.css). Use it for navigation, not for refreshes.
+    pub fn patch_animated(mut self, html: Markup) -> Self {
+        self.0
+            .push_str("event: datastar-patch-elements\ndata: useViewTransition true\n");
+        self.elements_body(None, "outer", &html.into_string())
     }
 
     /// Replace the children of `selector` with `html`.
