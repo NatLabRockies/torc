@@ -113,7 +113,8 @@ sequenceDiagram
 - **Dependency graph.** Laid out on the server with `rust-sugiyama`, one connected component at a
   time, then drawn as SVG with pan and zoom. Layouts are cached, so auto-refresh doesn't redo them.
 - **Resource charts.** Plot data from `torc plot-resources` and live samples are drawn as SVG line
-  and bar charts with `<title>` tooltips.
+  and bar charts. Each point carries its hover text in `data-` attributes; `shell.js` shows the
+  values of every series nearest the pointer in one tooltip, as Plotly's unified hover did.
 - **AI chat.** Conversations are kept on the server, keyed by an id the page generates, so a reply
   keeps streaming across tab switches. Markdown is rendered with `pulldown-cmark`, dropping raw
   HTML.

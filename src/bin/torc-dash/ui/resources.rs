@@ -722,7 +722,8 @@ fn live_chart(nodes: &[Node], show_nodes: bool) -> Markup {
 }
 
 /// Small server-rendered SVG charts: stacked panels of line series (sharing one x range) or
-/// grouped bars, colored by the `--chart-N` CSS variables, with `<title>` tooltips and a legend.
+/// grouped bars, colored by the `--chart-N` CSS variables, with a legend. Points and bars carry
+/// their hover text in `data-x` / `data-tip`; `shell.js` shows it (all series at the pointer's x).
 pub mod chart {
     use maud::{Markup, html};
 
@@ -846,7 +847,6 @@ pub mod chart {
         let (top, yt) = ticks(p.max.unwrap_or(data_max));
         let sy = |y: f64| T + ph - y.clamp(0.0, top) / top * ph;
         let sx = |x: f64| L + (x - x0) / (x1 - x0) * pw;
-        let fmt = |x: f64, y: f64| format!("{} @ {}", num(y), xfmt(x));
         html! {
             svg.chart-panel viewBox=(format!("0 0 {W} {H}")) role="img" aria-label=(p.title) {
                 text.ptitle x=(L) y="14" { (p.title) }
@@ -864,9 +864,8 @@ pub mod chart {
                             @if let Some((_, y)) = s.pts.iter().find(|pt| pt.0 as usize == ci) {
                                 rect class=(format!("bar c{}", s.color % COLORS))
                                     x=(L + band * ci as f64 + band * 0.1 + bw * si as f64) y=(sy(*y))
-                                    width=(bw.max(1.0)) height=((T + ph - sy(*y)).max(0.0)) {
-                                    title { (s.name) " · " (c) ": " (num(*y)) }
-                                }
+                                    width=(bw.max(1.0)) height=((T + ph - sy(*y)).max(0.0))
+                                    data-x=(c) data-tip=(format!("{}: {}", s.name, num(*y))) {}
                             }
                         }
                     }
@@ -879,11 +878,11 @@ pub mod chart {
                         @let pts = thin(s);
                         @let d = pts.iter().enumerate().map(|(i, (x, y, _))| format!("{}{:.1},{:.1}", if i == 0 { "M" } else { "L" }, sx(*x), sy(*y))).collect::<String>();
                         g class=(format!("series c{}", s.color % COLORS)) {
-                            path.line d=(d) { title { (s.name) } }
+                            path.line d=(d) {}
                             @for (x, y, note) in &pts {
-                                circle.pt cx=(format!("{:.1}", sx(*x))) cy=(format!("{:.1}", sy(*y))) r="3.5" {
-                                    title { (s.name) ": " (fmt(*x, *y)) @if let Some(n) = note { " (" (n) ")" } }
-                                }
+                                circle.pt cx=(format!("{:.1}", sx(*x))) cy=(format!("{:.1}", sy(*y))) r="3.5"
+                                    data-x=(xfmt(*x))
+                                    data-tip=(format!("{}: {}{}", s.name, num(*y), note.map(|n| format!(" ({n})")).unwrap_or_default())) {}
                             }
                         }
                     }

@@ -73,14 +73,38 @@
   fill: var(--c);
   opacity: 0;
 }
-.chart-panel .pt:hover {
+.chart-panel .pt.hot {
   opacity: 1;
+  stroke: var(--surface);
+  stroke-width: 1.5;
 }
 .chart-panel .bar {
   fill: var(--c);
 }
-.chart-panel .bar:hover {
+.chart-panel .bar.hot {
   opacity: 0.8;
+}
+.chart-tip {
+  position: fixed;
+  z-index: 1000;
+  pointer-events: none;
+  padding: 6px 9px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+}
+.chart-tip div::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--c);
 }
 .chart-xtitle {
   text-align: center;

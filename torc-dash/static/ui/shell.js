@@ -114,6 +114,42 @@ window.torcEditor = {
   cursor: () => editor?.cursor() ?? 0,
 };
 
+// Chart hover (resources::chart): the point nearest the pointer's x in each series of the panel
+// (or the bar under it), highlighted and listed in one tooltip that follows the pointer.
+const tip = document.createElement("div");
+tip.className = "chart-tip";
+let lit = [];
+addEventListener("pointermove", (e) => {
+  lit.forEach((el) => el.classList.remove("hot"));
+  lit = [];
+  const svg = e.target.closest?.(".chart-panel");
+  if (svg && e.target.matches(".bar")) lit = [e.target];
+  else if (svg) {
+    const x = new DOMPoint(e.clientX, e.clientY).matrixTransform(svg.getScreenCTM().inverse()).x;
+    for (const g of svg.querySelectorAll("g.series")) {
+      let best = null;
+      for (const c of g.querySelectorAll("circle.pt")) {
+        if (!best || Math.abs(c.cx.baseVal.value - x) < Math.abs(best.cx.baseVal.value - x)) best = c;
+      }
+      if (best) lit.push(best);
+    }
+  }
+  if (!lit.length) return tip.remove();
+  lit.forEach((el) => el.classList.add("hot"));
+  const head = document.createElement("b");
+  head.textContent = lit[0].dataset.x;
+  tip.replaceChildren(head, ...lit.map((el) => {
+    const row = document.createElement("div");
+    row.style.setProperty("--c", getComputedStyle(el).getPropertyValue("--c"));
+    row.textContent = el.dataset.tip;
+    return row;
+  }));
+  document.body.append(tip);
+  const flip = e.clientX + 16 + tip.offsetWidth > innerWidth;
+  tip.style.left = `${flip ? e.clientX - 16 - tip.offsetWidth : e.clientX + 16}px`;
+  tip.style.top = `${Math.min(e.clientY + 12, innerHeight - tip.offsetHeight - 8)}px`;
+});
+
 const KEYS = { 1: "workflows", 2: "details", 3: "dag", 4: "events", 5: "debugging", 6: "resources", e: "editor", 7: "chat", 8: "config", g: "dag" };
 const fire = (name) => document.body.dispatchEvent(new CustomEvent(name));
 
