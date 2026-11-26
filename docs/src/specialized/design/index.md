@@ -7,7 +7,8 @@ Internal design documentation for developers.
 - [Workflow Actions](./workflow-actions.md) - Workflow action system
 - [Web Dashboard Design](./dashboard.md) - torc-dash server: proxy, CLI delegation, AI chat,
   security model
-- [Dashboard Frontend Design](./dashboard-frontend.md) - Svelte UI structure, state, spec editor
+- [Dashboard Frontend Design](./dashboard-frontend.md) - Server-rendered UI with Datastar:
+  structure, state, conventions
 - [Torc Desktop Design](./desktop.md) - Desktop app: SSH tunnel to a UNIX socket, askpass relay,
   session lifecycle
 - [Server API Handler](./server.md) - Server implementation

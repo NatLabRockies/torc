@@ -1,139 +1,120 @@
 # Dashboard Frontend Design
 
-The torc-dash UI is a Svelte 5 + TypeScript single-page app in `torc-dash/web/`. This page explains
-how it is put together and the conventions to follow when changing it. The server it runs against is
-described in [Web Dashboard Design](./dashboard.md).
+The torc-dash UI is rendered on the server in Rust (maud templates) and made interactive in the
+browser by [Datastar](https://data-star.dev), a small hypermedia library. This page explains how it
+is put together and the conventions to follow when changing it. The server it runs in is described
+in [Web Dashboard Design](./dashboard.md).
 
-## Build and delivery
+## Goals
 
-- `npm run build` (Vite) writes the bundle to `torc-dash/static/app/`, which `torc-dash` embeds at
-  compile time and serves at `/` (assets under `/static/app/`).
-- **The built bundle is checked in**, so building torc never needs Node.js. Any UI change is
-  committed together with its rebuilt `static/app/`. Asset names are content-hashed, so a rebuild
-  replaces files rather than editing them.
-- `npm run dev` serves the UI with hot reload and proxies `/api`, `/torc-service`, and
-  `/static/images` to a running torc-dash (`TORC_DASH_URL`, default `http://127.0.0.1:8090`).
-- Heavy libraries load on demand as separate chunks: Plotly (Resources), Cytoscape (Graph),
-  marked/DOMPurify (chat Markdown), and the whole spec editor (CodeMirror, the YAML parser, the JSON
-  Schema validator, templates). The main bundle stays near 275 KB.
+- **Pure Rust, no build step.** There is no Node.js toolchain, bundle, or generated TypeScript
+  client. The only JavaScript is Datastar itself (vendored, about 33 KB) and `shell.js`, a short
+  hand-written file for preferences, the dashboard token, the action menu, and keyboard shortcuts.
+- **Light.** Charts and the dependency graph are SVG drawn on the server, so the page loads no
+  charting, graph, editor, or Markdown libraries and works without internet access.
+- **One source of truth.** State that matters lives on the server; the browser holds only UI state
+  (filters, the open tab, the selected workflow).
 
-## Structure
+## Files
 
 ```
-src/
-  App.svelte            shell: sidebar, top bar, global shortcuts, auto-refresh, health check
-  app.css               design tokens (light/dark), shared classes, read-only syntax colors (.hl)
-  lib/
-    state.svelte.ts     global app state (`app`) and tab list
-    api/client.ts       typed torc-server client (openapi-fetch + generated schema.d.ts)
-    api/dash.ts         torc-dash endpoints (/api/*): dashGet, dashPost, cli()
-    highlight.ts        read-only YAML/JSON highlighting
-    ui/                 DataTable, Modal, toasts, confirm(), LogSearch, Icon, ...
-  features/<tab>/       one directory per tab or feature
-tests/                  Node checks run by `npm test`
+src/bin/torc-dash/ui/
+  mod.rs          shell page, GET /ui/tab dispatch, tab list
+  kit.rs          shared building blocks (below)
+  workflows.rs    one module per tab or feature: routes() and, for tabs, view()
+  details*.rs  dag.rs  events.rs  debugging.rs  resources.rs  editor.rs  create*.rs
+  chat.rs  config.rs  wf_dialogs.rs  exec.rs
+torc-dash/static/ui/
+  datastar.js     vendored Datastar release (the version is in its first line)
+  shell.js        the only hand-written script
+  app.css         design tokens (light/dark, dark palettes) and shared component styles
+  <feature>.css   one stylesheet per feature module
 ```
 
-Feature directories own their components and state. A feature that other tabs open (job details,
-file viewer, create-workflow modal) exposes a field on `app` (for example `app.jobDetailsId`) rather
-than being imported by those tabs.
+`torc-dash/static/` is embedded in the binary with `rust_embed`.
 
-## State and data loading
-
-- **Global state** lives in `app` (`lib/state.svelte.ts`) as Svelte 5 runes: the current tab
-  (mirrored in the URL hash), the selected workflow, theme, refresh interval, and modal triggers.
-- **Feature state that must outlive a tab switch** lives in module-level classes with rune fields:
-  `execution` (run/watch output), `chat` and `specChat` (conversations), `draft` (the spec being
-  edited), the event watcher.
-- **Loading convention.** A feature reloads in an `$effect` that reads `app.refreshTick` (and
-  `app.workflowId` if relevant). The tick increments on manual refresh and on the auto-refresh
-  timer, which pauses while the window is hidden. Keep showing the previous data while a refresh is
-  in flight; show a loading state only when there is nothing to show.
-- **Persistence.** Preferences and conveniences use `localStorage` with `try`/`catch` around every
-  access (it can be unavailable). Nothing that must not be lost lives only there. Saved items: the
-  theme, selected workflow, refresh interval, editor draft, assistant panel state, and chat setup
-  fields (never API keys).
-
-## Talking to the backend
-
-- **torc-server REST** goes through the proxy with the typed client:
-  `unwrap(api.GET("/workflows/{id}", ...))`. Types come from `api/openapi.yaml` via
-  `npm run gen:api`; `schema.d.ts` is generated and never edited. `listAll` pages through list
-  endpoints.
-- **torc-dash endpoints** use `dashGet` / `dashPost`, or `cli(endpoint, body)`, which throws with
-  the command's stderr when it fails. Request and response types are declared next to the feature
-  that uses them.
-- **Streams.** Run/watch output uses `EventSource` on `/api/cli/run-stream`. Chat uses `fetch` on
-  `POST /api/chat` and parses the SSE stream from the response body, since it needs a request body
-  and cancellation through `AbortController`. Live workflow events come from torc-server's SSE
-  stream through the proxy.
-- **Errors** surface as toasts; error toasts persist until dismissed.
-
-## Spec editor
-
-The editor tab (`features/editor/`) is a CodeMirror 6 YAML editor driven by the workflow-spec JSON
-Schema.
+## How a request flows
 
 ```mermaid
-flowchart LR
-    Rust["WorkflowSpec<br/>(schemars)"] --> Endpoint["GET /api/workflow-schema"]
-    Endpoint --> Schema["SpecSchema<br/>(yamlSchema.ts)"]
-    Schema --> Complete["completion"]
-    Schema --> Hover["hover docs"]
-    Schema --> Lint["lint"]
+sequenceDiagram
+    participant B as Browser (Datastar)
+    participant D as torc-dash
+    participant S as torc-server / torc CLI
+    B->>D: GET / (shell: sidebar, top bar, empty slots)
+    B->>D: GET /ui/tab (signals: $tab, $wf, $wfs.filter, ...)
+    D->>S: REST calls, CLI handlers in-process
+    D-->>B: SSE: patch #topbar, #content, #conn
+    B->>D: @post('/ui/wf/3/submit') on a click
+    D-->>B: SSE: toast, then a refresh of the tab
 ```
 
-- `yamlSchema.ts` has no CodeMirror dependency, so it runs under Node in tests. Completion and hover
-  compute the cursor's path (`jobs` → item → `resource_requirements`) from indentation rather than
-  from a parse, so they work while the document is half typed. They follow `$ref`s and unwrap
-  `Option` (`anyOf: [T, null]`). Block-style YAML only; flow collections get no completion.
-- Lint parses with `yaml`, reports syntax errors, then validates with `@cfworker/json-schema`. The
-  validator reports every level of nesting and both branches of each `anyOf`; lint keeps only the
-  most specific error per location and rewrites it ("Unknown property", "Expected one of: ...").
-- **Validate** runs the server-side dry run (`/api/cli/validate`), which catches what a schema
-  cannot, such as references to undefined jobs or files.
-- `cm.ts` wires the pieces into CodeMirror and themes it from the design tokens, so dark mode
-  follows the app.
-- **Templates** are a curated allowlist of `examples/yaml` files (`templates.ts`), bundled as lazy
-  chunks; only listed files are included. **Snippets** (`snippets.ts`) append a block to the end of
-  its top-level section, matching the section's indentation.
-- **`draft`** holds the text and the file path on the torc-dash host. Every path that replaces the
-  text goes through `draft.open()`, which asks before discarding unsaved edits.
+- **The shell** (`GET /`) persists for the whole session. It holds the sidebar, the top bar, and
+  slots that features fill: `#content` (the current tab), `#modals`, `#menu`, `#exec` (run/watch
+  output), and `#toasts`.
+- **Tabs are hash routes** (`#/details`). On a hash change the page sets `$tab` and calls
+  `GET /ui/tab`, which runs the tab module's `view()` and patches the result into `#content`. The
+  same call runs on Refresh, after actions (`Ui::refresh()`), and every `$refresh` seconds while the
+  page is visible (`Ctx::auto` tells a view it is an automatic refresh).
+- **Patches morph.** Datastar merges new HTML into elements with the same id, so re-rendering a
+  whole tab keeps focus, typed text, scroll positions, and open `<details>`. Elements whose content
+  the browser manages (log tails, the chat thread while streaming) are marked `data-ignore-morph`.
+- **Signals** are Datastar's reactive state, sent with every request. Globals live on `<body>`:
+  `$tab`, `$wf`, `$refresh`, `$allUsers`, `$archived`, `$group`, `$outputDir`, `$theme`, `$palette`.
+  `shell.js` saves them to localStorage. Each tab owns one namespace object (`$wfs`, `$details`,
+  `$dag`, ...) declared with `data-signals__ifmissing` so re-renders don't reset it. Signals whose
+  names start with `_` stay in the browser.
 
-## AI conversations
+## The kit
 
-`ChatState` (`features/chat/chat.svelte.ts`) is one conversation: messages, streaming state, and the
-SSE parsing. There are two instances:
+`ui/kit.rs` holds what every feature uses:
 
-- `chat` for the AI Chat tab, which sends the selected workflow ID as context.
-- `specChat` for the editor's Assistant panel. Its `spec` binding (set in `draft.svelte.ts`)
-  supplies the buffer with each message and applies `spec_edit` events. While the editor is open,
-  edits go through `SpecEditor.applyEdit()`, which makes each one its own undo step and selects it;
-  otherwise they apply to `draft.text` directly.
+- **`Ui`**, the response type: a list of Datastar SSE events. `patch` (morph by id), `inner`,
+  `append`, `remove`, `signals`, `script`, `toast`/`ok`/`err`, `modal`/`close_modal`, and `refresh`.
+  `stream()` sends a series of `Ui`s over a long-lived response (run output, chat replies, live
+  tails).
+- **`Sig<T>`**, an extractor that deserializes the request's signals into `T`; `G` holds the global
+  ones and `ns()` reads one tab's namespace.
+- **torc-server access**: `get`, `api`, and `list_all` (pages through list endpoints) deserialize
+  into `torc::models` types. The dashboard's basic-auth login is added as for the proxy.
+- **`call`** invokes one of torc-dash's JSON handlers (`cli_*_handler`, chat, file and Slurm
+  handlers) in-process and parses its reply, so the UI reuses the same code paths as the `/api/*`
+  endpoints and the `torc` CLI. `op` runs a whitelisted CLI command through `build_op`.
+- **Components**: `Table` (server-side sort, filter, paging, and row selection), `modal`,
+  `seg_tabs`, `filter_box`, `badge`/`status_badge`, `icon`, `kv`, `stats`, and formatters.
 
-`ChatThread.svelte` renders either conversation. The provider is shared by both (it lives in
-torc-dash), so a successful setup in either place marks both available. The editor is read-only
-while `specChat.streaming`, which is what keeps the buffer consistent with torc-dash's copy (see
-[AI chat](./dashboard.md#ai-chat)).
+## Conventions
 
-## Testing
+- Put new routes under `/ui/`; the token guard covers them. A feature that other tabs open exposes a
+  URL rather than a function: `GET /ui/job/{id}` (job details), `GET /ui/file?path=` (file viewer),
+  `GET /ui/create/open`, `GET /ui/wf/{id}/<dialog>`, `POST /ui/exec/{id}/{mode}`.
+- Simple confirmations use the browser's `confirm()`. Multi-step ones (initialize with missing
+  files, delete selected) are dialogs the server returns.
+- When a response removes the element that sent the request (closing a dialog), send signal patches
+  before that element patch: Datastar stops reading a response whose initiating element is gone.
+- Colors come from CSS variables, including in SVG, so everything follows the theme.
+- Keep markup per row small: tables can show thousands of rows a page, and job lists can hold 100k.
+- Verify UI changes in a browser, in light and dark themes, with no console errors.
 
-- `npm run check`: svelte-check (types and Svelte diagnostics).
-- `npm test`: Node checks with `--experimental-strip-types`, so tested modules must avoid
-  TypeScript-only runtime syntax such as parameter properties. `highlight.check.ts` covers the
-  read-only highlighters; `editor.check.ts` covers completion paths, hover, lint, snippet placement,
-  and validates every `examples/yaml` spec against the schema from `torc workflows schema` (it runs
-  `cargo`).
-- CI (`.github/workflows/dashboard.yml`) runs both, then rebuilds the bundle and fails if
-  `torc-dash/static/app/` differs from what is committed.
-- UI behavior is verified by driving a running torc-dash in a browser; there is no browser test
-  suite in the repository.
+## Notable features
+
+- **Spec editor.** A `<textarea>` with a line-number gutter. As you type, the server parses the
+  buffer with the real spec parser (`WorkflowSpec`) and reports errors with line numbers; clicking
+  one selects the line. Templates come from `examples/yaml`, and snippets insert into the right
+  section. The draft is kept in localStorage.
+- **Dependency graph.** Laid out on the server with `rust-sugiyama`, one connected component at a
+  time, then drawn as SVG with pan and zoom. Layouts are cached, so auto-refresh doesn't redo them.
+- **Resource charts.** Plot data from `torc plot-resources` and live samples are drawn as SVG line
+  and bar charts with `<title>` tooltips.
+- **AI chat.** Conversations are kept on the server, keyed by an id the page generates, so a reply
+  keeps streaming across tab switches. Markdown is rendered with `pulldown-cmark`, dropping raw
+  HTML.
+- **Run/watch output.** `POST /ui/exec/{id}/{mode}` opens the panel, which streams `torc run` or
+  `torc watch` output. Closing the stream ends a watch; a run keeps going.
 
 ## Alternatives considered
 
-- **Monaco** instead of CodeMirror: heavier, harder to theme from CSS variables, and its YAML
-  support needs a language server.
-- **`codemirror-json-schema`**: would pull in `shiki` (a large syntax-highlighting library) to
-  render hover text, and validates with an older JSON Schema draft. The schema glue is about 250
-  lines here.
-- **Not checking in the bundle**: would make Node.js a build dependency of every torc build,
-  including on HPC systems.
+- **The previous Svelte + TypeScript app.** Richer client-side widgets (CodeMirror completion,
+  Plotly zoom), but it needed Node.js to change and a checked-in 6 MB bundle, duplicated validation
+  that the Rust spec parser already does, and kept a second copy of state in the browser.
+- **A native GPU UI (gpui).** Pure Rust, but it can't be served through an SSH tunnel to a browser
+  or the Torc Desktop webview, which is how the dashboard reaches HPC login nodes.

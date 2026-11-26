@@ -76,8 +76,7 @@ torc/
 ├── torc-server/         # Server database migrations
 │   └── migrations/      # SQLx migration files
 ├── torc-dash/           # Dashboard UI
-│   ├── web/             # Svelte + TS source (npm run build → static/app/, checked in)
-│   └── static/          # Embedded assets: app/ (built UI) and images/
+│   └── static/          # Embedded assets: ui/ (Datastar, shell.js, CSS) and images/
 ├── torc-desktop/        # Tauri desktop app: runs torc-dash locally or on a login node via SSH
 ├── python_client/       # Python CLI client and library
 │   ├── src/torc/        # Python package
@@ -371,10 +370,9 @@ cascade-delete the entire database contents.
 - **Find every caller before editing shared code**: Before changing a function's signature or
   behavior, run LSP find-references on it (rust-analyzer). Grep misses trait impls, re-exports, and
   macro-generated call sites. API changes typically fan out to the server, CLI
-  (`src/client/commands/`), MCP tools, TUI, dash schema, and Python client.
-- **Don't review generated files**: Regenerate `api/openapi*.yaml`, `src/client/apis/`, and
-  `torc-dash/web/src/lib/api/schema.d.ts` via `api/sync_openapi.sh` and trust the output rather than
-  reading the diff.
+  (`src/client/commands/`), MCP tools, TUI, dashboard (`src/bin/torc-dash/ui/`), and Python client.
+- **Don't review generated files**: Regenerate `api/openapi*.yaml` and `src/client/apis/` via
+  `api/sync_openapi.sh` and trust the output rather than reading the diff.
 - **Prefer splitting PRs** that span the server API and multiple client surfaces: land the server
   and API change first, then the clients.
 

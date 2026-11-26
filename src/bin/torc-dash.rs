@@ -244,8 +244,7 @@ async fn guard_requests(
             .get(TOKEN_HEADER)
             .and_then(|v| v.to_str().ok())
             .map(String::from)
-            .or(from_query)
-            .or_else(|| ui::token_from_cookie(req.headers(), expected));
+            .or(from_query);
         if !given.is_some_and(|t| same_secret(&t, expected)) {
             warn!(
                 "Refused {} {}: missing or wrong token",
@@ -1119,7 +1118,7 @@ impl Drop for KillOnDrop {
 
 // ============== Static File Handlers ==============
 
-/// The dashboard UI, built from torc-dash/web into torc-dash/static/app/.
+/// Static assets: the UI's script and styles (torc-dash/static/ui/) and images.
 async fn static_handler(Path(path): Path<String>) -> impl IntoResponse {
     let path = path.trim_start_matches('/');
 

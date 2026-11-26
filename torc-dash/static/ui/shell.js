@@ -27,13 +27,53 @@ window.torcTheme = (theme, palette) => {
 };
 torcTheme(torcPrefs.theme, torcPrefs.palette);
 
-// The token arrives once in the URL; the server keeps it in a cookie, so drop it from the
-// address bar (and history and screenshots).
-if (new URLSearchParams(location.search).has("token")) {
-  const u = new URL(location.href);
-  u.searchParams.delete("token");
-  history.replaceState(history.state, "", u);
-}
+// The dashboard token (required on TCP) arrives once as `?token=` in the URL torc-dash prints. It
+// is kept in localStorage, which is per origin (host and port), so other servers on localhost never
+// see it (a cookie would be sent to every port), and sent with every request to torc-dash.
+const TOKEN_KEY = "torc-dash-token";
+const token = (() => {
+  const url = new URL(location.href);
+  const fromUrl = url.searchParams.get("token");
+  if (fromUrl === null) {
+    try {
+      return localStorage.getItem(TOKEN_KEY) || "";
+    } catch {
+      return "";
+    }
+  }
+  try {
+    localStorage.setItem(TOKEN_KEY, fromUrl);
+    // Saved, so drop it from the address bar (and from history and screenshots).
+    url.searchParams.delete("token");
+    history.replaceState(history.state, "", url);
+  } catch {
+    // No storage: keep it in the URL so a reload still works.
+  }
+  return fromUrl;
+})();
+
+// Datastar requests go through fetch: add the token to same-origin ones, and explain a refusal.
+const nativeFetch = window.fetch.bind(window);
+window.fetch = async (input, init = {}) => {
+  const url = new URL(input instanceof Request ? input.url : input, location.href);
+  if (url.origin !== location.origin) return nativeFetch(input, init);
+  const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
+  if (token) headers.set("X-Torc-Dash-Token", token);
+  const response = await nativeFetch(input, { ...init, headers });
+  if (response.status === 401 && url.pathname === "/ui/tab") {
+    const content = document.getElementById("content");
+    if (content) {
+      content.innerHTML =
+        '<div class="empty"><h3>Missing or wrong dashboard token</h3><p>Open the dashboard with ' +
+        "the URL torc-dash printed at startup (it ends in ?token=...).</p></div>";
+    }
+  }
+  return response;
+};
+
+/** `path` with the token as a query parameter, for navigations, which cannot send headers. */
+const withToken = (path) =>
+  token ? `${path}${path.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}` : path;
 
 /** Tab named in the URL hash (#/details). */
 window.torcTab = () => location.hash.replace(/^#\/?/, "").split(/[/?]/)[0] || "workflows";
@@ -52,11 +92,11 @@ window.torcMenu = () => {
   m.showPopover();
 };
 
-/** Ask the server to save a file: navigates to a download URL (the token is in a cookie). */
+/** Ask the server to save a file: navigates to a download URL. */
 window.torcDownload = (url) => {
   const a = document.createElement("a");
   // A unique URL per download: the desktop app tracks downloads by URL.
-  a.href = `${url}${url.includes("?") ? "&" : "?"}_=${Math.random().toString(36).slice(2)}`;
+  a.href = withToken(`${url}${url.includes("?") ? "&" : "?"}_=${Math.random().toString(36).slice(2)}`);
   a.download = "";
   document.body.append(a);
   a.click();

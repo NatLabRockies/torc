@@ -618,9 +618,9 @@ See [Desktop App](./desktop.md) for installing and using it.
 - **CLI integration** for workflow operations
 - **MCP client** that spawns `torc-mcp-server` as a subprocess for AI Chat
 
-The UI is a Svelte and TypeScript app in `torc-dash/web/`, with typed API calls generated from the
-OpenAPI spec, Cytoscape.js for the dependency graph, and Plotly.js for resource charts (both loaded
-only when needed).
+The UI is rendered on the server in Rust and made interactive with Datastar, a small (about 33 KB)
+script embedded in the binary. The dependency graph and resource charts are drawn on the server as
+SVG, so the dashboard loads no other JavaScript and needs no internet access.
 
 ## Next Steps
 

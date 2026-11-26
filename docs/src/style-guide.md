@@ -331,18 +331,22 @@ clients are auto-generated. Ensure:
 
 ### Dashboard (torc-dash)
 
-`torc-dash` (`src/bin/torc-dash.rs`) is an Axum server that embeds the Svelte UI from
-`torc-dash/web/`. See [Web Dashboard Design](./specialized/design/dashboard.md) and
+`torc-dash` (`src/bin/torc-dash.rs`) is an Axum server that renders its UI on the server with maud
+templates (`src/bin/torc-dash/ui/`), driven in the browser by Datastar. See
+[Web Dashboard Design](./specialized/design/dashboard.md) and
 [Dashboard Frontend Design](./specialized/design/dashboard-frontend.md).
 
 **Dashboard Conventions:**
 
-- Read torc-server data in the UI with the typed client through the `/torc-service` proxy; add a
-  torc-dash endpoint only when the server API can't do the job.
-- Put operations the CLI already implements behind `/api/cli/*` endpoints that run `torc` (see
-  `run_torc_command`) rather than reimplementing them.
-- Rebuild the UI (`npm run build`) and commit `torc-dash/static/app/` with any UI change.
-- Run `npm run check` and `npm test` in `torc-dash/web/` for UI changes.
+- No JavaScript libraries or build step. Views are Rust functions returning maud `Markup`;
+  interactivity is Datastar attributes. The only hand-written script is
+  `torc-dash/static/ui/shell.js`.
+- Read torc-server data with `kit::get`/`kit::list_all` into `torc::models` types.
+- Reuse operations the CLI already implements (the `/api/cli/*` handlers that run `torc`, see
+  `run_torc_command`) by calling them in-process with `kit::call` rather than reimplementing them.
+- Charts and graphs are server-rendered SVG that use the CSS color variables, so they follow the
+  theme.
+- Verify UI changes in a browser, in light and dark themes, with no console errors.
 
 ### TUI (Terminal User Interface)
 

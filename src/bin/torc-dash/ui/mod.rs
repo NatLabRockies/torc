@@ -5,8 +5,6 @@
 //! the `$tab` signal into `#content`, and re-runs on refresh. Each feature module exposes
 //! `routes()` for its own actions and, for tabs, `view()`.
 
-// ponytail: remove once every feature module uses the kit.
-#[allow(dead_code)]
 pub mod kit;
 
 mod chat;
@@ -27,8 +25,6 @@ use std::sync::Arc;
 use axum::{
     Router,
     extract::{Query, State},
-    http::{HeaderMap, header},
-    response::{IntoResponse, Response},
     routing::get,
 };
 use maud::{DOCTYPE, Markup, html};
@@ -55,7 +51,6 @@ const WORKFLOW_TABS: [&str; 5] = ["details", "dag", "events", "debugging", "reso
 
 /// What a tab's `view` gets: the global signals, all signals (for the tab's own namespace, read
 /// with `kit::ns`), and whether this render is an automatic refresh.
-#[allow(dead_code)] // ponytail: `auto` is for tabs that skip heavy work on auto-refresh.
 pub struct Ctx {
     pub g: G,
     pub sig: Value,
@@ -65,6 +60,7 @@ pub struct Ctx {
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/ui/tab", get(tab_handler))
+        .route("/ui/meta", get(meta_handler))
         .merge(workflows::routes())
         .merge(wf_dialogs::routes())
         .merge(exec::routes())
@@ -79,78 +75,17 @@ pub fn routes() -> Router<Arc<AppState>> {
         .merge(config::routes())
 }
 
-// ============== Dashboard token ==============
-
-/// Name of the cookie carrying this dashboard's token. Cookies ignore ports, so dashboards on
-/// other ports of the same host each get their own name (derived from their token).
-pub fn token_cookie_name(token: &str) -> String {
-    use std::hash::{Hash, Hasher};
-    let mut h = std::collections::hash_map::DefaultHasher::new();
-    token.hash(&mut h);
-    format!("torc_dash_{:08x}", h.finish() as u32)
-}
-
-/// The token in this request's cookie, if any.
-pub fn token_from_cookie(headers: &HeaderMap, token: &str) -> Option<String> {
-    let name = token_cookie_name(token);
-    headers
-        .get_all(header::COOKIE)
-        .iter()
-        .filter_map(|v| v.to_str().ok())
-        .flat_map(|v| v.split(';'))
-        .filter_map(|kv| kv.trim().split_once('='))
-        .find(|(k, _)| *k == name)
-        .map(|(_, v)| v.to_string())
-}
-
 // ============== Shell ==============
 
-/// `GET /`: the shell. Opened with `?token=`, it stores the token in a cookie (HttpOnly, so page
-/// scripts never see it) that every later request carries.
-pub async fn index_handler(
-    State(st): State<Arc<AppState>>,
-    Query(q): Query<std::collections::HashMap<String, String>>,
-    headers: HeaderMap,
-) -> Response {
-    let mut set_cookie = None;
-    if let Some(expected) = &st.token {
-        let given = q
-            .get("token")
-            .cloned()
-            .or_else(|| token_from_cookie(&headers, expected));
-        if !given
-            .as_deref()
-            .is_some_and(|t| crate::same_secret(t, expected))
-        {
-            return (
-                axum::http::StatusCode::UNAUTHORIZED,
-                maud::html! {
-                    (DOCTYPE)
-                    html { head { title { "Torc" } } body style="font-family: system-ui; padding: 40px" {
-                        h2 { "Missing or wrong dashboard token" }
-                        p { "Open the dashboard with the URL torc-dash printed at startup (it ends in ?token=...)." }
-                    } }
-                },
-            )
-                .into_response();
-        }
-        if q.contains_key("token") {
-            set_cookie = Some(format!(
-                "{}={}; Path=/; HttpOnly; SameSite=Strict",
-                token_cookie_name(expected),
-                expected
-            ));
-        }
-    }
-    let page = shell(&st).await;
-    match set_cookie {
-        Some(c) => ([(header::SET_COOKIE, c)], page).into_response(),
-        None => page.into_response(),
-    }
+/// `GET /`: the shell. It holds nothing private, so it loads without the dashboard token;
+/// `shell.js` keeps the token (from `?token=`) in localStorage and sends it with every request.
+pub async fn index_handler() -> Markup {
+    shell()
 }
 
-async fn shell(st: &Arc<AppState>) -> Markup {
-    let user = torc::get_username();
+/// `GET /ui/meta`: user and versions for the sidebar footer, and a toast if torc-server's
+/// version differs enough to matter.
+async fn meta_handler(State(st): State<Arc<AppState>>) -> Ui {
     let v: Value = kit::json_of(crate::version_handler(State(st.clone())).await)
         .await
         .unwrap_or_default();
@@ -158,16 +93,29 @@ async fn shell(st: &Arc<AppState>) -> Markup {
     let version = s("version").unwrap_or_default();
     let server_version = s("server_version");
     let mismatch = s("version_mismatch");
-    let severity = s("mismatch_severity");
-    let can_stop = v
-        .get("can_stop_runs")
-        .and_then(Value::as_bool)
-        .unwrap_or(true);
+    let ui = Ui::new().patch(html! {
+        div #meta.meta {
+            span title="User" { (icon("user", 12)) " " (torc::get_username()) }
+            span.warn[mismatch.is_some()] title=(mismatch.clone().unwrap_or_else(|| "Version".into())) {
+                @if mismatch.is_some() { "⚠ " }
+                "v" (version)
+                @if let Some(sv) = &server_version { " / server v" (sv) }
+            }
+        }
+    });
+    // Patch differences only get the footer cue; minor ones a passing warning.
+    match (mismatch, s("mismatch_severity").as_deref()) {
+        (Some(m), Some("major")) => ui.err(m),
+        (Some(m), Some("minor")) => ui.toast(kit::Tone::Warning, m),
+        _ => ui,
+    }
+}
 
+fn shell() -> Markup {
     let defaults = serde_json::json!({
         "tab": "workflows", "wf": null, "refresh": 30, "allUsers": false, "archived": false,
         "group": "", "outputDir": "torc_output", "theme": "system", "palette": "default",
-        "canStopRuns": can_stop, "_t": 0,
+        "canStopRuns": cfg!(unix), "_t": 0,
     });
 
     html! {
@@ -210,14 +158,7 @@ async fn shell(st: &Arc<AppState>) -> Markup {
                         }
                         div.sidebar-footer {
                             div #conn.status { span.dot {} "Connecting…" }
-                            div.meta {
-                                span title="User" { (icon("user", 12)) " " (user) }
-                                span.warn[mismatch.is_some()] title=(mismatch.clone().unwrap_or_else(|| "Version".into())) {
-                                    @if mismatch.is_some() { "⚠ " }
-                                    "v" (version)
-                                    @if let Some(sv) = &server_version { " / server v" (sv) }
-                                }
-                            }
+                            div #meta.meta data-init="@get('/ui/meta')" {}
                             div.footer-actions {
                                 button.btn.btn-ghost.btn-sm title="Theme (T)" data-on:click="el.dispatchEvent(new CustomEvent('torc-theme', {bubbles: true}))" {
                                     span.cap data-text="$theme" { "system" }
@@ -236,16 +177,7 @@ async fn shell(st: &Arc<AppState>) -> Markup {
                 div #modals {}
                 div #menu.menu popover="auto" role="menu" {}
                 div #exec {}
-                div #toasts.toasts aria-live="polite" {
-                    @if let (Some(m), Some(sev)) = (&mismatch, &severity) {
-                        @if sev != "patch" {
-                            div.toast.(if sev == "major" { "error" } else { "warning" }) role="status" {
-                                span.msg { (m) }
-                                button.btn.btn-ghost.btn-sm.btn-icon aria-label="Dismiss" data-on:click="el.parentElement.remove()" { "✕" }
-                            }
-                        }
-                    }
-                }
+                div #toasts.toasts aria-live="polite" {}
                 (shortcuts_dialog())
             }
         }
