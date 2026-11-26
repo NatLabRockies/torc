@@ -1,0 +1,299 @@
+/* Chart palette (resources::chart): Plotly's default colorway, a little brighter in dark mode. */
+:root {
+  --chart-0: #1f77b4;
+  --chart-1: #ff7f0e;
+  --chart-2: #2ca02c;
+  --chart-3: #d62728;
+  --chart-4: #9467bd;
+  --chart-5: #8c564b;
+  --chart-6: #e377c2;
+  --chart-7: #7f7f7f;
+  --chart-8: #bcbd22;
+  --chart-9: #17becf;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --chart-0: #4c9be0;
+    --chart-5: #b07d6f;
+    --chart-7: #a0a0a0;
+  }
+}
+:root[data-theme="dark"] {
+  --chart-0: #4c9be0;
+  --chart-5: #b07d6f;
+  --chart-7: #a0a0a0;
+}
+.chart .c0 { --c: var(--chart-0); }
+.chart .c1 { --c: var(--chart-1); }
+.chart .c2 { --c: var(--chart-2); }
+.chart .c3 { --c: var(--chart-3); }
+.chart .c4 { --c: var(--chart-4); }
+.chart .c5 { --c: var(--chart-5); }
+.chart .c6 { --c: var(--chart-6); }
+.chart .c7 { --c: var(--chart-7); }
+.chart .c8 { --c: var(--chart-8); }
+.chart .c9 { --c: var(--chart-9); }
+
+.chart {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.chart-panel {
+  width: 100%;
+  height: auto;
+  display: block;
+  font-family: var(--font);
+}
+.chart-panel .ptitle {
+  fill: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+.chart-panel .tick {
+  fill: var(--text-muted);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+.chart-panel .grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.chart-panel .axis {
+  stroke: var(--border-strong);
+}
+.chart-panel .line {
+  fill: none;
+  stroke: var(--c);
+  stroke-width: 1.75;
+  stroke-linejoin: round;
+}
+.chart-panel .pt {
+  fill: var(--c);
+  opacity: 0;
+}
+.chart-panel .pt:hover {
+  opacity: 1;
+}
+.chart-panel .bar {
+  fill: var(--c);
+}
+.chart-panel .bar:hover {
+  opacity: 0.8;
+}
+.chart-xtitle {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 14px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.chart-legend .sw {
+  width: 12px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--c);
+}
+
+/* Resources tab */
+.res-layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) 1fr;
+  gap: 16px;
+}
+.res .side {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+}
+.res .stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.res .scan {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+.res .spinner.small {
+  width: 12px;
+  height: 12px;
+  vertical-align: -2px;
+}
+.db-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12.5px;
+}
+.db-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 280px;
+  overflow: auto;
+}
+.db {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.db:hover {
+  background: var(--surface-hover);
+}
+.db.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.db input {
+  margin-top: 3px;
+}
+.db-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 12px;
+}
+.db-name {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plot-list {
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  overflow: auto;
+  max-height: 50vh;
+}
+.plot-item {
+  text-align: left;
+  padding: 6px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.plot-item:hover {
+  background: var(--surface-hover);
+}
+.plot-item.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+.res-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 420px;
+  min-width: 0;
+  overflow: auto;
+}
+.res-main > .plots-wrap {
+  transition: opacity 0.15s;
+}
+.res-main > .plots-wrap.stale {
+  opacity: 0.5;
+}
+.res .figure {
+  padding: 16px;
+}
+.fig-head {
+  margin-bottom: 8px;
+}
+.fig-head h3 {
+  font-size: 14px;
+}
+.fig-head .muted {
+  font-size: 12.5px;
+}
+.res .live {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.res .live-bar {
+  align-items: flex-end;
+  gap: 12px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.live-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(200px, 260px) 1fr;
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+}
+.live-body .jobs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-right: 1px solid var(--border);
+  overflow: auto;
+  max-height: 640px;
+}
+.live-body .node {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+}
+.live-body .node-head {
+  font-family: var(--mono);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.live-body .job span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.live-chart {
+  padding: 12px;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+.live-chart .empty {
+  max-width: 520px;
+  margin: 0 auto;
+}
+@media (max-width: 900px) {
+  .res-layout,
+  .live-body {
+    grid-template-columns: 1fr;
+  }
+  .live-body {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+}
