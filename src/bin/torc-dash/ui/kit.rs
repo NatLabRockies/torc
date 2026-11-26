@@ -108,7 +108,8 @@ impl Ui {
 
     /// Show `dialog` (from [`modal`]) in the modal slot.
     pub fn modal(self, dialog: Markup) -> Self {
-        self.inner("#modals", dialog)
+        // Empty the slot first: morphing an open dialog into a new one drops its `open` state.
+        self.close_modal().inner("#modals", dialog)
     }
 
     pub fn close_modal(self) -> Self {
