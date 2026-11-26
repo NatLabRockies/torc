@@ -24,13 +24,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Setup Node
-        uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: torc-desktop/package-lock.json
-
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -46,16 +39,6 @@ jobs:
           key: ${{ runner.os }}-desktop-check-${{ hashFiles('torc-desktop/src-tauri/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-desktop-check-
-
-      - name: Install npm packages
-        run: npm ci
-
-      - name: Type-check the connect page
-        run: npm run check
-
-      # The Rust build embeds the connect page from dist/.
-      - name: Build the connect page
-        run: npm run build
 
       - name: Check Rust formatting
         working-directory: torc-desktop/src-tauri

@@ -4,8 +4,8 @@ Native desktop app for torc-dash, on this computer or on a remote login node. In
 opens an SSH session, starts `torc-dash` there on a private UNIX socket, forwards it to a local
 port, and shows the dashboard in its window. No manual SSH tunnel.
 
-Built with [Tauri 2](https://tauri.app) and Svelte 5. It is a standalone crate, not part of the main
-torc workspace.
+Built with [Tauri 2](https://tauri.app); the connect page is a static HTML form (`ui/index.html`),
+so there is no JavaScript build. It is a standalone crate, not part of the main torc workspace.
 
 ## Usage
 
@@ -39,24 +39,23 @@ Design notes (why a UNIX socket, the remote watcher, the askpass relay, the stab
 
 ## Requirements
 
-- Rust and Node.js (see <https://tauri.app/start/prerequisites/>)
+- Rust and the Tauri system dependencies (see <https://tauri.app/start/prerequisites/>), plus the
+  Tauri CLI for installers: `cargo install tauri-cli --version "^2.12" --locked`
 - `torc-dash` installed on the login node
 - OpenSSH 8.4+ on the client (for `SSH_ASKPASS_REQUIRE`)
 
 ## Development
 
-CI type-checks the connect page and runs `cargo fmt`, clippy, and the tests for `src-tauri` on every
-pull request (`.github/workflows/dashboard.yml`). Tagged releases build the installers
+CI runs `cargo fmt`, clippy, and the tests for `src-tauri` on every pull request
+(`.github/workflows/dashboard.yml`). Tagged releases build the installers
 (`.github/workflows/release.yml`). The app's version follows torc's: `cargo release` bumps
-`src-tauri/Cargo.toml` and `package.json` (`tauri.conf.json` takes it from `Cargo.toml`).
+`src-tauri/Cargo.toml` (`tauri.conf.json` takes it from there).
 
 ```bash
 cd torc-desktop
-npm install
-npm run tauri dev      # run with hot reload
-npm run check          # svelte-check
-npm run tauri build    # release bundle in src-tauri/target/release/bundle/
-npm run tauri -- build --bundles dmg   # just one installer type
+cargo tauri dev        # run; edits to ui/index.html show on reload
+cargo tauri build      # release bundle in src-tauri/target/release/bundle/
+cargo tauri build --bundles dmg   # just one installer type
 ```
 
 Without the bundled binaries, local mode runs `torc-dash` from `PATH`. To bundle them as the release
@@ -64,5 +63,5 @@ does, copy each of `torc-dash`, `torc`, `torc-server`, and `torc-mcp-server` (pl
 Windows) to `src-tauri/binaries/<name>-<host triple>` (triple from `rustc -vV`), then:
 
 ```bash
-npm run tauri -- build --config src-tauri/tauri.bundle.conf.json
+cargo tauri build --config src-tauri/tauri.bundle.conf.json
 ```

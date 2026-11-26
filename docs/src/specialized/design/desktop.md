@@ -30,9 +30,10 @@ flowchart LR
     end
 ```
 
-The connect page (`src/App.svelte`) collects the target and calls the `connect` command in
-`src-tauri/src/main.rs`, which starts the session, waits for the dashboard, and navigates the window
-to it. From then on the window shows torc-dash's own UI.
+The connect page (`ui/index.html`, a static form with a short script that uses Tauri's global API)
+collects the target and calls the `connect` command in `src-tauri/src/main.rs`, which starts the
+session, waits for the dashboard, and navigates the window to it. From then on the window shows
+torc-dash's own UI.
 
 ## Remote mode
 
@@ -143,21 +144,22 @@ WebKitGTK show their own pickers.
 The dashboard notifies with the Web Notification API. tauri-plugin-notification injects a
 `window.Notification` polyfill into every page that sends it to the OS. The `dashboard` capability
 lets the remote origin `http://127.0.0.1:*` call only the plugin's permission and notify commands;
-it gets no other IPC.
+it gets no other IPC. `app.withGlobalTauri` (which the connect page needs, having no bundler) also
+defines `window.__TAURI__` in the dashboard, but capabilities, not that object, decide what a page
+may call, so this grants nothing more.
 
 ## Build and distribution
 
-- CI (`.github/workflows/dashboard.yml`) type-checks the connect page and runs `cargo fmt`, clippy,
-  and the unit tests on macOS for every pull request.
+- CI (`.github/workflows/dashboard.yml`) runs `cargo fmt`, clippy, and the unit tests on macOS for
+  every pull request.
 - Tagged releases (`.github/workflows/release.yml`) build installers on each OS: a `.dmg` for macOS
   on Apple Silicon, an `.AppImage` and a `.deb` for Linux x86_64 (built on Ubuntu 22.04 for older
-  glibc), and `.msi` and NSIS `.exe` installers for Windows x64. They are attached to the GitHub
-  release.
+  glibc), and `.msi` and NSIS `.exe` installers for Windows x64, using the Tauri CLI installed with
+  `cargo install`. They are attached to the GitHub release. No Node.js is involved.
 - The macOS app is ad-hoc signed (`signingIdentity: "-"`), not signed with a Developer ID or
   notarized, so users clear the quarantine flag once after downloading (see the README).
 - The app's version follows torc's. `tauri.conf.json` has no version, so Tauri uses
-  `src-tauri/Cargo.toml`, which `cargo release` updates along with `package.json` and the lock files
-  (`release.toml`).
+  `src-tauri/Cargo.toml`, which `cargo release` updates along with its lock file (`release.toml`).
 
 ## Alternatives considered
 

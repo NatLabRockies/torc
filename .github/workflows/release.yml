@@ -185,13 +185,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Setup Node
-        uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: torc-desktop/package-lock.json
-
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
@@ -213,8 +206,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-desktop-
 
-      - name: Install npm packages
-        run: npm ci
+      # The Tauri CLI bundles the installers (the app itself needs only cargo).
+      - name: Install the Tauri CLI
+        run: cargo install tauri-cli --version "^2.12" --locked
 
       - name: Download torc binaries
         uses: actions/download-artifact@v8
@@ -244,7 +238,7 @@ jobs:
       # users clear the quarantine flag once (see torc-desktop/README.md).
       - name: Build installers
         run: >-
-          npm run tauri -- build --bundles ${{ matrix.bundles }}
+          cargo tauri build --bundles ${{ matrix.bundles }}
           --config src-tauri/tauri.bundle.conf.json
 
       - name: Collect installers

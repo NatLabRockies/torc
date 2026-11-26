@@ -1,0 +1,550 @@
+<!doctype html>
+<!--
+  The connect page: a static form, no build step. It talks to the Rust side through Tauri's global
+  API (`app.withGlobalTauri` in tauri.conf.json): `connect` starts torc-dash and navigates the
+  window to it; `askpass` events carry SSH password/MFA/host-key prompts, answered with
+  `askpass_reply`.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Torc</title>
+    <style>
+      :root {
+        --bg: #f5f6f8;
+        --card: #ffffff;
+        --text: #1d2330;
+        --muted: #6b7280;
+        --border: #d6d9e0;
+        --accent: #2563eb;
+        --error: #b42318;
+        color-scheme: light dark;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #14171c;
+          --card: #1d2128;
+          --text: #e6e8ec;
+          --muted: #9aa1ad;
+          --border: #333944;
+          --accent: #4f8cff;
+          --error: #ff7a6b;
+        }
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+      }
+      main {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 16px;
+        box-sizing: border-box;
+      }
+      [hidden] {
+        display: none !important;
+      }
+      /* Mode sections: lay out their fields like the card's own children. */
+      .card > div[data-show] {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      .card {
+        width: min(440px, 100%);
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 28px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        box-shadow: 0 8px 24px rgb(0 0 0 / 0.08);
+      }
+      h1 {
+        margin: 0;
+        font-size: 1.4rem;
+      }
+      .hint,
+      .optional {
+        color: var(--muted);
+        margin: 0;
+        font-size: 0.9rem;
+        font-weight: 400;
+      }
+      label,
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-size: 0.9rem;
+        font-weight: 500;
+      }
+      input,
+      select {
+        font: inherit;
+        padding: 9px 11px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--bg);
+        color: var(--text);
+      }
+      input:focus,
+      select:focus {
+        outline: 2px solid var(--accent);
+        outline-offset: -1px;
+      }
+      button {
+        font: inherit;
+        font-weight: 600;
+        padding: 10px;
+        border: none;
+        border-radius: 8px;
+        background: var(--accent);
+        color: white;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: default;
+      }
+      button.secondary {
+        background: transparent;
+        color: var(--text);
+        border: 1px solid var(--border);
+      }
+      pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-size: 0.85rem;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+      }
+      .row input {
+        flex: 1;
+        min-width: 0;
+      }
+      .row button {
+        padding: 8px 14px;
+      }
+      .seg {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 2px;
+        padding: 3px;
+        border-radius: 8px;
+        background: var(--border);
+      }
+      .seg button {
+        padding: 7px;
+        background: transparent;
+        color: var(--muted);
+        font-weight: 500;
+      }
+      .seg button[aria-selected="true"] {
+        background: var(--card);
+        color: var(--text);
+        box-shadow: 0 1px 2px rgb(0 0 0 / 0.1);
+      }
+      fieldset {
+        border: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      legend {
+        font-size: 0.9rem;
+        font-weight: 500;
+        padding: 0;
+        margin-bottom: 10px;
+      }
+      .indent {
+        margin-left: 24px;
+      }
+      code {
+        font-size: 0.85em;
+      }
+      label.check {
+        flex-direction: row;
+        align-items: center;
+        gap: 8px;
+        font-weight: 400;
+      }
+      .notice {
+        margin: 0;
+        padding: 10px 12px;
+        border-radius: 8px;
+        background: color-mix(in srgb, var(--error) 12%, transparent);
+        color: var(--error);
+        font-size: 0.9rem;
+      }
+      .error {
+        color: var(--error);
+        max-height: 240px;
+        overflow: auto;
+      }
+      .overlay {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        background: rgb(0 0 0 / 0.4);
+        padding: 16px;
+      }
+      .actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+      .actions button {
+        padding: 8px 18px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <form id="connect" class="card">
+        <h1>Connect to Torc</h1>
+
+        <select id="profiles" aria-label="Saved connection" hidden></select>
+
+        <div class="seg" role="tablist">
+          <button type="button" role="tab" data-mode="local">This computer</button>
+          <button type="button" role="tab" data-mode="ssh">Remote (SSH)</button>
+        </div>
+
+        <p id="lost" class="notice" hidden></p>
+
+        <div data-show="local">
+          <p class="hint">Starts the Torc dashboard on this computer.</p>
+          <label>
+            Working directory <span class="optional">(optional)</span>
+            <input name="localWorkdir" placeholder="~ (home)" />
+            <span class="optional">Where workflows run and write output, e.g.
+              <code>~/projects/sim</code>.</span>
+          </label>
+        </div>
+
+        <div data-show="ssh">
+          <p class="hint">
+            Opens an SSH session to your login node and starts the Torc dashboard there.
+          </p>
+          <label>
+            Login node
+            <input name="host" placeholder="user@login.example.org" />
+          </label>
+          <label>
+            Environment setup <span class="optional">(optional)</span>
+            <input name="setup" placeholder="module load torc" />
+            <span class="optional">Runs before <code>torc-dash</code>; use it to put torc-dash on
+              the PATH.</span>
+          </label>
+          <label>
+            Working directory <span class="optional">(optional)</span>
+            <input name="workdir" placeholder="~ (home)" />
+            <span class="optional">Where workflows run and write output, e.g.
+              <code>/scratch/$USER</code>.</span>
+          </label>
+        </div>
+
+        <fieldset>
+          <legend>Torc server</legend>
+          <label class="check">
+            <input type="radio" name="private" value="false" /> Use a shared torc-server
+          </label>
+          <div data-shared class="field indent">
+            <label>
+              URL
+              <input
+                type="url"
+                name="url"
+                placeholder="https://torc.example.org/torc-service/v1"
+              />
+              <span class="optional">Leave blank to use <code>TORC_API_URL</code> or
+                <code>[dash] api_url</code> in the torc config<span data-show="ssh">
+                  on the login node</span>.</span>
+            </label>
+            <span class="optional">If it requires a login, set <code>TORC_PASSWORD</code> in your
+              shell profile<span data-show="ssh"> on the login node</span>.</span>
+          </div>
+          <label class="check">
+            <input type="radio" name="private" value="true" /> Start a private torc-server for me
+          </label>
+          <span data-private class="optional indent">Listens on localhost only; its database is
+            <span data-show="ssh">~/torc-desktop.db on the login node</span><span
+              data-show="local"
+            >kept in the app's data folder</span>.</span>
+        </fieldset>
+
+        <div class="field">
+          <label for="profile-name">Save as <span class="optional">(optional)</span></label>
+          <div class="row">
+            <input id="profile-name" placeholder="Profile name, e.g. Kestrel" />
+            <button type="button" class="secondary" id="save">Save</button>
+            <button type="button" class="secondary" id="delete" hidden>Delete</button>
+          </div>
+          <span class="optional">Connecting also saves changes to the named profile.</span>
+        </div>
+
+        <button type="submit" id="submit">Open dashboard</button>
+
+        <pre id="error" class="error" hidden></pre>
+      </form>
+
+      <div id="prompt" class="overlay" hidden>
+        <form class="card">
+          <pre id="prompt-text"></pre>
+          <input id="prompt-answer" />
+          <div class="actions">
+            <button type="button" class="secondary" id="prompt-cancel">Cancel</button>
+            <button type="submit">OK</button>
+          </div>
+        </form>
+      </div>
+    </main>
+
+    <script>
+      const { invoke } = window.__TAURI__.core;
+      const { listen } = window.__TAURI__.event;
+      const $ = (sel) => document.querySelector(sel);
+      const form = $("#connect");
+      const field = (name) => form.elements[name];
+
+      const STORAGE_KEY = "torc-desktop.connection";
+      const PROFILES_KEY = "torc-desktop.profiles";
+
+      function load(key, fallback) {
+        try {
+          return JSON.parse(localStorage.getItem(key) ?? "") ?? fallback;
+        } catch {
+          return fallback;
+        }
+      }
+
+      function store(key, value) {
+        try {
+          localStorage.setItem(key, JSON.stringify(value));
+        } catch {
+          // Remembering the form is a convenience only.
+        }
+      }
+
+      // The form's state. Text fields are read from the inputs; the server choice is kept per mode,
+      // since a login node and this computer usually use different servers.
+      let mode = "local";
+      const servers = { local: { private: false, url: "" }, ssh: { private: false, url: "" } };
+      let profiles = load(PROFILES_KEY, []);
+      let lost = location.hash === "#lost"; // set by the Rust side when the session dropped
+      let busy = false;
+      let prompt = null;
+
+      /** Fills the form from saved settings (the last connection or a profile). */
+      function apply(s) {
+        mode = s.mode === "ssh" ? "ssh" : "local";
+        for (const k of ["host", "setup", "workdir", "localWorkdir"]) field(k).value = s[k] ?? "";
+        servers.local = {
+          private: s.startServer === "true",
+          // Settings saved before version 2 hold this pre-filled default, which hid TORC_API_URL;
+          // blank means the same thing. Later saves keep it as an explicit choice.
+          url:
+            !s.version && s.serverUrl === "http://localhost:8080/torc-service/v1"
+              ? ""
+              : (s.serverUrl ?? ""),
+        };
+        servers.ssh = { private: s.remotePrivate === "true", url: s.remoteServerUrl ?? "" };
+      }
+
+      function snapshot() {
+        saveServerFields();
+        return {
+          version: "2",
+          mode,
+          serverUrl: servers.local.url,
+          startServer: String(servers.local.private),
+          host: field("host").value,
+          setup: field("setup").value,
+          workdir: field("workdir").value,
+          localWorkdir: field("localWorkdir").value,
+          remoteServerUrl: servers.ssh.url,
+          remotePrivate: String(servers.ssh.private),
+        };
+      }
+
+      /** Copies the server inputs into the current mode's server choice. */
+      function saveServerFields() {
+        servers[mode] = {
+          private: form.querySelector("input[name=private]:checked")?.value === "true",
+          url: field("url").value,
+        };
+      }
+
+      const name = () => $("#profile-name").value.trim();
+      const current = () => profiles.find((p) => p.name === name());
+
+      /** Shows the state: mode-specific parts, server fields, profile controls, buttons. */
+      function render() {
+        for (const b of form.querySelectorAll("[data-mode]")) {
+          b.setAttribute("aria-selected", String(b.dataset.mode === mode));
+        }
+        for (const el of document.querySelectorAll("[data-show]")) {
+          el.hidden = el.dataset.show !== mode;
+        }
+        const server = servers[mode];
+        for (const r of form.querySelectorAll("input[name=private]")) {
+          r.checked = r.value === String(server.private);
+        }
+        field("url").value = server.url;
+        $("[data-shared]").hidden = server.private;
+        $("[data-private]").hidden = !server.private;
+        field("host").required = mode === "ssh";
+
+        const select = $("#profiles");
+        select.hidden = profiles.length === 0;
+        select.replaceChildren(
+          new Option("New connection", ""),
+          ...profiles.map((p) => new Option(p.name, p.name)),
+        );
+        select.value = current()?.name ?? "";
+        $("#save").disabled = !name();
+        $("#delete").hidden = !current();
+
+        const notice = $("#lost");
+        notice.hidden = !lost;
+        notice.textContent = mode === "ssh"
+          ? `The connection to ${field("host").value || "the login node"} was lost.`
+          : "The dashboard stopped.";
+
+        const submit = $("#submit");
+        submit.disabled = busy;
+        submit.textContent = busy
+          ? "Starting…"
+          : lost
+          ? "Reconnect"
+          : mode === "local"
+          ? "Open dashboard"
+          : "Connect";
+      }
+
+      /** Saves the form as the named profile, replacing one of the same name. */
+      function saveProfile() {
+        const n = name();
+        if (!n) return;
+        profiles = [...profiles.filter((p) => p.name !== n), { ...snapshot(), name: n }].sort(
+          (a, b) => a.name.localeCompare(b.name),
+        );
+        store(PROFILES_KEY, profiles);
+        render();
+      }
+
+      function showError(message) {
+        const el = $("#error");
+        el.textContent = message;
+        el.hidden = !message;
+      }
+
+      for (const b of form.querySelectorAll("[data-mode]")) {
+        b.addEventListener("click", () => {
+          saveServerFields();
+          mode = b.dataset.mode;
+          render();
+        });
+      }
+      for (const r of form.querySelectorAll("input[name=private]")) {
+        r.addEventListener("change", () => {
+          saveServerFields();
+          render();
+        });
+      }
+      field("host").addEventListener("input", render);
+      $("#profile-name").addEventListener("input", render);
+      $("#profiles").addEventListener("change", (e) => {
+        const p = profiles.find((p) => p.name === e.target.value);
+        if (p) apply(p);
+        $("#profile-name").value = p?.name ?? "";
+        render();
+      });
+      $("#save").addEventListener("click", saveProfile);
+      $("#delete").addEventListener("click", () => {
+        profiles = profiles.filter((p) => p !== current());
+        store(PROFILES_KEY, profiles);
+        $("#profile-name").value = "";
+        render();
+      });
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        busy = true;
+        lost = false;
+        showError("");
+        saveProfile();
+        const s = snapshot();
+        store(STORAGE_KEY, { ...s, profile: name() });
+        render();
+        const server = servers[mode];
+        try {
+          // On success the window navigates to the dashboard and this page goes away.
+          await invoke("connect", {
+            args: {
+              mode,
+              host: s.host,
+              setup: s.setup,
+              workdir: mode === "local" ? s.localWorkdir : s.workdir,
+              command: "torc-dash",
+              standalone: server.private,
+              serverUrl: server.private ? "" : server.url,
+            },
+          });
+        } catch (err) {
+          showError(String(err));
+          busy = false;
+          hidePrompt(); // the attempt is over; its password prompt can no longer be answered
+          render();
+        }
+      });
+
+      // SSH prompts (password, MFA, host key) relayed from the askpass helper.
+      function hidePrompt() {
+        prompt = null;
+        $("#prompt").hidden = true;
+        $("#prompt-answer").value = "";
+      }
+
+      async function reply(answer) {
+        const p = prompt;
+        hidePrompt();
+        if (p) await invoke("askpass_reply", { id: p.id, answer });
+      }
+
+      listen("askpass", (e) => {
+        prompt = e.payload;
+        $("#prompt-text").textContent = prompt.prompt;
+        const input = $("#prompt-answer");
+        // Host-key confirmations ("yes/no") are shown in clear text; everything else is masked.
+        input.type = /yes\/no/i.test(prompt.prompt) ? "text" : "password";
+        input.value = "";
+        $("#prompt").hidden = false;
+        input.focus();
+      });
+      $("#prompt form").addEventListener("submit", (e) => {
+        e.preventDefault();
+        reply($("#prompt-answer").value);
+      });
+      $("#prompt-cancel").addEventListener("click", () => reply(null));
+
+      const saved = load(STORAGE_KEY, {});
+      apply(saved);
+      $("#profile-name").value = saved.profile ?? "";
+      render();
+      (mode === "ssh" ? field("host") : field("localWorkdir")).focus();
+    </script>
+  </body>
+</html>
