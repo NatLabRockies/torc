@@ -1,0 +1,289 @@
+/* Debugging tab */
+.debug .field.inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+.debug .field.inline .input {
+  width: 240px;
+}
+.debug p {
+  margin: 0;
+}
+.dbg-split {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  gap: 16px;
+}
+.dbg-split.tail {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.8fr);
+}
+.dbg-split .pane,
+.dbg-split .side {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dbg-split .side .table-host {
+  flex: 1;
+  min-height: 0;
+}
+.dbg-logs {
+  padding: 12px;
+}
+.logs-head {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.debug .bad {
+  color: var(--danger);
+  font-weight: 600;
+}
+.log-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.log-bar .path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.log-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.log-search .input {
+  width: 160px;
+  height: 28px;
+  padding: 0 8px;
+  font-size: 12.5px;
+}
+.log-search .count {
+  min-width: 44px;
+  text-align: right;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.log-view {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre;
+  tab-size: 4;
+}
+.log-view.stderr {
+  border-left: 3px solid var(--danger);
+}
+.log-view mark {
+  background: rgb(250 204 21 / 0.35);
+  color: inherit;
+}
+.log-view mark.cur {
+  background: rgb(249 115 22 / 0.75);
+  color: #000;
+}
+.log-note {
+  flex: 1;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+/* Live tail */
+.dbg-split .panes {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  align-content: start;
+  gap: 12px;
+}
+.tail-pane,
+.panes .none {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  min-height: 0;
+  min-width: 0;
+}
+.tail-pane .head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.tail-pane .title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.debug .tag {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--neutral-soft);
+}
+.debug .tag.err {
+  color: var(--danger);
+}
+.tail-pane .path {
+  color: var(--text-muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+.tail-pane .note {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.tail-pane .note:has(> span:empty) {
+  display: none;
+}
+.tail-pane .out {
+  flex: 1;
+  height: 280px;
+  min-height: 120px;
+  margin: 0;
+  white-space: pre;
+  overflow: auto;
+  resize: vertical;
+}
+.tail-pane .out.stderr {
+  color: var(--danger);
+}
+
+/* Scheduling, resource check, Slurm */
+.debug .section,
+.debug .stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+.debug .section {
+  flex: 1;
+  overflow: auto;
+}
+.debug h4 {
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+.debug .note {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.debug .note.warn {
+  border-left: 3px solid var(--warning);
+}
+.dbg-table {
+  min-height: 180px;
+  max-height: 45vh;
+  display: flex;
+  flex-direction: column;
+}
+.debug .options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+}
+.debug .options .input {
+  width: 90px;
+}
+.debug .spinner.small {
+  width: 12px;
+  height: 12px;
+}
+.debug table.plain {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.debug table.plain th,
+.debug table.plain td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.debug table.plain th {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.debug .table-wrap.static {
+  height: auto;
+  max-height: 60vh;
+}
+.debug .table-wrap.static table {
+  table-layout: auto;
+}
+.debug .group {
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.debug .group .head {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+}
+.debug .affected {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  font-size: 13px;
+}
+.debug .affected .tag {
+  border-radius: 10px;
+  font-size: 12px;
+  padding: 1px 8px;
+}
+.debug .issue {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.debug .issue .title {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.debug .loc {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+@media (max-width: 1100px) {
+  .dbg-split,
+  .dbg-split.tail {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(240px, 1fr) minmax(320px, 1.2fr);
+  }
+}
