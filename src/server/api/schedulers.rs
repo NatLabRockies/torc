@@ -1671,8 +1671,8 @@ where
             response.scheduler_ids.push(id);
         }
 
-        // Recovery actions. Their trigger is evaluated from job state when read; `pending` in the
-        // response reports it as of this transaction. Every gate job of a kept action is pending
+        // Recovery actions. link_action_gates records their gates and counts the unsatisfied ones;
+        // `pending` in the response reports the trigger as of this transaction. Every gate job of a kept action is pending
         // (checked above), and of the pending statuses only ready satisfies on_jobs_ready.
         let ready = models::JobStatus::Ready.to_int() as i64;
         for (action, keep) in body.recovery_actions.iter().zip(keep_action) {
@@ -1701,6 +1701,7 @@ where
             .fetch_one(&mut *tx)
             .await
             .map_err(|e| database_error_with_msg(e, "Failed to create recovery action"))?;
+            crate::server::api::workflow_actions::link_action_gates(&mut tx, id).await?;
             response.actions.push(models::AppliedSchedulerAction {
                 id,
                 scheduler_id,

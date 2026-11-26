@@ -19,9 +19,14 @@ use super::{
     ApiContext, database_error_with_msg, message_error_response, resource_not_found_response,
 };
 
-// Trigger conditions for job-gated actions, evaluated from current job statuses (alias `a` for
-// workflow_action, `j` for job). Status ints are pinned by `test_status_ints_match_sql`:
-// 0 uninitialized, 1 blocked, 5 completed, 6 failed, 7 canceled, 8 terminated, 9 disabled.
+// Trigger conditions for job-gated actions. Each action's gate jobs are rows in
+// workflow_action_job, and workflow_action_gate.unsatisfied_count is the number of gates that do
+// not satisfy the trigger. The `job_status_updates_action_gates` SQL trigger (migration
+// 20261126000000_add_workflow_action_job) keeps it current on every job status change, in the
+// same transaction, so a poll only compares it with 0.
+//
+// Status ints are pinned by `test_status_ints_match_sql`: 0 uninitialized, 1 blocked,
+// 5 completed, 6 failed, 7 canceled, 8 terminated, 9 disabled.
 //
 // - on_jobs_ready: the gate has reached ready in this run, i.e. anything but uninitialized or
 //   blocked (ready, pending, running, pending_failed, terminal, disabled).
@@ -43,18 +48,14 @@ macro_rules! is_job_gated {
     };
 }
 
-/// True when the action's trigger condition holds now. A job-gated action with no gate jobs, or
-/// with a gate id that no longer exists, never triggers.
+/// True when the action's trigger condition holds now.
 macro_rules! action_triggered {
     () => {
         concat!(
             "(CASE WHEN ",
             is_job_gated!(),
-            " THEN COALESCE(json_array_length(a.job_ids), 0) > 0 AND NOT EXISTS (\
-             SELECT 1 FROM json_each(a.job_ids) g LEFT JOIN job j ON j.id = g.value \
-             WHERE j.id IS NULL OR NOT (",
-            gate_satisfied!(),
-            ")) ELSE a.trigger_count >= a.required_triggers END)"
+            " THEN (SELECT ag.unsatisfied_count FROM workflow_action_gate ag WHERE ag.action_id = a.id) = 0 \
+             ELSE a.trigger_count >= a.required_triggers END)"
         )
     };
 }
@@ -65,16 +66,53 @@ macro_rules! action_triggered {
 macro_rules! action_columns {
     () => {
         concat!(
-    "a.id, a.workflow_id, a.trigger_type, a.action_type, a.action_config, a.job_ids, \
-     CASE WHEN ",
-    is_job_gated!(),
-    " THEN (SELECT COUNT(*) FROM json_each(a.job_ids) g JOIN job j ON j.id = g.value WHERE ",
-    gate_satisfied!(),
-    ") ELSE a.trigger_count END AS trigger_count, \
-     a.required_triggers, a.executed, a.executed_at, a.executed_by, a.persistent, \
-     a.is_recovery, a.state, a.error"
+            "a.id, a.workflow_id, a.trigger_type, a.action_type, a.action_config, a.job_ids, \
+             CASE WHEN ",
+            is_job_gated!(),
+            " THEN MAX(a.required_triggers - COALESCE((SELECT ag.unsatisfied_count \
+             FROM workflow_action_gate ag WHERE ag.action_id = a.id), a.required_triggers), 0) \
+             ELSE a.trigger_count END AS trigger_count, \
+             a.required_triggers, a.executed, a.executed_at, a.executed_by, a.persistent, \
+             a.is_recovery, a.state, a.error"
         )
     };
+}
+
+/// Record a job-gated action's gate jobs in `workflow_action_job` and its
+/// `workflow_action_gate.unsatisfied_count` from their current statuses. Gate ids that do not exist count as
+/// unsatisfied, and an action with no gates gets 1, so neither triggers. Call it in the
+/// transaction that inserts the action: later status changes are applied by the SQL trigger.
+pub async fn link_action_gates(
+    conn: &mut sqlx::SqliteConnection,
+    action_id: i64,
+) -> Result<(), ApiError> {
+    sqlx::query(concat!(
+        "INSERT OR IGNORE INTO workflow_action_job (action_id, job_id) \
+         SELECT a.id, j.id FROM workflow_action a \
+         JOIN json_each(a.job_ids) g \
+         JOIN job j ON j.id = g.value \
+         WHERE a.id = ? AND ",
+        is_job_gated!()
+    ))
+    .bind(action_id)
+    .execute(&mut *conn)
+    .await
+    .map_err(|e| database_error_with_msg(e, "Failed to record action gate jobs"))?;
+    sqlx::query(concat!(
+        "INSERT OR REPLACE INTO workflow_action_gate (action_id, trigger_type, unsatisfied_count) \
+         SELECT a.id, a.trigger_type, MAX(\
+         COALESCE((SELECT COUNT(DISTINCT g.value) FROM json_each(a.job_ids) g), 0), 1) \
+         - (SELECT COUNT(*) FROM workflow_action_job l JOIN job j ON j.id = l.job_id \
+            WHERE l.action_id = a.id AND ",
+        gate_satisfied!(),
+        ") FROM workflow_action a WHERE a.id = ? AND ",
+        is_job_gated!()
+    ))
+    .bind(action_id)
+    .execute(&mut *conn)
+    .await
+    .map_err(|e| database_error_with_msg(e, "Failed to count unsatisfied action gates"))?;
+    Ok(())
 }
 
 /// `SELECT <action columns> <rest>` as a static string.
@@ -359,6 +397,12 @@ where
             .as_ref()
             .map(|ids| serde_json::to_string(ids).expect("Failed to serialize job_ids"));
 
+        let mut tx = self
+            .context
+            .pool
+            .begin()
+            .await
+            .map_err(|e| database_error_with_msg(e, "Failed to begin transaction"))?;
         let result = sqlx::query(
             "INSERT INTO workflow_action (workflow_id, trigger_type, action_type, action_config, job_ids, trigger_count, required_triggers, executed, persistent, is_recovery)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
@@ -373,12 +417,16 @@ where
         .bind(if body.executed { 1 } else { 0 })
         .bind(if body.persistent { 1 } else { 0 })
         .bind(if body.is_recovery { 1 } else { 0 })
-        .execute(self.context.pool.as_ref())
+        .execute(&mut *tx)
         .await;
 
         match result {
             Ok(result) => {
                 let id = result.last_insert_rowid();
+                link_action_gates(&mut tx, id).await?;
+                tx.commit()
+                    .await
+                    .map_err(|e| database_error_with_msg(e, "Failed to commit workflow action"))?;
                 debug!("Created workflow action with id={}", id);
 
                 body.id = Some(id);
@@ -1168,10 +1216,9 @@ pub async fn gate_job_statuses(
 ) -> Result<HashMap<i64, i64>, ApiError> {
     let rows = sqlx::query_as::<_, (i64, i64)>(
         "SELECT DISTINCT j.id, j.status FROM workflow_action a \
-         JOIN json_each(a.job_ids) g \
-         JOIN job j ON j.id = g.value \
-         WHERE a.workflow_id = ? AND a.job_ids IS NOT NULL \
-         AND a.trigger_type IN ('on_jobs_ready', 'on_jobs_complete')",
+         JOIN workflow_action_job l ON l.action_id = a.id \
+         JOIN job j ON j.id = l.job_id \
+         WHERE a.workflow_id = ?",
     )
     .bind(workflow_id)
     .fetch_all(conn)
@@ -1225,5 +1272,11 @@ mod tests {
         }
         assert!(gate_satisfied!().contains("NOT IN (0, 1)"));
         assert!(gate_satisfied!().contains("IN (5, 6, 7, 8, 9)"));
+        // The SQL trigger that maintains unsatisfied_count must use the same status sets.
+        let migration = include_str!(
+            "../../../torc-server/migrations/20261126000000_add_workflow_action_job.up.sql"
+        );
+        assert!(migration.contains("NEW.status IN (0, 1)"));
+        assert!(migration.contains("NEW.status NOT IN (5, 6, 7, 8, 9)"));
     }
 }

@@ -299,10 +299,12 @@ Refer to this
 1. **Atomic Claiming**: Actions are claimed atomically by workers to prevent duplicate execution
 2. **Non-Persistent Actions**: Execute once per workflow (first worker to claim executes)
 3. **Persistent Actions**: Can be claimed and executed by multiple workers
-4. **Trigger Evaluation**: Job-based triggers are evaluated from the gate jobs' current statuses
-   when actions are listed or claimed, so retries, resets, and late-created actions need no
-   bookkeeping. A claim re-checks the condition in the same statement, so a client holding an
-   out-of-date pending list cannot claim an action that is no longer triggered (409,
+4. **Trigger Evaluation**: Each job-based action stores how many of its gate jobs do not yet satisfy
+   its trigger. A database trigger on `job.status` adjusts that number from each job's old and new
+   status, in the same transaction as the status change, so it cannot drift: a retried job, a reset,
+   or a `pending_failed` job is accounted for like any other status change, and polls only check
+   whether the number is zero. A claim re-checks the condition in the same statement, so a client
+   holding an out-of-date pending list cannot claim an action that is no longer triggered (409,
    `state: not_triggered`). `trigger_count` in the API is the number of gate jobs satisfying the
    trigger now. Event triggers (`on_workflow_start`, `on_workflow_complete`, `on_worker_*`) are
    armed once when the event happens.
