@@ -453,14 +453,15 @@ EXAMPLES:
         /// "suppress" answer, so no prompt is shown.
         #[arg(long, default_value = "false")]
         suppress_actions: bool,
-        /// Suppress every `schedule_nodes` action that has not executed, including later stages'
-        /// actions that are not pending yet, before submitting.
+        /// Suppress every non-recovery `schedule_nodes` action that has not executed, including
+        /// later stages' actions that are not pending yet, before submitting.
         ///
         /// Use this when you take over allocation for the rest of a re-run. `--suppress-actions`
         /// only covers actions that would fire now; a later stage's re-armed action still fires at
         /// its full `num_allocations` once its jobs become ready. Schedule later stages yourself
         /// with further `schedule-nodes` calls (or `torc watch --auto-schedule`). Re-arm an action
-        /// with `torc workflows reset-action`. Implies `--suppress-actions`.
+        /// with `torc workflows reset-action`. Implies `--suppress-actions`. Recovery actions
+        /// created by `torc recover` are left armed; a reinit deletes them.
         #[arg(long, default_value = "false")]
         suppress_all: bool,
         /// Do not prompt about pending `schedule_nodes` actions; proceed and let the worker(s) fire
@@ -1799,8 +1800,8 @@ fn suppress_all_schedule_actions(config: &Configuration, workflow_id: i64) -> Re
     let (suppressed, persistent_skipped) =
         crate::client::commands::recover::suppress_all_schedule_actions(config, workflow_id)?;
     eprintln!(
-        "Suppressed {} schedule_nodes action(s); later stages will not be scheduled automatically. \
-         Re-arm one with: torc workflows reset-action {} <action_id>",
+        "Suppressed {} non-recovery schedule_nodes action(s); the spec's actions will not schedule \
+         later stages. Re-arm one with: torc workflows reset-action {} <action_id>",
         suppressed, workflow_id
     );
     if persistent_skipped > 0 {

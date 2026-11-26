@@ -457,7 +457,7 @@ Or do it by hand:
 # Reset the jobs to re-run (downstream jobs reset automatically) and reinitialize.
 torc jobs reset-status <id1> <id2> ... --reinit
 
-# Suppress every schedule_nodes action that has not executed, then submit what you choose.
+# Suppress the spec's unexecuted schedule_nodes actions, then submit what you choose.
 torc slurm schedule-nodes --suppress-all -n 2 <workflow_id>
 ```
 
@@ -465,11 +465,12 @@ torc slurm schedule-nodes --suppress-all -n 2 <workflow_id>
 
 - `--suppress-actions` suppresses only the actions that would fire now. A later stage's re-armed
   action still fires at its full `num_allocations` once its jobs become ready.
-- `--suppress-all` suppresses every `schedule_nodes` action that has not executed, including later
-  stages'. Nothing is scheduled automatically after that: schedule each later stage with another
-  `torc slurm schedule-nodes` call when its jobs become ready, or run
+- `--suppress-all` suppresses every non-recovery `schedule_nodes` action that has not executed,
+  including later stages'. The spec's actions schedule nothing after that: schedule each later stage
+  with another `torc slurm schedule-nodes` call when its jobs become ready, or run
   `torc watch <workflow_id> --auto-schedule`, which submits allocations when jobs are ready and no
-  allocation is active or pending.
+  allocation is active or pending. Recovery actions created by `torc recover` stay armed, since they
+  are already sized to the pending jobs; any reinit deletes them.
 
 Without either option, `schedule-nodes` prompts when pending actions exist (or, with `--no-prompts`,
 lets them fire). To re-arm a suppressed action, run
