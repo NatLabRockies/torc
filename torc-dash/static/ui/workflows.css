@@ -1,0 +1,64 @@
+.page-header .group {
+  width: 160px;
+}
+.bulk {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+}
+.table-host {
+  flex: 1;
+  min-height: 0;
+}
+.wf-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  font-weight: 500;
+}
+.ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.file-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+}
+/* Workflow actions (table rows and the Details header) */
+.wf-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.wf-actions.compact {
+  gap: 0;
+  flex-wrap: nowrap;
+}
+.wf-actions .run:not(:disabled) {
+  color: var(--success);
+}
+.wf-actions .submit {
+  color: var(--accent);
+}
+.wf-actions .exec {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.wf-actions .exec:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+.wf-actions .sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 4px;
+  background: var(--border);
+}

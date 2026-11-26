@@ -12,7 +12,7 @@ use axum::{
     extract::{Path, State},
     http::{HeaderMap, Request, StatusCode, header},
     response::{
-        Html, IntoResponse, Response,
+        IntoResponse, Response,
         sse::{Event, KeepAlive, Sse},
     },
     routing::{get, post},
@@ -33,6 +33,9 @@ use tracing::{debug, error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 /// Embedded static assets for the dashboard
+#[path = "torc-dash/ui/mod.rs"]
+mod ui;
+
 #[derive(Embed)]
 #[folder = "torc-dash/static/"]
 struct Assets;
@@ -115,7 +118,7 @@ const TOKEN_HEADER: &str = "x-torc-dash-token";
 
 /// Whether `path` reaches torc-dash's API or the torc-server proxy, rather than the static UI.
 fn is_api_path(path: &str) -> bool {
-    path.starts_with("/api/") || path.starts_with("/torc-service/")
+    path.starts_with("/api/") || path.starts_with("/torc-service/") || path.starts_with("/ui/")
 }
 
 /// Splits a `token` parameter out of a query string: (token, remaining query).
@@ -238,7 +241,8 @@ async fn guard_requests(
             .get(TOKEN_HEADER)
             .and_then(|v| v.to_str().ok())
             .map(String::from)
-            .or(from_query);
+            .or(from_query)
+            .or_else(|| ui::token_from_cookie(req.headers(), expected));
         if !given.is_some_and(|t| same_secret(&t, expected)) {
             warn!(
                 "Refused {} {}: missing or wrong token",
@@ -923,8 +927,9 @@ async fn main() -> Result<()> {
     // Build router
     let app = Router::new()
         // Static files and dashboard
-        .route("/", get(index_handler))
+        .route("/", get(ui::index_handler))
         .route("/static/{*path}", get(static_handler))
+        .merge(ui::routes())
         // CLI command endpoints
         .route("/api/cli/create", post(cli_create_handler))
         .route("/api/cli/create-slurm", post(cli_create_slurm_handler))
@@ -1112,13 +1117,6 @@ impl Drop for KillOnDrop {
 // ============== Static File Handlers ==============
 
 /// The dashboard UI, built from torc-dash/web into torc-dash/static/app/.
-async fn index_handler() -> impl IntoResponse {
-    match Assets::get("app/index.html") {
-        Some(content) => Html(content.data.into_owned()).into_response(),
-        None => (StatusCode::NOT_FOUND, "app/index.html not found").into_response(),
-    }
-}
-
 async fn static_handler(Path(path): Path<String>) -> impl IntoResponse {
     let path = path.trim_start_matches('/');
 
@@ -1361,7 +1359,7 @@ struct SyncStatusRequest {
     dry_run: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 struct CliResponse {
     success: bool,
     stdout: String,

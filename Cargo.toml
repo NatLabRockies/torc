@@ -117,6 +117,9 @@ schemars = "1.0"
 # Dashboard-specific
 uuid = { version = "1.23", features = ["v4"] }
 hyper-util = { version = "0.1", features = ["tokio", "server-auto", "server-graceful", "service"] }
+maud = { version = "0.27", features = ["axum"] }
+pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
+rust-sugiyama = "0.4"
 utoipa = { version = "6.0", features = ["axum_extras", "yaml"] }
 
 # TLS
@@ -291,6 +294,10 @@ dash = [
     "dep:anyhow",
     "dep:tracing",
     "dep:rmcp",
+    "dep:maud",
+    "dep:pulldown-cmark",
+    "dep:rust-sugiyama",
+    "dep:serde_yaml",
 ]
 openapi-codegen = [
     "server",
@@ -399,6 +406,9 @@ mime_guess = { workspace = true, optional = true }
 uuid = { workspace = true, optional = true }
 hyper-util = { workspace = true, optional = true }
 utoipa = { workspace = true, optional = true }
+maud = { workspace = true, optional = true }
+pulldown-cmark = { workspace = true, optional = true }
+rust-sugiyama = { workspace = true, optional = true }
 
 # Configuration management
 config = { workspace = true, optional = true }
