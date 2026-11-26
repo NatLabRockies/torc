@@ -46,7 +46,16 @@ pub fn routes() -> Router<Arc<AppState>> {
 }
 
 pub async fn view(st: &Arc<AppState>, cx: &Ctx) -> Markup {
-    let t: TableState = kit::ns(&cx.sig, "wfs");
+    // The first render comes before the page's `$wfs` signals exist: start newest first, as
+    // they do.
+    let t: TableState = match cx.sig.get("wfs") {
+        Some(_) => kit::ns(&cx.sig, "wfs"),
+        None => TableState {
+            sort: "id".into(),
+            desc: true,
+            ..Default::default()
+        },
+    };
     let (rows, error) =
         match kit::list_all::<WorkflowModel>(st, "/workflows", &cx.g.workflow_query()).await {
             Ok(r) => (r, None),
