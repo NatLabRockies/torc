@@ -550,7 +550,7 @@ starts.
 ## Security Considerations
 
 1. **Network Access**: By default, binds to 127.0.0.1 (localhost only)
-2. **Dashboard token**: On TCP, the API and torc-server proxy require a token, because anyone who
+2. **Dashboard token**: On TCP, the dashboard's views and API require a token, because anyone who
    can connect to the port (on a shared login node, every user) could otherwise act as you: run
    `torc`, write files, and use your torc-server login. torc-dash generates one and prints it in the
    startup URL, or takes a fixed one from the `TORC_DASH_TOKEN` environment variable (not printed;
@@ -614,7 +614,6 @@ See [Desktop App](./desktop.md) for installing and using it.
 
 - **Axum web framework** for HTTP server
 - **Embedded static assets**: the dashboard UI, built at compile time into the binary
-- **API proxy** to forward requests to torc-server
 - **CLI integration** for workflow operations
 - **MCP client** that spawns `torc-mcp-server` as a subprocess for AI Chat
 

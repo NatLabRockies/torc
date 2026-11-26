@@ -24,7 +24,7 @@ reach only over SSH. The design goals:
 ```mermaid
 flowchart LR
     Browser["Browser / Torc Desktop<br/>(Datastar)"] <-->|HTTP + SSE| Dash["torc-dash"]
-    Dash <-->|"proxy /torc-service/*"| Server["torc-server"]
+    Dash <-->|REST| Server["torc-server"]
     Dash -->|subprocess| CLI["torc CLI"]
     Dash <-->|"MCP over stdio"| MCP["torc-mcp-server"]
     Dash <-->|HTTPS| LLM["LLM provider<br/>(Anthropic, gateway, OpenAI, Ollama)"]
@@ -32,16 +32,15 @@ flowchart LR
     MCP --> Server
 ```
 
-torc-dash has five jobs:
+torc-dash has four jobs:
 
 1. **Serve the UI**: HTML rendered on the server (`src/bin/torc-dash/ui/`, `/ui/*` routes), with
-   Datastar and styles embedded with `rust_embed` from `torc-dash/static/`.
-2. **Proxy the REST API**: `/torc-service/*` is forwarded to torc-server unchanged, for scripts and
-   other clients. The UI calls torc-server from Rust instead.
-3. **Run CLI commands**: `/api/cli/*` endpoints run `torc` as a subprocess for anything that
+   Datastar and styles embedded with `rust_embed` from `torc-dash/static/`. The views read
+   torc-server's REST API from Rust; the browser never talks to torc-server.
+2. **Run CLI commands**: `/api/cli/*` endpoints run `torc` as a subprocess for anything that
    involves files, multi-step logic, or long-running execution.
-4. **Manage a private torc-server** in standalone mode.
-5. **Host the AI chat**: an LLM tool loop over the MCP server's tools, plus spec-editing tools.
+3. **Manage a private torc-server** in standalone mode.
+4. **Host the AI chat**: an LLM tool loop over the MCP server's tools, plus spec-editing tools.
 
 ## Startup and configuration
 
@@ -65,27 +64,25 @@ Settings merge from, highest priority first: command-line flags, environment var
 
 Routes are grouped by what backs them. The full list is the `Router::new()` block in `main`.
 
-| Group      | Routes                                                     | Backed by                   |
-| ---------- | ---------------------------------------------------------- | --------------------------- |
-| UI         | `/`, `/static/*`, `/ui/*`                                  | server-rendered views       |
-| REST proxy | `/torc-service/*` (all methods)                            | torc-server                 |
-| Lifecycle  | `/api/cli/*`: create, validate, run, submit, cancel, ...   | `torc` subprocess           |
-| Streaming  | `GET /api/cli/run-stream`                                  | `torc run` / `watch` as SSE |
-| Files      | `/api/cli/*`: read-file, write-file, export, import, plots | filesystem, `torc`          |
-| Slurm      | `/api/cli/*`: slurm-parse-logs, slurm-sacct, hpc-profiles  | `torc`                      |
-| Spec       | `GET /api/workflow-schema`                                 | JSON Schema from Rust types |
-| Server     | `/api/server/{start,stop,status}`                          | managed torc-server         |
-| AI chat    | `/api/chat`, `/api/chat/status`, `/api/chat/configure`     | LLM provider + MCP          |
-| Info       | `/api/version`, `/api/user`                                | torc-dash itself            |
+| Group     | Routes                                                     | Backed by                   |
+| --------- | ---------------------------------------------------------- | --------------------------- |
+| UI        | `/`, `/static/*`, `/ui/*`                                  | server-rendered views       |
+| Lifecycle | `/api/cli/*`: create, validate, run, submit, cancel, ...   | `torc` subprocess           |
+| Streaming | `GET /api/cli/run-stream`                                  | `torc run` / `watch` as SSE |
+| Files     | `/api/cli/*`: read-file, write-file, export, import, plots | filesystem, `torc`          |
+| Slurm     | `/api/cli/*`: slurm-parse-logs, slurm-sacct, hpc-profiles  | `torc`                      |
+| Spec      | `GET /api/workflow-schema`                                 | JSON Schema from Rust types |
+| Server    | `/api/server/{start,stop,status}`                          | managed torc-server         |
+| AI chat   | `/api/chat`, `/api/chat/status`, `/api/chat/configure`     | LLM provider + MCP          |
+| Info      | `/api/version`, `/api/user`                                | torc-dash itself            |
 
-### REST proxy and authentication
+### torc-server authentication
 
-The proxy forwards method, headers (except `Host`), and body to `<api_url>/<path>`. If torc-server
-requires a login, torc-dash reads `TORC_PASSWORD` (and `TORC_USERNAME`, defaulting to `USER`) at
-startup, exactly as the CLI does, and adds HTTP basic auth to proxied requests that don't already
-carry an `Authorization` header. The credentials are added only on requests to torc-server, never to
-other hosts that share the same HTTP client (such as the LLM provider). CLI subprocesses inherit the
-same environment variables, so they authenticate the same way.
+If torc-server requires a login, torc-dash reads `TORC_PASSWORD` (and `TORC_USERNAME`, defaulting to
+`USER`) at startup, exactly as the CLI does, and adds HTTP basic auth to its requests to
+torc-server. The credentials are added only on requests to torc-server, never to other hosts that
+share the same HTTP client (such as the LLM provider). CLI subprocesses inherit the same environment
+variables, so they authenticate the same way.
 
 ### CLI delegation
 
@@ -173,25 +170,24 @@ sequenceDiagram
   port.
 - **What a connection can do.** Everything the owning user can: run `torc`, read and write files
   (`read-file`, `write-file`, export/import), and use their torc-server credentials.
-- **Dashboard token.** On TCP, `/ui/*`, `/api/*` and `/torc-service/*` require a secret, from
-  `TORC_DASH_TOKEN` or generated per run and printed in the startup URL (`/?token=…`). `shell.js`
-  reads it from the URL once, keeps it in `localStorage` (per origin, so dashboards on other ports
-  never see it; cookies would be sent to every port on `localhost`), and adds it as
-  `X-Torc-Dash-Token` to every request Datastar makes. Downloads are navigations, which cannot set
-  headers, so they pass `?token=`, which the middleware strips before the proxy forwards a request.
-  The shell page (`/`) and static assets are open so the page can load and report a missing token;
-  they contain no user data. Torc Desktop's local mode passes a fresh token by environment (never on
-  the command line, where `ps` would show it). Sockets skip the check; `--no-token` disables it for
-  deployments behind an authenticating proxy.
+- **Dashboard token.** On TCP, `/ui/*` and `/api/*` require a secret, from `TORC_DASH_TOKEN` or
+  generated per run and printed in the startup URL (`/?token=…`). `shell.js` reads it from the URL
+  once, keeps it in `localStorage` (per origin, so dashboards on other ports never see it; cookies
+  would be sent to every port on `localhost`), and adds it as `X-Torc-Dash-Token` to every request
+  Datastar makes. Downloads are navigations, which cannot set headers, so they pass `?token=`, which
+  the middleware strips before the handler runs. The shell page (`/`) and static assets are open so
+  the page can load and report a missing token; they contain no user data. Torc Desktop's local mode
+  passes a fresh token by environment (never on the command line, where `ps` would show it). Sockets
+  skip the check; `--no-token` disables it for deployments behind an authenticating proxy.
 - **Cross-site requests.** A middleware (`guard_requests`) checks every request before routing:
   - **Host allowlist.** The `Host` header must name `localhost`, `127.0.0.1`, `[::1]`, the `--host`
     bind address when it is a specific name, or an entry in `--allowed-hosts`
     (`[dash]
     allowed_hosts`; `*` disables the check). A DNS-rebinding page reaches the dashboard
     under its own hostname, which the browser treats as same-origin; this check refuses it.
-  - **Fetch metadata.** On `/ui/*`, `/api/*` and `/torc-service/*`, requests whose `Sec-Fetch-Site`
-    header says they come from another site (`cross-site` or `same-site`, such as another port on
-    `localhost`) are refused. This covers requests a page can make without a CORS preflight, such as
+  - **Fetch metadata.** On `/ui/*` and `/api/*`, requests whose `Sec-Fetch-Site` header says they
+    come from another site (`cross-site` or `same-site`, such as another port on `localhost`) are
+    refused. This covers requests a page can make without a CORS preflight, such as
     `<img src=".../api/cli/run-stream?mode=run">`. The shell page (`/`) is exempt because opening
     the dashboard is a navigation, which Torc Desktop makes from its own `tauri://` page. Clients
     that don't send the header (curl, scripts, Torc Desktop's readiness probe) are unaffected.

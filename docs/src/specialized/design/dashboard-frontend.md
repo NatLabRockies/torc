@@ -75,7 +75,7 @@ sequenceDiagram
 - **`Sig<T>`**, an extractor that deserializes the request's signals into `T`; `G` holds the global
   ones and `ns()` reads one tab's namespace.
 - **torc-server access**: `get`, `api`, and `list_all` (pages through list endpoints) deserialize
-  into `torc::models` types. The dashboard's basic-auth login is added as for the proxy.
+  into `torc::models` types. torc-dash adds its torc-server login (basic auth) to these requests.
 - **`call`** invokes one of torc-dash's JSON handlers (`cli_*_handler`, chat, file and Slurm
   handlers) in-process and parses its reply, so the UI reuses the same code paths as the `/api/*`
   endpoints and the `torc` CLI. `op` runs a whitelisted CLI command through `build_op`.

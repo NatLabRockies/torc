@@ -80,7 +80,7 @@ struct McpClient {
 struct AppState {
     /// URL of the torc-server API
     api_url: String,
-    /// HTTP client for proxying requests
+    /// HTTP client for torc-server and the AI chat provider
     client: reqwest::Client,
     /// Path to the torc CLI binary (defaults to "torc" in PATH)
     torc_bin: String,
@@ -107,7 +107,7 @@ struct AppState {
     server_auth: Option<(String, String)>,
     /// Hostnames requests may name in `Host` (lowercase, no port); None allows any.
     allowed_hosts: Option<Vec<String>>,
-    /// Secret that API and proxy requests must carry (header or `token` query parameter). None
+    /// Secret that UI and API requests must carry (header or `token` query parameter). None
     /// on a UNIX socket, whose file permissions already restrict access, or with --no-token.
     token: Option<String>,
     /// PIDs of the live `torc run` processes started from the dashboard, by workflow id, so they
@@ -115,13 +115,12 @@ struct AppState {
     local_runs: Mutex<std::collections::HashMap<String, Vec<u32>>>,
 }
 
-/// Header carrying the dashboard token. Not `Authorization`, which the proxy passes through to
-/// torc-server as the user's own login.
+/// Header carrying the dashboard token.
 const TOKEN_HEADER: &str = "x-torc-dash-token";
 
-/// Whether `path` reaches torc-dash's API or the torc-server proxy, rather than the static UI.
+/// Whether `path` reaches torc-dash's UI views or JSON API, rather than the shell or static files.
 fn is_api_path(path: &str) -> bool {
-    path.starts_with("/api/") || path.starts_with("/torc-service/") || path.starts_with("/ui/")
+    path.starts_with("/api/") || path.starts_with("/ui/")
 }
 
 /// Splits a `token` parameter out of a query string: (token, remaining query).
@@ -180,9 +179,9 @@ fn allowed_host_list(bind_host: &str, extra: &[String]) -> Option<Vec<String>> {
 ///
 /// - `Host` must be an allowed name. A DNS-rebinding page reaches the dashboard under its own
 ///   hostname, so this keeps it out even though the browser considers it same-origin.
-/// - API and proxy routes refuse requests the browser marks as coming from another site
+/// - UI and API routes refuse requests the browser marks as coming from another site
 ///   (`Sec-Fetch-Site` other than same-origin or none). That covers requests a hostile page can
-///   make without a CORS preflight, such as a GET of `/api/cli/run-stream`. UI routes are exempt:
+///   make without a CORS preflight, such as a GET of `/api/cli/run-stream`. The shell page is exempt:
 ///   opening the dashboard is a navigation, which Torc Desktop makes from its own `tauri://` page.
 ///   Clients that don't send the header (curl, Torc Desktop's readiness probe) are unaffected.
 fn check_request(
@@ -212,7 +211,7 @@ fn check_request(
 }
 
 /// Middleware applying [`check_request`] to every request, and requiring the dashboard token on
-/// API and proxy routes. Anyone who can connect to a TCP port (on a shared login node, every
+/// UI and API routes. Anyone who can connect to a TCP port (on a shared login node, every
 /// user) would otherwise act with this user's torc-server login and files.
 async fn guard_requests(
     State(state): State<Arc<AppState>>,
@@ -236,8 +235,8 @@ async fn guard_requests(
     if let Some(expected) = &state.token
         && is_api_path(req.uri().path())
     {
-        // EventSource cannot set headers, so streams pass the token as a query parameter.
-        // Strip it so it is never forwarded to torc-server.
+        // Downloads are navigations, which cannot set headers, so they pass the token as a query
+        // parameter. Strip it so handlers never see it.
         let (from_query, rest) = take_token_param(req.uri().query().unwrap_or(""));
         let given = req
             .headers()
@@ -990,15 +989,6 @@ async fn main() -> Result<()> {
         .route("/api/version", get(version_handler))
         // User endpoint
         .route("/api/user", get(user_handler))
-        // API proxy - catch all /torc-service/* requests
-        .route(
-            "/torc-service/{*path}",
-            get(proxy_handler)
-                .post(proxy_handler)
-                .put(proxy_handler)
-                .patch(proxy_handler)
-                .delete(proxy_handler),
-        )
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             guard_requests,
@@ -1132,89 +1122,6 @@ async fn static_handler(Path(path): Path<String>) -> impl IntoResponse {
                 .into_response()
         }
         None => (StatusCode::NOT_FOUND, format!("File not found: {}", path)).into_response(),
-    }
-}
-
-// ============== API Proxy Handler ==============
-
-async fn proxy_handler(
-    State(state): State<Arc<AppState>>,
-    req: Request<Body>,
-) -> impl IntoResponse {
-    let path = req.uri().path();
-    let query = req
-        .uri()
-        .query()
-        .map(|q| format!("?{}", q))
-        .unwrap_or_default();
-    let method = req.method().clone();
-
-    // Build the target URL - strip /torc-service/v1 prefix since api_url already contains it
-    let target_path = path.strip_prefix("/torc-service/v1").unwrap_or(path);
-    let target_url = format!("{}{}{}", state.api_url, target_path, query);
-
-    // Build the proxied request
-    let mut proxy_req = state.client.request(method, &target_url);
-    // A login the browser sent itself takes precedence.
-    let browser_auth = req.headers().contains_key(header::AUTHORIZATION);
-    if !browser_auth {
-        proxy_req = with_server_auth(proxy_req, &state.server_auth);
-    }
-
-    // Copy headers
-    for (name, value) in req.headers() {
-        if name != header::HOST {
-            proxy_req = proxy_req.header(name, value);
-        }
-    }
-
-    // Get body
-    let body_bytes = match axum::body::to_bytes(req.into_body(), usize::MAX).await {
-        Ok(bytes) => bytes,
-        Err(e) => {
-            error!("Failed to read request body: {}", e);
-            return (
-                StatusCode::BAD_REQUEST,
-                format!("Failed to read body: {}", e),
-            )
-                .into_response();
-        }
-    };
-
-    if !body_bytes.is_empty() {
-        proxy_req = proxy_req.body(body_bytes);
-    }
-
-    // Execute request
-    match proxy_req.send().await {
-        Ok(resp) => {
-            let status = StatusCode::from_u16(resp.status().as_u16())
-                .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
-            if status == StatusCode::UNAUTHORIZED && !browser_auth {
-                // Say why, instead of the server's bare "Unauthorized".
-                let message = unauthorized_message(&state, &target_url, resp.url().as_str());
-                warn!("{}", message);
-                return (status, Json(serde_json::json!({ "message": message }))).into_response();
-            }
-            let headers = resp.headers().clone();
-
-            let mut response = Response::builder().status(status);
-
-            for (name, value) in headers.iter() {
-                response = response.header(name, value);
-            }
-
-            // Stream the body instead of buffering it
-            let stream = resp.bytes_stream();
-            response
-                .body(Body::from_stream(stream))
-                .unwrap()
-                .into_response()
-        }
-        Err(e) => {
-            error!("Proxy request failed: {}", e);
-            (StatusCode::BAD_GATEWAY, format!("Proxy error: {}", e)).into_response()
-        }
     }
 }
 
@@ -5678,11 +5585,7 @@ mod tests {
             Some("cross-site"),
             "/api/cli/run-stream"
         ));
-        assert!(!ok(
-            "localhost:8090",
-            Some("same-site"),
-            "/torc-service/v1/workflows"
-        ));
+        assert!(!ok("localhost:8090", Some("same-site"), "/ui/tab"));
         // ...but navigating to the UI from elsewhere (Torc Desktop's tauri:// page) is fine.
         assert!(ok("127.0.0.1:23456", Some("cross-site"), "/"));
         assert!(ok("localhost", Some("none"), "/api/version"));

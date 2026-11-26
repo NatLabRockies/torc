@@ -5,8 +5,7 @@ Internal design documentation for developers.
 - [Client Architecture](./client.md) - Torc client design
 - [HTTP API Design](./http-api.md) - REST API conventions and design principles
 - [Workflow Actions](./workflow-actions.md) - Workflow action system
-- [Web Dashboard Design](./dashboard.md) - torc-dash server: proxy, CLI delegation, AI chat,
-  security model
+- [Web Dashboard Design](./dashboard.md) - torc-dash server: CLI delegation, AI chat, security model
 - [Dashboard Frontend Design](./dashboard-frontend.md) - Server-rendered UI with Datastar:
   structure, state, conventions
 - [Torc Desktop Design](./desktop.md) - Desktop app: SSH tunnel to a UNIX socket, askpass relay,
