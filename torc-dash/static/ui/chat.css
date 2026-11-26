@@ -1,0 +1,367 @@
+/* AI Chat tab and the spec editor's assistant panel (ui/chat.rs). */
+.page.chat {
+  gap: 12px;
+}
+.page.chat .page-header h2 {
+  margin-right: 0;
+}
+.page.chat .page-header .toolbar {
+  margin-left: auto;
+}
+.chat .ctx {
+  padding: 2px 10px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+}
+.chat-setup-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+}
+
+/* Editor panel */
+.chat-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.chat-panel > header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.chat-panel .welcome {
+  padding: 24px 8px 12px;
+}
+.chat-panel .bubble {
+  max-width: 100%;
+}
+
+/* Provider setup */
+.chat-setup {
+  width: min(440px, 100%);
+  margin: auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.chat-setup h3 {
+  font-size: 16px;
+}
+.chat-setup p {
+  margin: 0;
+}
+.chat-setup .note {
+  font-size: 12px;
+}
+.chat-setup .actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.chat-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* Thread */
+.chat-scroller {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.chat-thread {
+  max-width: 860px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-bottom: 8px;
+}
+.chat-thread .welcome {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 56px 16px 24px;
+  text-align: center;
+}
+.chat-thread .welcome p {
+  margin: 0;
+}
+.chat-thread .examples {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.chat-thread .examples .btn {
+  border-radius: 14px;
+}
+.chat-thread .msg {
+  display: flex;
+  gap: 10px;
+  animation: chat-rise 0.18s ease-out;
+}
+.chat-thread .msg.user {
+  justify-content: flex-end;
+}
+.chat-thread .bubble {
+  min-width: 0;
+  max-width: 85%;
+  padding: 10px 14px;
+  border-radius: var(--radius-lg);
+  line-height: 1.55;
+}
+.chat-thread .user .bubble {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-bottom-right-radius: 4px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.chat-thread .assistant .bubble {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top-left-radius: 4px;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.chat-thread .avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.chat-thread .dots {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px 0;
+}
+.chat-thread .dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  animation: chat-blink 1.2s infinite ease-in-out;
+}
+.chat-thread .dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.chat-thread .dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+/* Composer */
+.composer {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  max-width: 860px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+.composer:focus-within {
+  border-color: var(--accent);
+}
+.composer textarea {
+  flex: 1;
+  min-height: 32px;
+  max-height: 200px;
+  padding: 6px;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  line-height: 1.45;
+}
+
+/* Tool calls */
+.tool {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  font-size: 12.5px;
+}
+.tool.error {
+  border-color: var(--danger);
+}
+.tool summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  list-style: none;
+  color: var(--text-muted);
+  user-select: none;
+}
+.tool summary::-webkit-details-marker {
+  display: none;
+}
+.tool .chev {
+  display: inline-flex;
+  transition: transform 0.12s;
+}
+.tool[open] .chev {
+  transform: rotate(90deg);
+}
+.tool .name {
+  color: var(--text);
+}
+.tool .state,
+.tool summary .spinner {
+  display: inline-flex;
+  margin-left: auto;
+}
+.tool .ok {
+  color: var(--success);
+}
+.tool .err {
+  color: var(--danger);
+}
+.tool .body {
+  padding: 0 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tool .label {
+  color: var(--text-faint);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 4px;
+}
+.tool .code-block {
+  max-height: 320px;
+  background: var(--surface);
+}
+.tool .err-block {
+  color: var(--danger);
+}
+
+/* Assistant Markdown */
+.md {
+  overflow-wrap: anywhere;
+}
+.md > :first-child {
+  margin-top: 0;
+}
+.md > :last-child {
+  margin-bottom: 0;
+}
+.md p,
+.md ul,
+.md ol,
+.md blockquote,
+.md table {
+  margin: 0 0 10px;
+}
+.md ul,
+.md ol {
+  padding-left: 22px;
+}
+.md li + li {
+  margin-top: 2px;
+}
+.md h1,
+.md h2,
+.md h3,
+.md h4 {
+  margin: 14px 0 8px;
+  font-size: 15px;
+}
+.md pre.code-block {
+  margin: 0 0 10px;
+  white-space: pre;
+}
+.md pre code {
+  font-size: inherit;
+  background: none;
+  padding: 0;
+}
+.md :not(pre) > code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--neutral-soft);
+  font-size: 0.88em;
+}
+.md blockquote {
+  padding-left: 12px;
+  border-left: 3px solid var(--border-strong);
+  color: var(--text-muted);
+}
+.md table {
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+  font-size: 13px;
+}
+.md th,
+.md td {
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  text-align: left;
+}
+.md th {
+  background: var(--surface-2);
+}
+.md hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 12px 0;
+}
+
+@keyframes chat-rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+@keyframes chat-blink {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-thread .msg,
+  .chat-thread .dots span {
+    animation: none;
+  }
+}

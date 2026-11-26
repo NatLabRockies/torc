@@ -1,0 +1,81 @@
+/* Settings tab (ui/config.rs). */
+.page.config {
+  overflow: auto;
+  height: auto;
+}
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 16px;
+  align-items: start;
+  max-width: 1200px;
+}
+.config .stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.config h3 {
+  font-size: 15px;
+}
+.config .seg {
+  align-self: flex-start;
+}
+.config .select {
+  align-self: flex-start;
+  min-width: 180px;
+}
+.config .test {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.config .ok-text {
+  color: var(--success);
+}
+.config .banner {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--warning-soft);
+  color: var(--warning);
+  border: 1px solid var(--warning);
+  font-size: 13px;
+}
+.config .banner.major {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.config .row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.server-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--neutral-soft);
+}
+.server-status.on {
+  background: var(--success-soft);
+}
+.server-status .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+.server-status.on .dot {
+  background: var(--success);
+}
+.server-output {
+  max-height: 220px;
+}
+.config dl.kv {
+  margin: 0;
+}
