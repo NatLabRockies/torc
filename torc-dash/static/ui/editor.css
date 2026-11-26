@@ -46,35 +46,9 @@
 .spec-wrap:focus-within {
   border-color: var(--accent);
 }
-.spec-wrap .gutter,
-.spec-wrap textarea {
-  margin: 0;
-  padding: 10px 8px;
-  font-family: var(--mono);
-  font-size: 13px;
-  line-height: 1.55;
-  tab-size: 2;
-}
-.spec-wrap .gutter {
-  min-width: 3.2em;
-  overflow: hidden;
-  text-align: right;
-  color: var(--text-faint);
-  background: var(--surface-2);
-  border-right: 1px solid var(--border);
-  user-select: none;
-  white-space: pre;
-}
-.spec-wrap textarea {
+#editor-cm {
   flex: 1;
   min-width: 0;
-  border: none;
-  outline: none;
-  resize: none;
-  background: transparent;
-  color: var(--text);
-  white-space: pre;
-  overflow: auto;
 }
 .problems {
   flex-shrink: 0;

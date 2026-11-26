@@ -183,11 +183,10 @@ A YAML editor for workflow specs, driven by the workflow-spec JSON Schema:
   with their types and descriptions. After `key:`, fields with fixed values (such as
   `execution_config.mode` or booleans) list those values.
 - **Hover** a field name for its documentation.
-- **Problems are underlined as you type**: YAML syntax errors, unknown fields, missing required
-  fields, and wrong value types. **Validate** runs the full server-side check
-  (`torc create
-  --dry-run`), which also catches problems the schema can't express, such as
-  references to undefined jobs or files.
+- **Problems are underlined as you type** and listed below the editor (click one to jump to it):
+  syntax errors, unknown fields, values outside a fixed set, wrong value types, and the spec checks
+  of `torc create --dry-run`, such as references to undefined jobs or files. **Validate** shows the
+  full dry-run report.
 - **New from template** starts from a blank spec or one of a few examples from `examples/yaml`
   (basics, parameter sweeps and pipelines, Slurm, retries), with a preview.
 - **Insert** adds a building block (job, parameterized job, file, resource requirements, Slurm

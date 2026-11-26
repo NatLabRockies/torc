@@ -1,11 +1,13 @@
-//! Spec editor tab: a plain `<textarea>` bound to `$editor.text` (format in `$editor.format`),
-//! checked on the server as you type (the real spec parser and dry-run validation, with
-//! clickable line numbers); templates from examples/yaml; snippets for common blocks; open and
-//! save files on the torc-dash host; validate and create. The draft is kept in localStorage.
+//! Spec editor tab: CodeMirror (`static/ui/editor.js`) kept in step with `$editor.text` (format
+//! in `$editor.format`) through a hidden text area bound to it. The server checks the text as you
+//! type (the real spec parser and dry-run validation, plus the schema checks in `spec_schema`),
+//! for both the problem list and the editor's lint marks, and answers the editor's completion and
+//! hover requests. Templates from examples/yaml; snippets for common blocks; open and save files
+//! on the torc-dash host; validate and create. The draft is kept in localStorage.
 //!
-//! Elements whose content the browser manages (the textarea, gutter, problem list, report, and
-//! the AI chat slot) carry `data-ignore-morph`, so re-rendering the tab never resets them; the
-//! server updates the slots with `Ui::inner`.
+//! Elements whose content the browser manages (the editor, problem list, report, and the AI chat
+//! slot) carry `data-ignore-morph`, so re-rendering the tab never resets them; the server updates
+//! the slots with `Ui::inner`.
 
 use std::sync::{Arc, LazyLock};
 
@@ -20,14 +22,17 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use torc::client::workflow_spec::WorkflowSpec;
 
-use super::Ctx;
 use super::create::{self, Report, report_panel};
 use super::kit::{self, Sig, Tone, Ui, icon, js};
+use super::{Ctx, spec_schema};
 use crate::AppState;
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/ui/editor/check", post(check))
+        .route("/ui/editor/lint", post(lint))
+        .route("/ui/editor/complete", post(complete))
+        .route("/ui/editor/hover", post(hover))
         .route("/ui/editor/templates", get(templates))
         .route("/ui/editor/template", post(use_template))
         .route("/ui/editor/insert-menu", get(insert_menu))
@@ -96,11 +101,17 @@ struct Sigs {
 }
 
 impl Draft {
-    fn format(&self) -> &str {
-        match self.format.as_str() {
-            "json" | "json5" | "kdl" => &self.format,
-            _ => "yaml",
-        }
+    fn format(&self) -> &'static str {
+        format_name(&self.format)
+    }
+}
+
+fn format_name(f: &str) -> &'static str {
+    match f {
+        "json" => "json",
+        "json5" => "json5",
+        "kdl" => "kdl",
+        _ => "yaml",
     }
 }
 
@@ -176,8 +187,6 @@ pub fn open_in_editor(
 // ============== View ==============
 
 pub async fn view(_st: &Arc<AppState>, _cx: &Ctx) -> Markup {
-    let gutter =
-        "Array.from({length: $editor.text.split('\\n').length}, (_, i) => i + 1).join('\\n')";
     let file_label = "($editor.path || 'Unsaved draft') + ($editor.path && $editor.text !== $editor.saved ? ' •' : '')";
     let save_key = "if ((evt.metaKey || evt.ctrlKey) && evt.key === 's' && !document.querySelector('#modals dialog[open]')) { evt.preventDefault(); @post('/ui/editor/save') }";
     let open_local = "const f = el.files[0]; el.value = ''; f && f.text().then(t => { $editor.incoming = {name: f.name, text: t}; @post('/ui/editor/open-local') })";
@@ -198,7 +207,7 @@ pub async fn view(_st: &Arc<AppState>, _cx: &Ctx) -> Markup {
                 button.btn.btn-sm title="Save (⌘S / Ctrl+S)" data-on:click="@post('/ui/editor/save')" { (icon("download", 13)) " Save" }
                 button.btn.btn-sm.btn-ghost data-show="$editor.path" data-preserve-attr="style" style="display:none"
                     data-on:click="@get('/ui/editor/dialog?kind=save')" { "Save as…" }
-                select.select.sm aria-label="Spec format" title="Format of the text" data-bind="editor.format" {
+                select #editor-format.select.sm aria-label="Spec format" title="Format of the text" data-bind="editor.format" {
                     option value="yaml" { "YAML" }
                     option value="json" { "JSON" }
                     option value="json5" { "JSON5" }
@@ -228,11 +237,10 @@ pub async fn view(_st: &Arc<AppState>, _cx: &Ctx) -> Markup {
             div.spec-body {
                 div.spec-main {
                     div.spec-wrap {
-                        pre #editor-gutter.gutter aria-hidden="true" data-ignore-morph data-text=(gutter) {}
-                        textarea #editor-text data-ignore-morph data-bind="editor.text" data-attr:readonly="$chat.editing" spellcheck="false" wrap="off"
-                            aria-label="Workflow spec" autocomplete="off"
-                            data-on:keydown=(TAB_KEY)
-                            data-on:scroll="document.getElementById('editor-gutter').scrollTop = el.scrollTop" {}
+                        div #editor-cm data-ignore-morph data-init="torcEditor.mount(el)"
+                            data-effect="torcEditor.sync($editor.text, $editor.format, $chat.editing)" {}
+                        textarea #editor-text hidden aria-hidden="true" tabindex="-1" data-ignore-morph
+                            data-bind="editor.text" data-attr:readonly="$chat.editing" {}
                     }
                     div #editor-problems.problems data-ignore-morph
                         data-init="@post('/ui/editor/check')"
@@ -253,7 +261,7 @@ pub async fn view(_st: &Arc<AppState>, _cx: &Ctx) -> Markup {
                 }
             }
             p.faint.tips {
-                "Problems are checked as you type; click one to jump to its line · Tab indents · ⌘S / Ctrl+S saves · Validate runs a full dry-run create"
+                "Problems are checked as you type; click one to jump to it · Ctrl+Space completes keys and values (YAML) · Hover a key for help · ⌘F finds · ⌘S / Ctrl+S saves · Validate runs a full dry-run create"
             }
         }
     }
@@ -261,40 +269,98 @@ pub async fn view(_st: &Arc<AppState>, _cx: &Ctx) -> Markup {
 
 // ============== Checking ==============
 
-/// The line (1-based) an error message refers to: its "line N", else the first line that
-/// contains a name quoted in the message.
-static LINE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)\bline (\d+)").unwrap());
+static LINE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)\bline (\d+)(?:,? column (\d+))?").unwrap());
 
-fn line_of(msg: &str, text: &str) -> Option<usize> {
+/// Byte range an error message refers to: its "line N column M" (the word there) or "line N"
+/// (the line), else a name quoted in the message, where it first appears.
+fn locate(msg: &str, text: &str) -> Option<(usize, usize)> {
     static QUOTED: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r#"'([^'\n]{1,80})'|"([^"\n]{1,80})"|`([^`\n]{1,80})`"#).unwrap()
     });
-    let lines = text.lines().count().max(1);
-    if let Some(n) = LINE.captures(msg).and_then(|c| c[1].parse::<usize>().ok()) {
-        return Some(n.clamp(1, lines));
+    if let Some(c) = LINE.captures(msg) {
+        let lines: Vec<&str> = text.split('\n').collect();
+        let n = c[1].parse::<usize>().ok()?.clamp(1, lines.len()) - 1;
+        let start: usize = lines[..n].iter().map(|l| l.len() + 1).sum();
+        let line = lines[n];
+        let col = c.get(2).and_then(|m| m.as_str().parse::<usize>().ok());
+        return Some(
+            match col.and_then(|c| line.char_indices().nth(c.saturating_sub(1))) {
+                Some((i, _)) => {
+                    let w = line[i..]
+                        .find(|ch: char| !(ch.is_alphanumeric() || "_.-".contains(ch)))
+                        .unwrap_or(line.len() - i);
+                    (start + i, start + i + w.max(1).min(line.len() - i))
+                }
+                None => (
+                    start + line.len() - line.trim_start().len(),
+                    start + line.len(),
+                ),
+            },
+        );
     }
     QUOTED.captures_iter(msg).find_map(|c| {
         let tok = c.get(1).or(c.get(2)).or(c.get(3))?.as_str();
-        text.lines().position(|l| l.contains(tok)).map(|i| i + 1)
+        text.find(tok).map(|i| (i, i + tok.len()))
     })
 }
 
-/// Select line `n` in the text area and scroll it into view.
-fn jump(n: usize) -> String {
-    format!(
-        "const t = document.getElementById('editor-text'), L = t.value.split('\\n'), n = Math.min({n}, L.length), a = L.slice(0, n - 1).join('\\n').length + (n > 1 ? 1 : 0); t.focus(); t.setSelectionRange(a, a + L[n - 1].length); t.scrollTop = Math.max(0, (n - 5) * parseFloat(getComputedStyle(t).lineHeight))"
-    )
+/// A problem in the spec text, with its byte range when the message can be placed.
+struct Diag {
+    range: Option<(usize, usize)>,
+    error: bool,
+    message: String,
 }
 
-/// One error or warning, as a link to its line when one can be found.
-fn problem(msg: &str, text: &str) -> Markup {
-    match line_of(msg, text) {
-        Some(n) => html! {
-            button.problem-link type="button" title="Go to line" data-on:click=(jump(n)) {
-                span.ln { "Ln " (n) } span.msg { (msg) }
+/// Every problem in the text: schema checks (YAML), then the spec parser and dry-run validation,
+/// skipping those on a line the schema checks already flagged (the same mistake, worded twice).
+/// Blocking; shared by the problem list and the editor's lint marks.
+fn diagnostics(text: &str, format: &str) -> Vec<Diag> {
+    let line = |o: usize| text[..o].matches('\n').count();
+    let mut out: Vec<Diag> = if format == "yaml" {
+        spec_schema::lint(text)
+            .into_iter()
+            .map(|(f, t, message)| Diag {
+                range: Some((f, t)),
+                error: true,
+                message,
+            })
+            .collect()
+    } else {
+        vec![]
+    };
+    let flagged: Vec<usize> = out
+        .iter()
+        .filter_map(|d| d.range)
+        .map(|r| line(r.0))
+        .collect();
+    let (errors, warnings) = check_spec(text, format);
+    let msgs = errors.into_iter().map(|m| (m, true));
+    for (message, error) in msgs.chain(warnings.into_iter().map(|m| (m, false))) {
+        let range = locate(&message, text);
+        if range.is_some_and(|r| flagged.contains(&line(r.0))) {
+            continue;
+        }
+        out.push(Diag {
+            range,
+            error,
+            message,
+        });
+    }
+    out
+}
+
+/// One problem, as a link that selects its text when it can be placed.
+fn problem(d: &Diag, text: &str) -> Markup {
+    match d.range {
+        Some((from, to)) => html! {
+            button.problem-link type="button" title="Go to it" data-on:click=(format!(
+                "torcEditor.select({}, {})", u16len(&text[..from]), u16len(&text[..to])
+            )) {
+                span.ln { "Ln " (text[..from].matches('\n').count() + 1) } span.msg { (d.message) }
             }
         },
-        None => html! { span.msg { (msg) } },
+        None => html! { span.msg { (d.message) } },
     }
 }
 
@@ -344,18 +410,14 @@ async fn check(Sig(s): Sig<Sigs>) -> Ui {
     let html = if text.trim().is_empty() {
         html! { div.problems-ok.muted { "Empty spec" } }
     } else {
-        let format = d.format().to_string();
-        let t = text.clone();
-        let (errors, warnings) = tokio::task::spawn_blocking(move || check_spec(&t, &format))
-            .await
-            .unwrap_or_else(|e| (vec![e.to_string()], vec![]));
-        if errors.is_empty() && warnings.is_empty() {
+        let diags = blocking_diagnostics(text.clone(), d.format()).await;
+        if diags.is_empty() {
             html! { div.problems-ok { (icon("check", 13)) " No problems found" } }
         } else {
             html! {
                 ul.problem-list {
-                    @for e in &errors { li.error { (icon("x", 12)) (problem(e, &text)) } }
-                    @for w in &warnings { li.warning { "⚠" (problem(w, &text)) } }
+                    @for d in diags.iter().filter(|d| d.error) { li.error { (icon("x", 12)) (problem(d, &text)) } }
+                    @for d in diags.iter().filter(|d| !d.error) { li.warning { "⚠" (problem(d, &text)) } }
                 }
             }
         }
@@ -363,6 +425,72 @@ async fn check(Sig(s): Sig<Sigs>) -> Ui {
     Ui::new()
         .inner("#editor-problems", html)
         .inner("#editor-report", html! {})
+}
+
+async fn blocking_diagnostics(text: String, format: &'static str) -> Vec<Diag> {
+    tokio::task::spawn_blocking(move || diagnostics(&text, format))
+        .await
+        .unwrap_or_else(|e| {
+            vec![Diag {
+                range: None,
+                error: true,
+                message: e.to_string(),
+            }]
+        })
+}
+
+/// A request from the editor: its text, format, and cursor (UTF-16 units).
+#[derive(Deserialize)]
+struct EditorDoc {
+    text: String,
+    #[serde(default)]
+    format: String,
+    #[serde(default)]
+    pos: usize,
+}
+
+/// The editor's lint marks: the problem list's diagnostics, in UTF-16 offsets. Unplaced ones
+/// mark the first line.
+async fn lint(Json(d): Json<EditorDoc>) -> Json<Value> {
+    let diags = blocking_diagnostics(d.text.clone(), format_name(&d.format)).await;
+    let u = |b: usize| u16len(&d.text[..b]);
+    let first_line = d.text.find('\n').unwrap_or(d.text.len());
+    Json(Value::Array(
+        diags
+            .iter()
+            .map(|g| {
+                let (f, t) = g.range.unwrap_or((0, first_line));
+                json!({
+                    "from": u(f), "to": u(t), "message": g.message,
+                    "severity": if g.error { "error" } else { "warning" },
+                })
+            })
+            .collect(),
+    ))
+}
+
+/// Completions at the cursor (YAML): keys of the enclosing mapping or allowed values.
+async fn complete(Json(d): Json<EditorDoc>) -> Json<Value> {
+    let pos = byte_at(&d.text, d.pos);
+    Json(match spec_schema::complete(&d.text, pos) {
+        Some(c) => json!({
+            "from": u16len(&d.text[..c.from]), "to": u16len(&d.text[..c.to]),
+            "kind": c.kind, "options": c.options,
+        }),
+        None => Value::Null,
+    })
+}
+
+/// Type and description of the key under the pointer (YAML).
+async fn hover(Json(d): Json<EditorDoc>) -> Json<Value> {
+    let pos = byte_at(&d.text, d.pos);
+    Json(match spec_schema::hover(&d.text, pos) {
+        Some(h) => json!({
+            "from": u16len(&d.text[..h.from]), "to": u16len(&d.text[..h.to]),
+            "title": h.title, "type": h.type_, "info": h.info,
+        }),
+        None => Value::Null,
+    })
 }
 
 // ============== Templates ==============
@@ -667,7 +795,7 @@ async fn insert_menu() -> Ui {
             html! {
                 @for (i, s) in SNIPPETS.iter().enumerate() {
                     button role="menuitem" data-on:click=(format!(
-                        "document.getElementById('menu').hidePopover(); $editor.cursor = document.getElementById('editor-text')?.selectionStart || 0; @post('/ui/editor/insert?i={i}')"
+                        "document.getElementById('menu').hidePopover(); $editor.cursor = torcEditor.cursor(); @post('/ui/editor/insert?i={i}')"
                     )) {
                         (s.label) span.faint.section { (s.section) }
                     }
@@ -709,7 +837,7 @@ async fn insert(Query(q): Query<Index>, Sig(s): Sig<Sigs>) -> Ui {
             Ui::new()
                 .signals(json!({ "editor": { "text": text } }))
                 .script(&format!(
-                    "setTimeout(() => {{ const t = document.getElementById('editor-text'); if (!t) return; t.focus(); t.setSelectionRange({f}, {t}); t.scrollTop = Math.max(0, (t.value.slice(0, {f}).split('\\n').length - 5) * parseFloat(getComputedStyle(t).lineHeight)) }}, 30)"
+                    "setTimeout(() => torcEditor.select({f}, {t}), 30)"
                 ))
         }
         Err(e) => Ui::new().err(e),
@@ -897,7 +1025,7 @@ fn body(d: &Draft) -> Value {
 fn report_box(r: &Report, text: &str) -> Markup {
     html! {
         div.spec-report {
-            (report_panel(r, &|m| problem(m, text)))
+            (report_panel(r, &|m| problem(&Diag { range: locate(m, text), error: true, message: m.to_string() }, text)))
             button.btn.btn-sm.btn-ghost data-on:click="document.getElementById('editor-report').replaceChildren()" { "Dismiss" }
         }
     }
@@ -963,9 +1091,10 @@ mod tests {
     #[test]
     fn lines() {
         let text = "name: x\njobs:\n  - name: foo\n";
-        assert_eq!(line_of("bad at line 2 column 3", text), Some(2));
-        assert_eq!(line_of("job 'foo' depends on missing", text), Some(3));
-        assert_eq!(line_of("nothing here", text), None);
+        assert_eq!(locate("bad at line 3 column 11", text), Some((24, 27)));
+        assert_eq!(locate("bad at line 2", text), Some((8, 13)));
+        assert_eq!(locate("job 'foo' depends on missing", text), Some((24, 27)));
+        assert_eq!(locate("nothing here", text), None);
         assert_eq!(byte_at("aé😀b", 2), 3);
         assert_eq!(byte_at("aé😀b", 4), 7);
         assert_eq!(u16len("aé😀b"), 5);

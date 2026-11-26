@@ -76,7 +76,7 @@ torc/
 ├── torc-server/         # Server database migrations
 │   └── migrations/      # SQLx migration files
 ├── torc-dash/           # Dashboard UI
-│   └── static/          # Embedded assets: ui/ (Datastar, shell.js, CSS) and images/
+│   └── static/          # Embedded assets: ui/ (Datastar, CodeMirror, JS, CSS) and images/
 ├── torc-desktop/        # Tauri desktop app: runs torc-dash locally or on a login node via SSH
 ├── python_client/       # Python CLI client and library
 │   ├── src/torc/        # Python package

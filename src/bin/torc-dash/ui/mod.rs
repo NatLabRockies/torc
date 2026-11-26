@@ -17,6 +17,7 @@ mod editor;
 mod events;
 mod exec;
 mod resources;
+mod spec_schema;
 mod wf_dialogs;
 mod workflows;
 

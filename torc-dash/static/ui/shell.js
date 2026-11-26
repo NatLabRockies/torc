@@ -1,5 +1,6 @@
-// The dashboard's only hand-written script: preferences, theme, the action menu, and keyboard
-// shortcuts. Everything else is Datastar attributes on server-rendered HTML.
+// The dashboard's main hand-written script: preferences, theme, the action menu, and keyboard
+// shortcuts. editor.js sets up the spec editor; everything else is Datastar attributes on
+// server-rendered HTML.
 
 // Preferences live in localStorage (per origin); the page's signals start from them.
 window.torcPrefs = (() => {
@@ -101,6 +102,16 @@ window.torcDownload = (url) => {
   document.body.append(a);
   a.click();
   a.remove();
+};
+
+// The spec editor (CodeMirror, about 140 KB gzipped) loads on first use of the editor tab. The
+// tab's markup calls these; they do nothing until it has loaded.
+let editor = null;
+window.torcEditor = {
+  mount: (el) => import("/static/ui/editor.js").then((m) => (editor = m.mount(el))),
+  sync: (text, format, readOnly) => editor?.sync(text, format, readOnly),
+  select: (from, to) => editor?.select(from, to),
+  cursor: () => editor?.cursor() ?? 0,
 };
 
 const KEYS = { 1: "workflows", 2: "details", 3: "dag", 4: "events", 5: "debugging", 6: "resources", e: "editor", 7: "chat", 8: "config", g: "dag" };

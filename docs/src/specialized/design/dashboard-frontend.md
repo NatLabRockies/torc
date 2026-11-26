@@ -7,11 +7,13 @@ in [Web Dashboard Design](./dashboard.md).
 
 ## Goals
 
-- **Pure Rust, no build step.** There is no Node.js toolchain, bundle, or generated TypeScript
-  client. The only JavaScript is Datastar itself (vendored, about 33 KB) and `shell.js`, a short
-  hand-written file for preferences, the dashboard token, the action menu, and keyboard shortcuts.
+- **Pure Rust, no build step.** There is no Node.js toolchain or generated TypeScript client. The
+  JavaScript is two vendored libraries, Datastar (about 33 KB) and CodeMirror (for the spec editor
+  only), plus two short hand-written files: `shell.js` (preferences, the dashboard token, the action
+  menu, keyboard shortcuts) and `editor.js` (the spec editor).
 - **Light.** Charts and the dependency graph are SVG drawn on the server, so the page loads no
-  charting, graph, editor, or Markdown libraries and works without internet access.
+  charting, graph, or Markdown libraries and works without internet access. CodeMirror (about 140 KB
+  gzipped) loads only when the spec editor is opened.
 - **One source of truth.** State that matters lives on the server; the browser holds only UI state
   (filters, the open tab, the selected workflow).
 
@@ -26,7 +28,9 @@ src/bin/torc-dash/ui/
   chat.rs  config.rs  wf_dialogs.rs  exec.rs
 torc-dash/static/ui/
   datastar.js     vendored Datastar release (the version is in its first line)
-  shell.js        the only hand-written script
+  codemirror.js   vendored CodeMirror bundle (versions in its first line; see below)
+  shell.js        hand-written: preferences, token, menus, shortcuts
+  editor.js       hand-written: the spec editor, loaded on first use
   app.css         design tokens (light/dark, dark palettes) and shared component styles
   <feature>.css   one stylesheet per feature module
 ```
@@ -97,10 +101,15 @@ sequenceDiagram
 
 ## Notable features
 
-- **Spec editor.** A `<textarea>` with a line-number gutter. As you type, the server parses the
-  buffer with the real spec parser (`WorkflowSpec`) and reports errors with line numbers; clicking
-  one selects the line. Templates come from `examples/yaml`, and snippets insert into the right
-  section. The draft is kept in localStorage.
+- **Spec editor.** CodeMirror, with syntax highlighting, folding, search, and lint marks. The text
+  stays in `$editor.text`: a hidden text area bound to the signal carries edits both ways, so
+  templates, opened files, and the assistant's edits replace the editor's text like any other signal
+  patch. The editing intelligence is on the server: `/ui/editor/lint` runs the real spec parser and
+  dry-run validation plus schema checks (unknown keys, values outside an enum), which also fill the
+  problem list below the editor; `/ui/editor/complete` and `/ui/editor/hover` (YAML) read the
+  `schemars` schema of `WorkflowSpec` in `ui/spec_schema.rs`, finding the cursor's place from
+  indentation so they work on half-typed text. Templates come from `examples/yaml`, and snippets
+  insert into the right section. The draft is kept in localStorage.
 - **Dependency graph.** Laid out on the server with `rust-sugiyama`, one connected component at a
   time, then drawn as SVG with pan and zoom. Layouts are cached, so auto-refresh doesn't redo them.
 - **Resource charts.** Plot data from `torc plot-resources` and live samples are drawn as SVG line
@@ -111,10 +120,36 @@ sequenceDiagram
 - **Run/watch output.** `POST /ui/exec/{id}/{mode}` opens the panel, which streams `torc run` or
   `torc watch` output. Closing the stream ends a watch; a run keeps going.
 
+## Updating vendored libraries
+
+`datastar.js` is the release file from the Datastar repository. `codemirror.js` is a bundle of the
+CodeMirror packages `editor.js` imports, made once with Node.js outside the repository:
+
+```bash
+npm i esbuild codemirror @codemirror/{view,state,lang-yaml,lang-json,autocomplete,lint,language,commands} @lezer/highlight
+cat > entry.js <<'EOF'
+export { basicSetup } from "codemirror";
+export { EditorView, keymap, hoverTooltip } from "@codemirror/view";
+export { EditorState, Compartment } from "@codemirror/state";
+export { yaml } from "@codemirror/lang-yaml";
+export { json } from "@codemirror/lang-json";
+export { autocompletion, insertCompletionText, pickedCompletion } from "@codemirror/autocomplete";
+export { linter, lintGutter, forceLinting } from "@codemirror/lint";
+export { HighlightStyle, syntaxHighlighting, indentUnit } from "@codemirror/language";
+export { indentWithTab } from "@codemirror/commands";
+export { tags } from "@lezer/highlight";
+EOF
+npx esbuild entry.js --bundle --format=esm --minify --legal-comments=none \
+  --banner:js="// CodeMirror 6 (<package versions>), MIT. Rebuild: see docs/src/specialized/design/dashboard-frontend.md." \
+  --outfile=torc-dash/static/ui/codemirror.js
+```
+
 ## Alternatives considered
 
-- **The previous Svelte + TypeScript app.** Richer client-side widgets (CodeMirror completion,
-  Plotly zoom), but it needed Node.js to change and a checked-in 6 MB bundle, duplicated validation
-  that the Rust spec parser already does, and kept a second copy of state in the browser.
+- **The previous Svelte + TypeScript app.** Richer client-side widgets (Plotly zoom, draggable graph
+  nodes), but it needed Node.js to change and a checked-in 6 MB bundle, duplicated validation that
+  the Rust spec parser already does, and kept a second copy of state in the browser.
+- **A plain `<textarea>` for the spec editor.** No library, but no highlighting, completion, or
+  inline errors, which made the editor clearly worse than the Svelte app's.
 - **A native GPU UI (gpui).** Pure Rust, but it can't be served through an SSH tunnel to a browser
   or the Torc Desktop webview, which is how the dashboard reaches HPC login nodes.
