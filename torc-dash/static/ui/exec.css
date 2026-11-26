@@ -1,0 +1,280 @@
+/* Execution panel (#exec) */
+.exec-panel {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 50;
+  width: min(760px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  animation: exec-rise 0.16s ease-out;
+}
+.exec-panel.collapsed {
+  width: min(420px, calc(100vw - 32px));
+}
+.exec-panel > header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.exec-panel.collapsed > header {
+  border-bottom: none;
+}
+.exec-panel .title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 2px 4px;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.exec-panel .title > span {
+  display: inline-flex;
+}
+.exec-panel .title .faint {
+  font-weight: 400;
+}
+.exec-panel .dot.warn {
+  background: var(--warning);
+}
+.exec-panel pre {
+  margin: 0;
+  height: 280px;
+  min-height: 80px;
+  max-height: 75vh;
+  padding: 10px 12px;
+  overflow: auto;
+  resize: vertical;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.exec-panel .stderr,
+.exec-panel .warning {
+  color: var(--warning);
+}
+.exec-panel .info {
+  color: var(--info);
+}
+.exec-panel .error {
+  color: var(--danger);
+}
+.exec-panel .success {
+  color: var(--success);
+  font-weight: 600;
+}
+@keyframes exec-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* Workflow dialogs ($dlg) */
+.dlg-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.dlg-form p,
+.dlg p {
+  margin: 0;
+}
+.dlg-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.dlg-indent {
+  margin-top: -10px;
+  padding-left: 24px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.dlg section + section,
+.dlg section + .dlg-note {
+  margin-top: 20px;
+}
+.dlg h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+.dlg-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.dlg-table th,
+.dlg-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.dlg-table th {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.dlg .danger {
+  color: var(--danger);
+}
+.dlg .warning {
+  color: var(--warning);
+}
+.dlg-note {
+  padding: 12px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text-muted);
+}
+.dlg-done h4 {
+  color: var(--success);
+}
+.dlg-done ul {
+  margin: 0;
+  padding-left: 20px;
+}
+/* Recover options */
+.dlg-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 14px;
+  align-items: end;
+  margin-bottom: 18px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.dlg-options .check {
+  grid-column: 1 / 3;
+}
+.dlg-options button {
+  justify-self: end;
+}
+.dlg-sched {
+  margin-bottom: 12px;
+}
+.dlg-sched .kv {
+  margin-top: 6px;
+}
+/* Execution plan */
+.plan-events {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.plan-events > li {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.plan-events > li.root {
+  border-left-color: var(--accent);
+}
+.plan-events > li.leaf {
+  border-left-color: var(--success);
+}
+.plan-events .head {
+  display: flex;
+  gap: 8px;
+  font-weight: 600;
+}
+.plan-events .marker,
+.plan-events .flow,
+.plan-events h5,
+.plan-events summary {
+  color: var(--text-muted);
+}
+.plan-events h5 {
+  margin: 10px 0 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.plan-events ul {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13px;
+}
+.plan-events summary {
+  cursor: pointer;
+  font-size: 13px;
+  padding-left: 20px;
+}
+.plan-events .flow {
+  margin-top: 8px;
+  font-size: 12px;
+}
+/* Edit: shared groups */
+.dlg-groups {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.dlg-groups ul {
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+}
+.dlg-groups li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+.dlg-groups .add {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.dlg-groups .add select {
+  flex: 1;
+}
+/* Import: drop zone (the file input covers it, so clicks and drops reach it natively) */
+.dlg-drop {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 28px 16px;
+  border: 2px dashed var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  text-align: center;
+  transition:
+    border-color 0.12s,
+    background 0.12s;
+}
+.dlg-drop:hover,
+.dlg-drop:focus-within {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.dlg-drop input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.dlg-drop .loaded {
+  color: var(--success);
+  font-weight: 500;
+}
