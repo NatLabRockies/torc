@@ -494,10 +494,10 @@ action, and skips outcome reporting.</p>
 <h3 id="workflow-reinitialization"><a class="header" href="#workflow-reinitialization">Workflow Reinitialization</a></h3>
 <p>Every reinitialize entry point — <code>torc workflows reinit</code>, <code>torc jobs reset-status --reinit</code>,
 <code>torc recover</code>, and the Slurm <code>regenerate</code>/<code>watch</code> paths — funnels through the single server routine
-<code>reset_actions_for_reinitialize</code>, which runs as part of <code>initialize_jobs</code>. For each action it
-recomputes <code>trigger_count</code> from the current job states and then decides whether to <strong>re-arm</strong> the
-action (clear <code>executed</code>/<code>executed_by</code> so it can fire again on the new run) or <strong>keep it executed</strong>
-(leave it suppressed).</p>
+<code>reset_actions_for_reinitialize</code>, which runs inside the <code>initialize_jobs</code> transaction. For each
+action it recomputes <code>trigger_count</code> from the current job states and then decides whether to
+<strong>re-arm</strong> the action (clear <code>executed</code>/<code>executed_by</code>/<code>state</code> so it can fire again on the new run)
+or <strong>keep</strong> its executed state (including <code>suppressed</code>).</p>
 <p>The decision follows one rule, independent of <code>action_type</code>:</p>
 <blockquote>
 <p>Re-arm an action <strong>iff its triggering condition will genuinely re-occur in the new run.</strong></p>
@@ -512,49 +512,49 @@ is "duplicate side effect," not "duplicate allocation."</p>
     start([For each non-recovery action&lt;br/&gt;during reinitialize]) --&gt; recompute[Recompute trigger_count&lt;br/&gt;from current job states]
     recompute --&gt; trig{Trigger type?}
 
-    trig -- on_workflow_start --&gt; keep
+    trig -- on_workflow_start --&gt; full{Full initialize?}
+    full -- Yes --&gt; rearm
+    full -- No --&gt; keep
     trig -- &quot;on_workflow_complete&lt;br/&gt;on_worker_start / on_worker_complete&quot; --&gt; rearm
-    trig -- &quot;on_jobs_ready /&lt;br/&gt;on_jobs_complete&quot; --&gt; terminal{All gating jobs still&lt;br/&gt;in a terminal state?&lt;br/&gt;completed / failed /&lt;br/&gt;canceled / terminated}
+    trig -- &quot;on_jobs_ready /&lt;br/&gt;on_jobs_complete&quot; --&gt; reset{Did this initialize&lt;br/&gt;reset any gate job?&lt;br/&gt;touched it and left it&lt;br/&gt;Ready or Blocked}
 
-    terminal -- &quot;Yes — subset re-run&lt;br/&gt;(gates untouched,&lt;br/&gt;event already happened)&quot; --&gt; keep
-    terminal -- &quot;No — full re-run&lt;br/&gt;(a gate was reset,&lt;br/&gt;now ready/blocked)&quot; --&gt; rearm
+    reset -- &quot;No — gates untouched&lt;br/&gt;(complete, untouched Ready&lt;br/&gt;or Blocked, disabled)&quot; --&gt; keep
+    reset -- &quot;Yes — a gate will&lt;br/&gt;become ready again&quot; --&gt; rearm
 
-    rearm[Re-arm:&lt;br/&gt;executed = 0, executed_by = NULL&lt;br/&gt;action can fire again]
-    keep[Keep executed:&lt;br/&gt;action stays suppressed&lt;br/&gt;no duplicate side effect]
+    rearm[Re-arm:&lt;br/&gt;executed = 0, state = NULL&lt;br/&gt;action can fire again]
+    keep[Keep:&lt;br/&gt;executed / state unchanged&lt;br/&gt;no duplicate side effect]
 
     rearm --&gt; done([Write trigger_count])
     keep --&gt; done
 
     style keep fill:#d4edda,stroke:#28a745,color:#155724
     style rearm fill:#fff3cd,stroke:#ffc107,color:#856404
-    style terminal fill:#cce5ff,stroke:#004085,color:#004085
+    style reset fill:#cce5ff,stroke:#004085,color:#004085
 </pre>
-<p>The keep logic below applies to a <strong>partial</strong> reinitialize (<code>reinit</code>, <code>reset-status --reinit</code>,
-<code>recover</code>, <code>regenerate</code>, <code>watch</code>). A <strong>full</strong> initialize — <code>torc workflows init</code>, which first resets
-every job — is a clean slate and re-arms <strong>every</strong> action, including <code>on_workflow_start</code>; otherwise
-re-running <code>workflows init</code> on a workflow that already ran would leave its start actions suppressed
-forever. (The server distinguishes the two by <code>only_uninitialized</code>: <code>false</code> = full, <code>true</code> =
-partial.)</p>
-<p>Per trigger (partial reinitialize):</p>
+<p>Per trigger:</p>
 <ul>
-<li><strong><code>on_workflow_start</code> → keep.</strong> A partial reinit is not a new start, so this stops plain <code>reinit</code>
-/ <code>reset-status --reinit</code> from re-running start-time setup or re-submitting the original node
-count. (A never-fired action keeps <code>executed = 0</code> and still fires, so a first real initialize is
-unaffected; a full <code>workflows init</code> re-arms it as noted above.)</li>
-<li><strong><code>on_jobs_ready</code> / <code>on_jobs_complete</code> → keep iff the gating jobs are still all terminal.</strong> That
-is the <em>subset</em> re-run (the gates were untouched, so the event already happened and is not
-recurring). Re-arm when any gate was reset — the <em>full</em> re-run, where that job will run again and
-its action should fire again with it.</li>
+<li><strong><code>on_jobs_ready</code> / <code>on_jobs_complete</code> → re-arm iff this initialize reset at least one gate job.</strong>
+A gate counts as reset when it ends <code>Ready</code> or <code>Blocked</code> and the initialize touched it: either it
+was <code>Uninitialized</code> after the uninitialize step (reset directly, or a transitive descendant of a
+reset job) or its status changed (for example a <code>Ready</code> gate pushed back to <code>Blocked</code> because its
+upstream job was reset). Such a gate will become ready again in the new run. Gates the initialize
+did not touch keep the action as it is: a gate that is still complete, an untouched <code>Ready</code> gate
+(its allocation may still be queued), an untouched <code>Blocked</code> gate, or a disabled gate. A
+suppressed action is re-armed only when its own gates are reset. A full <code>torc workflows init</code>
+resets every job first, so every gate counts as reset there.</li>
+<li><strong><code>on_workflow_start</code> → keep on a partial reinitialize</strong> (<code>reinit</code>, <code>reset-status --reinit</code>,
+<code>recover</code>, <code>regenerate</code>, <code>watch</code>). A partial reinit is not a new start, so this stops it from
+re-running start-time setup or re-submitting the original node count. A full <code>torc workflows init</code>
+re-arms it. (A never-fired action keeps <code>executed = 0</code> and still fires.) The server distinguishes
+the two by <code>only_uninitialized</code>: <code>false</code> = full, <code>true</code> = partial.</li>
 <li><strong><code>on_workflow_complete</code>, <code>on_worker_start</code>, <code>on_worker_complete</code> → re-arm.</strong> These recur every
 run (the workflow will complete again; new workers start), so they should fire again.</li>
 </ul>
-<p><strong>Why "terminal state" and not <code>trigger_count</code>.</strong> The job-gated test measures the gating jobs with
-the <code>on_jobs_complete</code> notion (terminal jobs only), <em>not</em> the action's own <code>trigger_count</code>. For an
-<code>on_jobs_ready</code> action a reset gate returns to <code>Ready</code>, and <code>Ready</code> already satisfies
-<code>on_jobs_ready</code>, so <code>trigger_count</code> cannot distinguish a freshly-reset gate from one that already
-completed. Using it would wrongly suppress the action on a full re-run and stall the workflow. The
-terminal-state count drops as soon as a gate is reset, which is exactly the signal that the action
-must fire again.</p>
+<p><strong>Why not look at current job states alone.</strong> After the initialize, a reset gate and a gate that was
+already <code>Ready</code> look the same, and so do an untouched <code>Blocked</code> gate and one that was just reset.
+Only the before/after comparison tells them apart. If an action was claimed for a gate that is still
+<code>Ready</code> and its allocation was later cancelled, re-arm it with
+<code>POST /workflows/{id}/actions/{action_id}/reset</code>.</p>
 <p><strong>Example — subset re-run vs. full re-run</strong>:</p>
 <ul>
 <li><code>gate_job</code> runs first; an <code>on_jobs_complete</code> action (a <code>schedule_nodes</code> allocation or a
@@ -573,7 +573,7 @@ when a worker starts.</li>
 <li>User resets <code>gate_job</code> itself and reinitializes. <code>gate_job</code> returns to a non-terminal state.</li>
 <li>The action is <strong>re-armed</strong>, so when <code>gate_job</code> completes again in the new run it fires again.</li>
 </ol>
-<p>With multiple gating jobs, the action is only kept executed when <strong>all</strong> of them remain terminal;
+<p>With multiple gating jobs, the action is only kept when the initialize reset <strong>none</strong> of them;
 resetting any one of them re-arms it.</p>
 <p>The <code>recover</code> path keeps its own <code>suppress_satisfied_schedule_actions</code> guard (the <code>regenerate</code> path
 suppresses the same actions inside the <code>apply_scheduler_plan</code> transaction), and it is
